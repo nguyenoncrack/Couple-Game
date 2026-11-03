@@ -69,7 +69,7 @@ export class DirectoryDO extends DurableObject<Env> {
 
   /** May this request's sign-in connect to this house? */
   async authorize(cookie: string | null, origin: string | null, host: string | null, houseId: string, ip: string): Promise<Pass> {
-    if (!this.connectLimit.take(ip)) return { ok: false, code: CLOSE.unauthorized, reason: "too many attempts" };
+    if (!this.connectLimit.take(ip)) return { ok: false, code: CLOSE.busy, reason: "too many attempts" };
     if (!sameOrigin(origin, host)) return { ok: false, code: CLOSE.unauthorized, reason: "wrong origin" };
     const who = await signedIn(this.directory, cookie);
     const member = who && (await this.directory.memberFor(houseId, who.account.id));

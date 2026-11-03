@@ -300,6 +300,23 @@ export function connect(house: HouseSummary) {
         status: "gone",
         goneReason: code === 4409 ? "You opened this house in another tab or device." : code === 4404 ? "This house doesn't exist anymore." : "You're not in that house, or you've been signed out.",
       }),
+    onUnsettled: (times) => {
+      if (times % 3 !== 0) return;
+      const c = get().confirmed;
+      if (!c) return;
+      // Ask for the whole house next time instead of catching up from our copy, which may be out of step.
+      console.warn(times >= 6 ? "[house] starting over: fresh copy, dropping unsaved edits" : "[house] asking for a fresh copy of the house");
+      if (times < 6) {
+        set({ confirmed: { ...c, version: 0 } });
+        return;
+      }
+      // Still not settling: let go of what we'd resend as well, as a reload would.
+      const lost = get().pending.length;
+      for (const p of get().pending) forgetHistory(p.clientOpId);
+      settle({ ...c, version: 0 }, []);
+      set({ selection: null });
+      if (lost) toast(lost === 1 ? "Your last change couldn't be saved, so the house reloaded." : `Your last ${lost} changes couldn't be saved, so the house reloaded.`);
+    },
   });
 }
 

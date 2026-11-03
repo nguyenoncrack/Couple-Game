@@ -7,10 +7,19 @@ export interface ConnectionHandlers {
   onStatus(status: "connecting" | "online" | "reconnecting" | "asleep"): void;
   /** The server won't let us back in (not a member, house gone, or this player opened the house elsewhere). */
   onFatal(code: number): void;
+  /**
+   * We keep getting dropped moments after being let in: something we hold (our copy of the house, or edits we
+   * resend) is probably out of step. Called with how many times in a row, so the game can let go of more each time.
+   */
+  onUnsettled(times: number): void;
 }
 
 /** A tab hidden this long lets go of the house, so a forgotten tab doesn't keep it awake. */
 const HIDDEN_MS = 5 * 60_000;
+/** Dropped this soon after a welcome counts as not having settled in. */
+const SETTLE_MS = 5_000;
+/** How long to wait when the server says we've been trying too often. */
+const BUSY_MS = 20_000;
 
 /**
  * The house WebSocket. Reconnects with backoff on its own; the game state decides what to resend after each
@@ -20,7 +29,11 @@ const HIDDEN_MS = 5 * 60_000;
 export class Connection {
   private ws: WebSocket | null = null;
   private welcomed = false;
+  private welcomedAt = 0;
   private attempts = 0;
+  /** Attempts before the last welcome, kept so a welcome that doesn't last doesn't reset the backoff. */
+  private attemptsBefore = 0;
+  private quickDrops = 0;
   private retryTimer: number | undefined;
   private pingTimer: number | undefined;
   private hiddenTimer: number | undefined;
@@ -57,6 +70,8 @@ export class Connection {
       }
       if (msg.type === "welcome") {
         this.welcomed = true;
+        this.welcomedAt = performance.now();
+        this.attemptsBefore = this.attempts;
         this.attempts = 0;
         this.h.onStatus("online");
       }
@@ -65,6 +80,8 @@ export class Connection {
     ws.onclose = (e) => {
       if (this.ws !== ws) return;
       this.ws = null;
+      const settled = this.welcomed && performance.now() - this.welcomedAt >= SETTLE_MS;
+      const quick = this.welcomed && !settled;
       this.welcomed = false;
       window.clearInterval(this.pingTimer);
       if (this.disposed) return;
@@ -78,9 +95,16 @@ export class Connection {
         this.h.onStatus("asleep");
         return;
       }
+      if (quick) {
+        this.quickDrops++;
+        this.attempts = this.attemptsBefore;
+        console.warn(`[house] dropped right after joining (${this.quickDrops} in a row): ${e.code} ${e.reason || "no reason given"}`);
+        this.h.onUnsettled(this.quickDrops);
+      } else if (settled) this.quickDrops = 0;
       this.attempts++;
       this.h.onStatus("reconnecting");
-      const delay = Math.min(8000, 400 * 2 ** Math.min(this.attempts, 5)) * (0.75 + Math.random() * 0.5);
+      const backoff = Math.min(8000, 400 * 2 ** Math.min(this.attempts, 5)) * (0.75 + Math.random() * 0.5);
+      const delay = e.code === CLOSE.busy ? BUSY_MS : backoff;
       this.retryTimer = window.setTimeout(() => this.open(), delay);
     };
     window.clearInterval(this.pingTimer);

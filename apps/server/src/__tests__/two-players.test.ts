@@ -190,6 +190,16 @@ describe("houses and membership", () => {
     expect(welcome.members.map((m) => m.name)).toEqual(["Ana", "Ben"]);
   });
 
+  it("turns away too many tries as busy, not as someone who isn't a member", async () => {
+    const { a, houseId } = await couple();
+    const url = `${base.replace("http", "ws")}/ws`;
+    // A tab stuck reconnecting uses up the allowance; the next try is "busy", which the game waits out.
+    let refused = "";
+    for (let i = 0; i < 25 && !refused.includes(String(CLOSE.busy)); i++) refused = await new Player(url, houseId, "").connect().then(() => "", (e: Error) => e.message);
+    expect(refused).toContain(String(CLOSE.busy));
+    await expect(a.connect()).rejects.toThrow(String(CLOSE.busy));
+  });
+
   it("forgets a house when the last person leaves it", async () => {
     const { houseId } = await couple();
     const [ana, ben] = [(await call("POST", "/api/session", { name: "Ana", password: "correct horse" })).cookie, (await call("POST", "/api/session", { name: "Ben", password: "correct horse" })).cookie];
