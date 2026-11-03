@@ -334,13 +334,14 @@ const CATEGORIES: { id: Category; label: string }[] = [
   { id: "bathroom", label: "Bathroom" },
   { id: "decor", label: "Decor" },
   { id: "outdoor", label: "Outdoor" },
+  { id: "entertainment", label: "Entertainment" },
   { id: "openings", label: "Doors & windows" },
 ];
 
 /** A colour to stand for an item in the catalog (its main fabric, wood or body colour). */
 function itemColor(item: FurnitureItem | OpeningItem) {
   const m = item.model as Record<string, unknown>;
-  for (const k of ["fabric", "blanket", "color", "cabinet", "body", "wood", "shade", "leaves", "cushion", "canopy", "water", "leaf", "panel"]) if (typeof m[k] === "string") return m[k] as string;
+  for (const k of ["fabric", "blanket", "color", "cabinet", "body", "wood", "shade", "leaves", "cushion", "canopy", "water", "leaf", "panel", "top", "felt"]) if (typeof m[k] === "string") return m[k] as string;
   return "#cfe2ea";
 }
 
@@ -433,7 +434,9 @@ function ToolPanel() {
               ? "Click to place · R to turn · Esc to stop"
               : category === "openings"
                 ? "Pick a door or window, then click on a wall."
-                : "Pick something, then click on the lot."}
+                : category === "entertainment"
+                  ? "Games-room pieces · decorative for now. Pick one to place."
+                  : "Pick something, then click on the lot."}
         </p>
       </div>
     );

@@ -36,7 +36,8 @@ const Interaction = z
 const FurnitureItem = z.object({
   id: z.string(),
   name: z.string(),
-  category: z.enum(["living", "bedroom", "kitchen", "bathroom", "decor", "outdoor"]),
+  category: z.enum(["living", "bedroom", "kitchen", "bathroom", "decor", "outdoor", "entertainment"]),
+  tags: z.array(z.string().trim().min(1).max(32)).max(12).optional(),
   price: z.number().int().nonnegative(),
   footprint: z.tuple([z.number().int().min(1).max(6), z.number().int().min(1).max(6)]),
   /** Floor items can't overlap each other; rugs go underneath them. */
