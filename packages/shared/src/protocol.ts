@@ -165,4 +165,6 @@ export const CLOSE = {
   replaced: 4409,
   /** Nobody did anything for a long while; come back with a click. */
   idle: 4408,
+  /** Too many tries in a short while: wait a little, then try again. Not a reason to leave the house. */
+  busy: 4429,
 } as const;

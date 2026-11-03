@@ -112,7 +112,7 @@ export function createApp({ directory, houses, staticDir, roomIdleMs, houseIdleM
 
     void (async () => {
       const url = new URL(req.url ?? "/", "http://x");
-      if (!connectLimit.take(clientIp(req))) return ws.close(CLOSE.unauthorized, "too many attempts");
+      if (!connectLimit.take(clientIp(req))) return ws.close(CLOSE.busy, "too many attempts");
       if (!sameOrigin(req.headers.origin, req.headers.host)) return ws.close(CLOSE.unauthorized, "wrong origin");
       const who = await signedIn(directory, req.headers.cookie);
       const id = url.searchParams.get("house") ?? "";
