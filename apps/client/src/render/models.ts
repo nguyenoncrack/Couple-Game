@@ -571,7 +571,7 @@ export function modelFor(item: FurnitureItem, ghost: "ok" | "bad" | null = null)
  * opening's front (outside): doors swing in towards -z, window sills and flower boxes stick out towards +z.
  * `low` draws what's left when walls are cut away or down: a threshold for doors, a sill line for windows.
  */
-type OpeningBuilder = (k: Kit, item: OpeningItem, p: Params, m: Mat, low: number | null) => void;
+type OpeningBuilder = (k: Kit, item: OpeningItem, p: Params, m: Mat, low: number | null, leaves?: boolean) => void;
 
 /** Wall thickness, matching the walls they sit in. */
 const T = 0.14;
@@ -619,7 +619,7 @@ function leaf(k: Kit, m: Mat, hingeX: number, width: number, height: number, ope
 }
 
 const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
-  door: (k, item, p, m, low) => {
+  door: (k, item, p, m, low, leaves = true) => {
     const W = item.width;
     const frame = m(str(p, "frame", "#f4efe4"));
     k.box(m("#cfc6b6", "stone"), [0, 0.012, 0], [W, 0.024, T + 0.04], { outline: 0.005 });
@@ -631,17 +631,9 @@ const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
     for (const sx of [-1, 1]) k.box(frame, [sx * (W / 2 - 0.03), top / 2, 0], [0.06, top, T + 0.03], { outline: 0.008 });
     k.box(frame, [0, top - 0.03, 0], [W, 0.06, T + 0.03], { outline: 0.008 });
     trims(k, frame, W, 0, top, false);
-    const color = str(p, "leaf", "#a57a50");
-    const glass = p.glass === true;
-    const inner = W - 0.12;
-    const h = top - 0.08;
-    // the door stands a little ajar, swung in towards -z
-    k.at([0, 0, -0.03], 0, () => {
-      if (p.double === true) {
-        leaf(k, m, -inner / 2, inner / 2, h, 0.45, color, glass, false);
-        leaf(k, m, inner / 2, inner / 2, h, 0.45, color, glass, true);
-      } else leaf(k, m, -inner / 2, inner, h, 0.4, color, glass, false);
-    });
+    if (!leaves) return;
+    // in the catalog and while placing, the door stands a little ajar, swung in towards -z
+    for (const l of doorLeaves(item)) k.at([0, 0, -0.03], 0, () => leaf(k, m, l.hingeX, l.width, l.height, l.mirror ? 0.45 : 0.4, l.color, l.glass, l.mirror));
   },
 
   arch: (k, item, p, m, low) => {
@@ -725,6 +717,50 @@ const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
     }
   },
 };
+
+/** The leaves of a door: where each is hinged along the opening, how big, and whether it's the mirrored one of a pair. */
+function doorLeaves(item: OpeningItem) {
+  const p = item.model as Params;
+  const inner = item.width - 0.12;
+  const common = { height: item.top - 0.08, color: str(p, "leaf", "#a57a50"), glass: p.glass === true };
+  return p.double === true
+    ? [
+        { ...common, hingeX: -inner / 2, width: inner / 2, mirror: false },
+        { ...common, hingeX: inner / 2, width: inner / 2, mirror: true },
+      ]
+    : [{ ...common, hingeX: -inner / 2, width: inner, mirror: false }];
+}
+
+export interface DoorLeaf {
+  /** Where the hinge is along the opening (from its middle), and whether it opens the other way round. */
+  hingeX: number;
+  mirror: boolean;
+  /** The leaf shut, drawn hinged at the origin. */
+  meshes: BuiltMesh[];
+}
+
+const builtDoors = new Map<string, { frame: BuiltMesh[]; leaves: DoorLeaf[] }>();
+
+/** A hinged door in pieces, so its leaves can swing open: the frame on its own, then each leaf shut. */
+export function doorParts(item: OpeningItem): { frame: BuiltMesh[]; leaves: DoorLeaf[] } | null {
+  if (item.model.kind !== "door") return null;
+  let out = builtDoors.get(item.id);
+  if (!out) {
+    const m: Mat = (tone, finish, alpha) => pencilMaterial(tone, { finish, alpha });
+    const k = new Kit();
+    OPENING_BUILDERS.door!(k, item, item.model as Params, m, null, false);
+    out = {
+      frame: k.build(false),
+      leaves: doorLeaves(item).map((l) => {
+        const lk = new Kit();
+        leaf(lk, m, 0, l.width, l.height, 0, l.color, l.glass, l.mirror);
+        return { hingeX: l.hingeX, mirror: l.mirror, meshes: lk.build(false) };
+      }),
+    };
+    builtDoors.set(item.id, out);
+  }
+  return out;
+}
 
 const builtOpenings = new Map<string, BuiltMesh[]>();
 

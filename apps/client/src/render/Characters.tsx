@@ -2,7 +2,7 @@ import { normalizeAppearance, activityAt, arrivalTime, faceDir, positionAt, type
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type * as THREE from "three";
+import * as THREE from "three";
 import { serverNow, useGame } from "../state/game";
 import { cameraFollow, cameraGestureActive } from "./CameraRig";
 import { FLOOR_Y } from "./House";
@@ -31,6 +31,9 @@ interface Pose {
 }
 
 const ease = (from: number, to: number, k: number) => from + (to - from) * k;
+/** Where the eyes are on the body: up the spine into the head, a little in front. */
+const EYE = new THREE.Vector3(0, TORSO + 0.24, 0.05);
+const eyeAt = new THREE.Vector3();
 
 function poseFor(activity: string, seatY: number | null, t: number, standingTarget: boolean): Pose {
   const s = t / 1000;
@@ -235,6 +238,8 @@ function SpeechBubble({ memberId }: { memberId: string }) {
 function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner: Avatar | null; member: MemberInfo; mine: boolean }) {
   const looks = useMemo(() => member.appearance ? customizedLooks(normalizeAppearance(member.appearance)) : looksFor(member.id, member.color), [member.id, member.color, member.appearance]);
   const live = useGame((s) => s.mode === "live");
+  // in first person you're behind your own eyes, so your body is out of the way
+  const unseen = useGame((s) => mine && s.mode === "live" && s.firstPerson);
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const armL = useRef<THREE.Group>(null);
@@ -318,7 +323,13 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     const close = activity === "hug" || activity === "kiss" || activity === "cuddle";
     if (hearts.current) hearts.current.style.display = close ? "" : "none";
     if (tag.current) tag.current.dataset.close = close ? "1" : "";
-    if (mine) cameraFollow.target = { x: g.position.x, z: g.position.z };
+    if (mine) {
+      cameraFollow.target = { x: g.position.x, z: g.position.z };
+      g.updateMatrixWorld();
+      eyeAt.copy(EYE);
+      b.localToWorld(eyeAt);
+      cameraFollow.eye = { x: eyeAt.x, y: eyeAt.y, z: eyeAt.z };
+    }
   });
 
   // in Live mode, click your partner for what you can do together
@@ -341,7 +352,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
         <ringGeometry args={[0.42, 0.5, 32]} />
         <meshBasicMaterial color="#ffffff" transparent depthWrite={false} />
       </mesh>
-      <group ref={body} position={[0, HIP, 0]}>
+      <group ref={body} position={[0, HIP, 0]} visible={!unseen}>
         <KitMesh make={(k) => torso(k, looks)} deps={[looks]} />
         <group ref={armL} position={[-SHOULDER, TORSO - 0.06, 0]}>
           <KitMesh make={(k) => arm(k, looks)} deps={[looks]} />
@@ -357,7 +368,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
             </group>
           </group>
         ))}
-        {tagged && (
+        {tagged && !unseen && (
           <Html position={[0, TORSO + 0.62, 0]} center distanceFactor={9} zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
             <div ref={tag} className={`pin-tag char-tag ${member.online ? "" : "away"}`} style={{ borderColor: member.color }}>
               <SpeechBubble memberId={member.id} />

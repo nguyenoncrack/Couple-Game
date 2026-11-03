@@ -148,6 +148,27 @@ export const Icon = {
       <path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3" />
     </svg>
   ),
+  music: () => (
+    <svg {...base}>
+      <path d="M9.2 17.4V5.6l10-2v11.6" />
+      <circle cx="6.7" cy="17.6" r="2.5" />
+      <circle cx="16.7" cy="15.3" r="2.5" />
+    </svg>
+  ),
+  musicOff: () => (
+    <svg {...base}>
+      <path d="M9.2 17.4V5.6l10-2v11.6" />
+      <circle cx="6.7" cy="17.6" r="2.5" />
+      <circle cx="16.7" cy="15.3" r="2.5" />
+      <path d="M3.4 3.6l17.2 17" />
+    </svg>
+  ),
+  eye: () => (
+    <svg {...base}>
+      <path d="M2.4 12.2c2.4-4.1 5.6-6.2 9.6-6.2s7.2 2.1 9.6 6.1c-2.4 4-5.6 6.1-9.6 6.1s-7.2-2-9.6-6z" />
+      <circle cx="12" cy="12.1" r="2.8" />
+    </svg>
+  ),
   stand: () => (
     <svg {...base}>
       <path d="M12 20.2V9.8M7.6 13.6 12 9.4l4.4 4.3" />

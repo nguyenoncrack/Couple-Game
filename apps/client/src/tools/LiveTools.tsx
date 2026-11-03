@@ -30,6 +30,16 @@ const VERB: Record<Action, string> = {
 const seatSeesTv = (level: Level, o: PlacedObject) => slotsOf(o, "sit").some((s) => tvFacing(level, s));
 const offers = (level: Level, o: PlacedObject): Action[] => [...new Set(actionsOf(o)), ...(seatSeesTv(level, o) ? (["watch"] as const) : [])];
 
+/** Open what you can do with a piece of furniture, if anything. True if there's a menu. */
+export function openObjectMenu(level: Level, id: string) {
+  const o = level.objects[id];
+  if (!o || !offers(level, o).length) return false;
+  const { position, item } = objectTransform(o);
+  const h = (item.model as { height?: unknown }).height;
+  useGame.setState({ menu: { objectId: id, at: [position[0], typeof h === "number" ? h + 0.4 : 1.2, position[2]] } });
+  return true;
+}
+
 export function LiveTools() {
   const view = useGame((s) => s.view);
   const plane = useMemo(() => new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI / 2), []);
@@ -65,16 +75,7 @@ export function LiveTools() {
 
   const onObjectDown = (id: string, e: ThreeEvent<PointerEvent>) => {
     if (cameraGestureActive()) return;
-    const o = level.objects[id];
-    if (!o || !offers(level, o).length) return walk(e);
-    const { position, item } = objectTransform(o);
-    const h = (item.model as { height?: unknown }).height;
-    useGame.setState({
-      menu: {
-        objectId: id,
-        at: [position[0], typeof h === "number" ? h + 0.4 : 1.2, position[2]],
-      },
-    });
+    if (!openObjectMenu(level, id)) walk(e);
   };
 
   return (

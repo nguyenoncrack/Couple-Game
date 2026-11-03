@@ -43,8 +43,14 @@ const twistOf = (a: { x: number; y: number }, b: { x: number; y: number }) => Ma
 /** How far fingers must twist before the view turns, so a pinch doesn't wobble it. */
 const TWIST_DEADZONE = 0.14;
 
-/** Where my character is, written every frame; the camera keeps it centred while following is on. */
-export const cameraFollow = { target: null as { x: number; z: number } | null };
+/**
+ * Where my character is, written every frame; the camera keeps it centred while following is on. `eye` is where
+ * their eyes are (sitting, lying in the bath, walking), for seeing through them in first person.
+ */
+export const cameraFollow = {
+  target: null as { x: number; z: number } | null,
+  eye: null as { x: number; y: number; z: number } | null,
+};
 
 let controls: CameraControlsImpl | null = null;
 let home: (() => void) | null = null;

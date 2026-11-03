@@ -1,7 +1,8 @@
 import type { HouseSummary } from "@cg/shared";
 import { useEffect } from "react";
 import { Scene } from "../render/Scene";
-import { act, connect, disconnect, openChat, redo, setMode, setTool, undo, useGame, type Tool } from "../state/game";
+import { act, connect, disconnect, openChat, redo, setFirstPerson, setMode, setTool, undo, useGame, type Tool } from "../state/game";
+import { wantMusic } from "../state/music";
 import { cycleWallMode, Hud, TOOL_KEYS } from "../ui/Hud";
 
 export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => void }) {
@@ -11,6 +12,8 @@ export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => v
     connect(house);
     return () => disconnect();
   }, [house.houseId]);
+
+  useEffect(() => wantMusic(), []);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -36,7 +39,8 @@ export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => v
       if (k === "l") return setMode(s.mode === "live" ? "build" : "live");
       if (k === "t") return cycleWallMode();
       if (s.mode === "live") {
-        if (k === "f") useGame.setState({ follow: !s.follow });
+        if (k === "v") setFirstPerson(!s.firstPerson);
+        else if (k === "f" && !s.firstPerson) useGame.setState({ follow: !s.follow });
         else if (k === "x") act({ do: "stop" });
         return;
       }

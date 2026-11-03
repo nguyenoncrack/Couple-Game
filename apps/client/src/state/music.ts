@@ -1,0 +1,100 @@
+import { useSyncExternalStore } from "react";
+
+/**
+ * Quiet lo-fi music while you're in a house. Browsers only let a page make sound after you've clicked or typed,
+ * so it starts on your first one; it fades in and out rather than cutting. Whether it's on is remembered on
+ * this device.
+ */
+
+const SRC = "/audio/lofi.m4a";
+const VOLUME = 0.32;
+const FADE_MS = 1200;
+const KEY = "cg.music";
+
+let audio: HTMLAudioElement | null = null;
+let wanted = false;
+let fade = 0;
+const listeners = new Set<() => void>();
+
+function stored(): boolean {
+  try {
+    return localStorage.getItem(KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+let on = stored();
+
+function fadeTo(target: number, then?: () => void) {
+  const a = audio;
+  if (!a) return;
+  cancelAnimationFrame(fade);
+  const from = a.volume;
+  const start = performance.now();
+  const step = (now: number) => {
+    const k = Math.min(1, (now - start) / FADE_MS);
+    a.volume = from + (target - from) * k;
+    if (k < 1) fade = requestAnimationFrame(step);
+    else then?.();
+  };
+  fade = requestAnimationFrame(step);
+}
+
+function play() {
+  if (!wanted || !on) return;
+  if (!audio) {
+    audio = new Audio(SRC);
+    audio.loop = true;
+    audio.volume = 0;
+  }
+  // refused until the first click or key press; we try again then
+  audio
+    .play()
+    .then(() => fadeTo(VOLUME))
+    .catch(() => {});
+}
+
+function pause() {
+  const a = audio;
+  if (a && !a.paused) fadeTo(0, () => a.pause());
+}
+
+/** The house screen wants music for as long as it's open. */
+export function wantMusic() {
+  wanted = true;
+  const kick = () => {
+    if (!audio || audio.paused) play();
+  };
+  play();
+  window.addEventListener("pointerdown", kick);
+  window.addEventListener("keydown", kick);
+  return () => {
+    wanted = false;
+    window.removeEventListener("pointerdown", kick);
+    window.removeEventListener("keydown", kick);
+    pause();
+  };
+}
+
+export function setMusic(next: boolean) {
+  on = next;
+  try {
+    localStorage.setItem(KEY, next ? "on" : "off");
+  } catch {
+    // not remembered, but still switched for now
+  }
+  if (next) play();
+  else pause();
+  listeners.forEach((l) => l());
+}
+
+export function useMusicOn() {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    () => on,
+  );
+}

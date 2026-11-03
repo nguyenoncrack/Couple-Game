@@ -348,3 +348,59 @@ describe("around the house", () => {
     expect(amy().use!.pose!.z).not.toBe(ben().use!.pose!.z);
   });
 });
+
+describe("walking freely", () => {
+  /** Amy standing still at a spot on the lot. */
+  function at(bp: Blueprint, x: number, z: number) {
+    const life = new Life(emptyLife());
+    life.ensureAvatar("amy", bp, 0);
+    life.state.avatars.amy!.path = [[x, z]];
+    return { life, amy: () => life.state.avatars.amy!, end: () => life.state.avatars.amy!.path.at(-1)! };
+  }
+
+  it("goes straight to a spot close by, and only so far in one step", () => {
+    const bp = emptyBlueprint(8, 8);
+    const { life, amy, end } = at(bp, 2.5, 2.5);
+    expect(life.move("amy", bp, [3.3, 2.5], 1000)).toBeNull();
+    expect(end()[0]).toBeCloseTo(3.3);
+    expect(amy().path).toHaveLength(2);
+    expect(amy().face).toBe(3);
+    life.move("amy", bp, [7.5, 2.5], 60_000);
+    expect(end()[0]).toBeCloseTo(3.3 + 1.2);
+  });
+
+  it("stops short of a wall and slides along it, but walks through a door", () => {
+    let bp = split();
+    const { life, end } = at(bp, 1.5, 2.5);
+    life.move("amy", bp, [1.5, 3.5], 0);
+    expect(end()[1]).toBeLessThan(3 - 0.2);
+    expect(end()[1]).toBeGreaterThan(2.6);
+    // heading into the wall at an angle, you carry on along it
+    life.move("amy", bp, [2.3, 3.3], 60_000);
+    expect(end()[0]).toBeCloseTo(2.3);
+    expect(end()[1]).toBeLessThan(3);
+
+    bp = apply(bp, { t: "opening.place", level: 0, id: "door000001", catalogId: "door_wood", dir: "h", x: 2, z: 3, flip: false });
+    const through = at(bp, 2.5, 2.5);
+    through.life.move("amy", bp, [2.5, 3.5], 0);
+    expect(through.end()[1]).toBeCloseTo(3.5);
+  });
+
+  it("doesn't walk into furniture, and gets up from a seat to walk off", () => {
+    let bp = place(emptyBlueprint(8, 8), "fridge0001", "fridge", 3, 2);
+    const { life, amy, end } = at(bp, 2.5, 2.5);
+    // up to the fridge, then no further
+    expect(life.move("amy", bp, [3.5, 2.5], 0)).toBeNull();
+    expect(end()[0]).toBeLessThan(3 - 0.2);
+    expect(life.move("amy", bp, [3.5, 2.5], 60_000)).toBe("unreachable");
+
+    bp = place(bp, "chair00001", "dining_chair", 5, 5);
+    life.use("amy", bp, "chair00001", "sit", 60_000);
+    expect(life.move("amy", bp, [end()[0], end()[1] + 1], 120_000)).toBeNull();
+    expect(amy().use).toBeNull();
+  });
+});
+
+function place(bp: Blueprint, id: string, catalogId: string, x: number, z: number, rot: 0 | 1 | 2 | 3 = 0) {
+  return apply(bp, { t: "object.place", level: 0, id, catalogId, x, z, rot });
+}

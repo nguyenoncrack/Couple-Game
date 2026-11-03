@@ -82,6 +82,8 @@ export interface GameState {
   menu: Menu | null;
   /** Keep the camera on my character. */
   follow: boolean;
+  /** Seeing through my character's eyes and walking with the keys, in Live mode. */
+  firstPerson: boolean;
 
   /** What's been said, oldest first; whether the chat is open, and what came in while it wasn't. */
   chat: ChatMessage[];
@@ -114,6 +116,7 @@ export const useGame = create<GameState>(() => ({
   life: null,
   menu: null,
   follow: false,
+  firstPerson: false,
   chat: [],
   chatOpen: false,
   unread: 0,
@@ -455,7 +458,13 @@ export function act(intent: LifeIntent) {
 export function setMode(mode: Mode) {
   if (mode === get().mode) return;
   if (get().selection) hold(null);
-  set({ mode, menu: null, selection: null, placing: null, catalogOpen: false, tool: "select", ...(mode === "build" ? { follow: false } : {}) });
+  set({ mode, menu: null, selection: null, placing: null, catalogOpen: false, tool: "select", ...(mode === "build" ? { follow: false, firstPerson: false } : {}) });
+}
+
+/** Into or out of first person; coming back out, the camera picks you up where you are. */
+export function setFirstPerson(on: boolean) {
+  if (get().mode !== "live" || on === get().firstPerson) return;
+  set({ firstPerson: on, menu: null, ...(on ? {} : { follow: true }) });
 }
 
 // Handy for poking at the game from the console while developing.

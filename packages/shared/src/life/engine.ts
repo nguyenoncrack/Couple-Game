@@ -4,7 +4,7 @@ import type { Rot } from "../grid";
 import { newId } from "../ids";
 import { footprintOf } from "../rules";
 import { canSee, screenOf, seatsFacing, slotsFor, slotsOf, stationSlots, tvFacing, type PlacedSlot } from "./interactions";
-import { buildNav, canStep, findPath, nearestWalkable, walkable, type Cell, type Nav } from "./nav";
+import { buildNav, canStep, findPath, nearestWalkable, slide, walkable, type Cell, type Nav } from "./nav";
 import {
   activityAt,
   arrivalTime,
@@ -66,6 +66,9 @@ const together = (u: Use | null | undefined) => u?.action === "hug" || u?.action
 const brief = (u: Use | null | undefined) => u?.action === "toilet" || u?.action === "wash";
 
 const center = ([x, z]: Cell): [number, number] => [x + 0.5, z + 0.5];
+/** Walking freely: the furthest one step can go, and how close to a wall the middle of you can get. */
+const MOVE_MAX = 1.2;
+const BODY_R = 0.3;
 
 /** The facing (quarter turns) closest to a direction. */
 function rotToward(dx: number, dz: number): Rot {
@@ -207,6 +210,34 @@ export class Life {
       if (!floor || !seats.length) return floor;
     }
     return r;
+  }
+
+  /**
+   * Walk freely, a step at a time (first person): straight towards a spot close by, sliding along walls and
+   * furniture rather than through them. Getting up from a seat first if you're on one.
+   */
+  move(memberId: string, bp: Blueprint, to: [number, number], now: number): LifeReject | null {
+    const a = this.state.avatars[memberId];
+    if (!a) return "unreachable";
+    const nav = buildNav(bp, 0, this.cat);
+    const p = positionAt(a, now);
+    const seated = a.use?.pose && p.next >= a.path.length;
+    // from a seat you get up where you sat down from
+    const from: [number, number] = seated ? a.path[a.path.length - 1]! : [p.x, p.z];
+    let [dx, dz] = [to[0] - from[0], to[1] - from[1]];
+    const len = Math.hypot(dx, dz);
+    if (len > MOVE_MAX) [dx, dz] = [(dx / len) * MOVE_MAX, (dz / len) * MOVE_MAX];
+    const end = slide(nav, from, [from[0] + dx, from[1] + dz], BODY_R);
+    const moved = Math.hypot(end[0] - from[0], end[1] - from[1]) > 0.01;
+    if (!moved && !a.use && p.next >= a.path.length) return "unreachable";
+    this.letGo(a);
+    if (a.use?.pose) a.face = a.use.pose.face;
+    a.use = null;
+    a.path = moved ? [from, end] : [from];
+    a.startedAt = now;
+    // a little shuffle (stopping where you are) doesn't turn you round
+    if (Math.hypot(end[0] - from[0], end[1] - from[1]) > 0.15) a.face = rotToward(end[0] - from[0], end[1] - from[1]);
+    return null;
   }
 
   /** Stand still (getting up if sitting), stopping at the next cell if walking. */
