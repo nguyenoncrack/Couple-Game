@@ -55,7 +55,7 @@ function rod(k: Kit, mat: THREE.Material, from: THREE.Vector3, to: THREE.Vector3
 }
 
 function knob(k: Kit, m: Mat, x: number, y: number, z: number) {
-  k.add("sphere", m(METAL), [x, y, z], 0.035, { outline: 0.006 });
+  k.add("sphere", m(METAL, "metal"), [x, y, z], 0.035, { outline: 0.006 });
 }
 
 /** A closed ceramic shell with an open top; profile runs up the outside and down the inside. */
@@ -298,18 +298,18 @@ const BUILDERS: Record<string, Builder> = {
     } else k.box(m(cab, "wood"), [0, 0.48, z - 0.01], [W, 0.76, D - 0.02]);
     for (const s of [-1, 1]) {
       k.box(m(shade(cab, 1.07), "wood"), [s * (W / 4), 0.48, z + D / 2 - 0.01], [W / 2 - 0.04, 0.68, 0.015], { outline: 0.006 });
-      k.box(m(METAL), [s * 0.06, 0.7, z + D / 2 + 0.01], [0.015, 0.14, 0.02], { outline: 0.005 });
+      k.box(m(METAL, "metal"), [s * 0.06, 0.7, z + D / 2 + 0.01], [0.015, 0.14, 0.02], { outline: 0.005 });
     }
     const top = m(str(p, "top", "#e9e3d6"), "stone");
     if (p.sink) k.add(rim(W, D + 0.02, 0.5, 0.36, 0.05), top, [0, 0.885, z + 0.03], 1);
     else k.box(top, [0, 0.885, z + 0.01], [W, 0.05, D + 0.02]);
     if (p.sink) {
       k.add(rim(0.54, 0.4, 0.46, 0.32, 0.018), m("#c9ccc8"), [0, 0.915, z + 0.03], 1, { outline: 0.004 });
-      const steelBowl = m("#9aa3a3");
+      const steelBowl = m("#9aa3a3", "metal");
       k.box(steelBowl, [0, 0.755, z + 0.03], [0.46, 0.02, 0.32], { outline: false });
       k.add(rim(0.5, 0.36, 0.46, 0.32, 0.15), steelBowl, [0, 0.83, z + 0.03], 1, { outline: 0.004 });
       k.add("cyl", m(INK_DARK), [0, 0.767, z + 0.03], [0.045, 0.003, 0.045], { outline: false });
-      const steel = m(METAL);
+      const steel = m(METAL, "metal");
       k.add("cyl", steel, [0, 0.98, z - D / 2 + 0.08], [0.04, 0.18, 0.04], { outline: 0.006 });
       k.box(steel, [0, 1.07, z - D / 2 + 0.16], [0.03, 0.03, 0.18], { outline: 0.006 });
     } else {
@@ -328,7 +328,7 @@ const BUILDERS: Record<string, Builder> = {
     k.box(body, [0, 0.46, z], [W, 0.86, D]);
     k.box(m(INK_DARK), [0, 0.42, z + D / 2 + 0.005], [W - 0.16, 0.42, 0.01], { outline: 0.006 });
     k.box(m("#56646b"), [0, 0.44, z + D / 2 + 0.012], [W - 0.3, 0.2, 0.006], { outline: false });
-    k.box(m(METAL), [0, 0.68, z + D / 2 + 0.03], [W - 0.2, 0.025, 0.025], { outline: 0.005 });
+    k.box(m(METAL, "metal"), [0, 0.68, z + D / 2 + 0.03], [W - 0.2, 0.025, 0.025], { outline: 0.005 });
     k.box(m("#d8d2c4"), [0, 0.9, z], [W, 0.02, D]);
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
@@ -350,7 +350,7 @@ const BUILDERS: Record<string, Builder> = {
     const W = Math.min(w, 0.8);
     k.add("roundbox", body, [0, 0.93, z], [W, 1.86, D]);
     k.box(m(shade(str(p, "body", "#dfe7e4"), 0.82)), [0, 1.3, z + D / 2], [W - 0.02, 0.012, 0.012], { outline: false });
-    const steel = m(METAL);
+    const steel = m(METAL, "metal");
     k.box(steel, [-W / 2 + 0.1, 1.55, z + D / 2 + 0.03], [0.025, 0.3, 0.03], { outline: 0.005 });
     k.box(steel, [-W / 2 + 0.1, 0.95, z + D / 2 + 0.03], [0.025, 0.42, 0.03], { outline: 0.005 });
     // magnets and a note
@@ -369,7 +369,7 @@ const BUILDERS: Record<string, Builder> = {
     k.box(china, [0, 0.36, z - 0.13], [0.22, 0.28, 0.18]);
     k.add("roundbox", china, [0, 0.62, z - 0.22], [0.42, 0.42, 0.18]);
     k.box(china, [0, 0.85, z - 0.22], [0.44, 0.04, 0.2]);
-    k.box(m(METAL), [-0.14, 0.78, z - 0.12], [0.06, 0.02, 0.03], { outline: 0.004 });
+    k.box(m(METAL, "metal"), [-0.14, 0.78, z - 0.12], [0.06, 0.02, 0.03], { outline: 0.004 });
   },
 
   bathtub: (k, w, d, p, m) => {
@@ -380,11 +380,11 @@ const BUILDERS: Record<string, Builder> = {
     k.add("cyl", m("#bcd3dc", "water"), [0, 0.49, 0], [W * 0.74, 0.012, D * 0.74], { outline: false });
     const feet = m(str(p, "feet", "#b8955c"));
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add("sphere", feet, [sx * W * 0.22, 0.095, sz * D * 0.2], [0.12, 0.19, 0.12]);
-    k.add("cyl", m(METAL), [-W * 0.46, 0.75, 0], [0.04, 0.3, 0.04], { outline: 0.005 });
-    k.box(m(METAL), [-W * 0.46 + 0.08, 0.9, 0], [0.18, 0.03, 0.03], { outline: 0.005 });
+    k.add("cyl", m(METAL, "metal"), [-W * 0.46, 0.75, 0], [0.04, 0.3, 0.04], { outline: 0.005 });
+    k.box(m(METAL, "metal"), [-W * 0.46 + 0.08, 0.9, 0], [0.18, 0.03, 0.03], { outline: 0.005 });
     // The duck floats inside the open basin, below the rim.
-    k.add("sphere", m("#f2cf4a"), [0.25, 0.53, 0.06], [0.1, 0.08, 0.13], { outline: 0.004 });
-    k.add("sphere", m("#f2cf4a"), [0.25, 0.59, 0.1], 0.065, { outline: 0.004 });
+    k.add("sphere", m("#f5c537"), [0.25, 0.53, 0.06], [0.1, 0.08, 0.13], { outline: 0.004 });
+    k.add("sphere", m("#f5c537"), [0.25, 0.59, 0.1], 0.065, { outline: 0.004 });
     k.add("cone", m("#e89436"), [0.25, 0.585, 0.14], [0.035, 0.045, 0.025], { rot: [Math.PI / 2, 0, 0], outline: false });
     for (const sx of [-1, 1]) k.add("sphere", m(INK_DARK), [0.25 + sx * 0.022, 0.6, 0.12], 0.008, { outline: false });
   },
@@ -395,17 +395,17 @@ const BUILDERS: Record<string, Builder> = {
     k.add("cone", china, [0, 0.38, z], [0.16, 0.76, 0.16], { rot: [Math.PI, 0, 0] });
     k.add(basin([[0, 0.74], [0.2, 0.74], [0.43, 0.8], [0.5, 0.88], [0.48, 0.91], [0.41, 0.89], [0.3, 0.81], [0, 0.8]]), china, [0, 0, z], [0.56, 1, 0.44], { outline: 0.005, normals: true });
     k.add("cyl", m("#c9d6da"), [0, 0.825, z], [0.32, 0.008, 0.24], { outline: false });
-    k.add("cyl", m(METAL), [0, 0.831, z], [0.035, 0.004, 0.035], { outline: false });
-    k.add("cyl", m(METAL), [0, 0.98, z - 0.17], [0.035, 0.16, 0.035], { outline: 0.005 });
-    k.box(m(METAL), [0, 1.05, z - 0.11], [0.025, 0.025, 0.12], { outline: 0.005 });
+    k.add("cyl", m(METAL, "metal"), [0, 0.831, z], [0.035, 0.004, 0.035], { outline: false });
+    k.add("cyl", m(METAL, "metal"), [0, 0.98, z - 0.17], [0.035, 0.16, 0.035], { outline: 0.005 });
+    k.box(m(METAL, "metal"), [0, 1.05, z - 0.11], [0.025, 0.025, 0.12], { outline: 0.005 });
   },
 
   car: (k, _w, _d, p, m) => {
-    const paint = str(p, "body", "#e07a5f");
-    const body = m(paint);
+    const paint = str(p, "body", "#f0704c");
+    const body = m(paint, "paint");
     const dark = m("#3a3631");
-    const glass = m("#a9c4cf");
-    const chrome = m(METAL);
+    const glass = m("#a9c4cf", "glass");
+    const chrome = m(METAL, "metal");
     // wheels with hub caps, turned to roll along z
     for (const sx of [-1, 1])
       for (const sz of [-1, 1]) {
@@ -447,7 +447,7 @@ const BUILDERS: Record<string, Builder> = {
     const peg = m("#d8c39d");
     k.box(peg, [0, 1.415, -d / 2 + 0.04], [W, 0.97, 0.03]);
     for (let x = -W / 2 + 0.1; x < W / 2; x += 0.12) for (let y = 1.08; y < 1.88; y += 0.12) k.box(m("#9b8662"), [x, y, -d / 2 + 0.056], [0.015, 0.015, 0.005], { outline: false });
-    const metal = m(METAL);
+    const metal = m(METAL, "metal");
     const handle = m("#c4534a");
     k.box(handle, [-0.6, 1.5, -d / 2 + 0.08], [0.05, 0.28, 0.04], { outline: 0.005 });
     k.box(metal, [-0.6, 1.66, -d / 2 + 0.08], [0.16, 0.05, 0.05], { outline: 0.005 });
@@ -469,13 +469,13 @@ const BUILDERS: Record<string, Builder> = {
     k.box(coping, [0, 0.07, d / 2 - c / 2], [w, 0.1, c]);
     k.box(coping, [-w / 2 + c / 2, 0.07, 0], [c, 0.1, d - c * 2]);
     k.box(coping, [w / 2 - c / 2, 0.07, 0], [c, 0.1, d - c * 2]);
-    const water = str(p, "water", "#8fc3d1");
+    const water = str(p, "water", "#47c4d0");
     k.box(m(shade(water, 0.82)), [0, 0.02, 0], [w - c * 2, 0.02, d - c * 2], { outline: false });
     k.box(m(water, "water"), [0, 0.06, 0], [w - c * 2, 0.01, d - c * 2], { outline: false });
     // steps at one end, seen through the water
     for (let i = 0; i < 3; i++) k.box(m(shade(water, 1.12 - i * 0.04)), [-w / 2 + c + 0.2 + i * 0.4, 0.067, 0], [0.4, 0.004, d - c * 2 - 0.1], { outline: false });
     // a ladder at the other end
-    const metal = m(METAL);
+    const metal = m(METAL, "metal");
     for (const s of [-1, 1]) {
       const x = w / 2 - c - 0.12;
       const curve = new THREE.CatmullRomCurve3([
@@ -506,11 +506,11 @@ const BUILDERS: Record<string, Builder> = {
       k.add("soft", m(cushion, "fabric"), [0, 0.26, -0.14], [W - 0.04, 0.07, 0.52], { rot: [0.95, 0, 0] });
     });
     // a rolled towel
-    k.add("cyl", m("#f2cf4a", "fabric"), [0, 0.42, d / 2 - 0.6], [0.14, W - 0.1, 0.14], { rot: [0, 0, Math.PI / 2], outline: 0.006 });
+    k.add("cyl", m("#f5c537", "fabric"), [0, 0.42, d / 2 - 0.6], [0.14, W - 0.1, 0.14], { rot: [0, 0, Math.PI / 2], outline: 0.006 });
   },
 
   parasol: (k, _w, _d, p, m) => {
-    const canopy = str(p, "canopy", "#f2cf4a");
+    const canopy = str(p, "canopy", "#f5c537");
     k.add("cyl", m("#e4ddcf", "stone"), [0, 0.05, 0], [0.5, 0.1, 0.5]);
     k.add("cyl8", m("#8a6a4c", "wood"), [0, 1.15, 0], [0.05, 2.2, 0.05]);
     k.add(CANOPY, m(canopy, "fabric"), [0, 2.08, 0], [2.0, 0.5, 2.0], { outline: 0.014, normals: true });
@@ -613,7 +613,7 @@ function leaf(k: Kit, m: Mat, hingeX: number, width: number, height: number, ope
         k.box(panel, [cx, height * 0.7, z], [width - 0.22, height * 0.38, 0.01], { outline: 0.005 });
         k.box(panel, [cx, height * 0.26, z], [width - 0.22, height * 0.34, 0.01], { outline: 0.005 });
       }
-      k.add("sphere", m(METAL), [sign * (width - 0.08), 0.98, s * 0.05], 0.045, { outline: 0.005 });
+      k.add("sphere", m(METAL, "metal"), [sign * (width - 0.08), 0.98, s * 0.05], 0.045, { outline: 0.005 });
     }
   });
 }
@@ -672,10 +672,10 @@ const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
     for (let i = 1; i < 4; i++) for (const s of [-1, 1]) k.box(m(shade(panel, 0.84)), [0, (h / 4) * i, 0.03 + s * 0.027], [inner, 0.025, 0.006], { outline: false });
     for (let i = 0; i < 4; i++) {
       const x = -inner / 2 + inner / 8 + (inner / 4) * i;
-      k.box(m("#a9c4cf"), [x, h * 0.86, 0.058], [inner / 4 - 0.2, 0.22, 0.01], { outline: 0.005 });
+      k.box(m("#a9c4cf", "glass"), [x, h * 0.86, 0.058], [inner / 4 - 0.2, 0.22, 0.01], { outline: 0.005 });
       for (const sx of [-1, 1]) k.box(m(shade(panel, 0.9)), [x + sx * 0.5 * (inner / 4 - 0.2), h * 0.6, 0.058], [0.02, h * 0.3, 0.006], { outline: false });
     }
-    k.box(m(METAL), [0, 0.42, 0.065], [0.3, 0.04, 0.03], { outline: 0.004 });
+    k.box(m(METAL, "metal"), [0, 0.42, 0.065], [0.3, 0.04, 0.03], { outline: 0.004 });
     trims(k, frame, W, 0, top, false);
   },
 
@@ -712,7 +712,7 @@ const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
       for (let i = 0; i < W * 6; i++) {
         const x = -W / 2 + 0.12 + r() * (W - 0.24);
         k.add("blob", m(shade("#7fa36a", 0.85 + r() * 0.3)), [x, sill - 0.02 + r() * 0.05, T / 2 + 0.14 + (r() - 0.5) * 0.1], 0.1 + r() * 0.05, { outline: 0.006 });
-        if (i % 2) k.add("sphere", m(["#e07a5f", "#f2cf4a", "#ecc9bd"][i % 3]!), [x, sill + 0.06 + r() * 0.05, T / 2 + 0.16], 0.05, { outline: 0.004 });
+        if (i % 2) k.add("sphere", m(["#f0704c", "#f5c537", "#ecc9bd"][i % 3]!), [x, sill + 0.06 + r() * 0.05, T / 2 + 0.16], 0.05, { outline: 0.004 });
       }
     }
   },

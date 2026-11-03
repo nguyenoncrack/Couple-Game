@@ -19,7 +19,7 @@ function rng(seed: number) {
 
 export function Lot({ w, d }: { w: number; d: number }) {
   const lawn = pencilMaterial("#9cb57a", { finish: "lawn", rim: false });
-  const ground = useMemo(() => new THREE.PlaneGeometry(260, 260).rotateX(-Math.PI / 2), []);
+  const ground = useMemo(() => new THREE.PlaneGeometry(700, 700).rotateX(-Math.PI / 2), []);
 
   return (
     <group>
@@ -60,7 +60,7 @@ export function Lot({ w, d }: { w: number; d: number }) {
           const r = rng(7);
           const tree = (x: number, z: number, s: number) => {
             k.add("cyl8", pencilMaterial("#8a6a4c", { finish: "wood" }), [x, 1.2 * s, z], [0.22 * s, 2.4 * s, 0.22 * s]);
-            const leaf = "#7fa36a";
+            const leaf = "#5f9e4f";
             for (let i = 0; i < 6; i++) {
               const a = r() * Math.PI * 2;
               const rr = r() * 0.9 * s;
@@ -73,7 +73,7 @@ export function Lot({ w, d }: { w: number; d: number }) {
           tree(w + 5, d - 2, 0.95);
           tree(w * 0.3, -4.5, 1.15);
           tree(w * 0.75, -5, 1.0);
-          for (let x = 0.5; x < w; x += 1.1) k.add("blob", pencilMaterial(shade("#88a873", 0.9 + r() * 0.2)), [x, 0.45, -o - 0.7], [1.3, 0.9 + r() * 0.3, 0.9], { outline: 0.012 });
+          for (let x = 0.5; x < w; x += 1.1) k.add("blob", pencilMaterial(shade("#6c9e57", 0.9 + r() * 0.2)), [x, 0.45, -o - 0.7], [1.3, 0.9 + r() * 0.3, 0.9], { outline: 0.012 });
         }}
       />
       <LotBorder w={w} d={d} />
