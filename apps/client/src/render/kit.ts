@@ -25,6 +25,12 @@ function rounded(w: number, h: number, d: number, r: number) {
   shape.quadraticCurveTo(-w / 2, -h / 2, x, -h / 2);
   const g = new THREE.ExtrudeGeometry(shape, { depth: d - r * 2, bevelEnabled: true, bevelSize: r * 0.9, bevelThickness: r, bevelSegments: 3, curveSegments: 4 });
   g.translate(0, 0, -(d - r * 2) / 2);
+  // Extrusion bevels grow outside the path. Normalize the complete geometry so
+  // callers' dimensions describe the actual cushion, including its rounded edge.
+  g.computeBoundingBox();
+  const size = g.boundingBox!.getSize(new THREE.Vector3());
+  g.center();
+  g.scale(w / size.x, h / size.y, d / size.z);
   g.computeVertexNormals();
   return g;
 }
@@ -40,6 +46,8 @@ const SHAPES = {
   torus: new THREE.TorusGeometry(0.5, 0.08, 8, 24),
   /** Unit cushion with soft edges (scale it). */
   soft: rounded(1, 1, 1, 0.22),
+  /** Gently rounded rigid housing, with flat faces for handles and trim. */
+  roundbox: rounded(1, 1, 1, 0.06),
 };
 export type Shape = keyof typeof SHAPES;
 
