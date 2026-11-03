@@ -1,8 +1,11 @@
 import { Canvas } from "@react-three/fiber";
 import { useGame } from "../state/game";
 import { BuildTools } from "../tools/BuildTools";
+import { LiveTools } from "../tools/LiveTools";
 import { CameraRig } from "./CameraRig";
+import { Characters } from "./Characters";
 import { Floors } from "./House";
+import { LifeProps } from "./LifeProps";
 import { Lot } from "./Lot";
 import { PartnerPresence } from "./Partner";
 import { FOG } from "./pencil";
@@ -11,6 +14,7 @@ import { FOG } from "./pencil";
 export function Scene() {
   const lot = useGame((s) => s.view?.lot);
   const level = useGame((s) => s.view?.levels[0]);
+  const mode = useGame((s) => s.mode);
   if (!lot || !level) return null;
 
   return (
@@ -26,7 +30,9 @@ export function Scene() {
       <CameraRig w={lot.w} d={lot.d} />
       <Lot w={lot.w} d={lot.d} />
       <Floors tiles={level.tiles} />
-      <BuildTools />
+      {mode === "live" ? <LiveTools /> : <BuildTools />}
+      <Characters />
+      <LifeProps />
       <PartnerPresence />
     </Canvas>
   );

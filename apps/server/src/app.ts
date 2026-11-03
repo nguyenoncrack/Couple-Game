@@ -108,8 +108,11 @@ export function createApp({ store, staticDir, roomIdleMs }: AppOptions) {
         case "presence":
           room.setPresence(peer, { cursor: msg.cursor, tool: msg.tool, drag: msg.drag });
           break;
+        case "life":
+          room.act(peer, msg.intent);
+          break;
         case "ping":
-          send({ type: "pong" });
+          send({ type: "pong", now: Date.now() });
           break;
       }
     });

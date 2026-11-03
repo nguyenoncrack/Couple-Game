@@ -1,9 +1,13 @@
 import {
   applyOp,
   CLOSE,
+  emptyLife,
+  Life,
   upgradeBlueprint,
   type AppliedOp,
   type Blueprint,
+  type LifeIntent,
+  type LifeReject,
   type MemberInfo,
   type Op,
   type Presence,
@@ -32,6 +36,10 @@ const MAX_CATCHUP = 500;
 /** Write a fresh snapshot after this many ops, and keep this many ops of history behind it. */
 const SNAPSHOT_EVERY = 100;
 const KEEP_HISTORY = 1000;
+/** How often time moves on for meals and plates while someone's in. */
+const LIFE_TICK_MS = 250;
+/** Life changes all the time; save it at most this often. */
+const LIFE_SAVE_MS = 2000;
 
 /**
  * The authority for one house while anyone is in it. Ops are handled strictly one at a time (a promise queue),
@@ -46,6 +54,9 @@ export class HouseRoom {
   private queue: Promise<unknown> = Promise.resolve();
   private members: MemberRow[] = [];
   private snapshotVersion: number;
+  private life = new Life(emptyLife());
+  private lifeTimer: NodeJS.Timeout | null = null;
+  private lifeSave: NodeJS.Timeout | null = null;
 
   private constructor(
     readonly house: HouseRow,
@@ -54,6 +65,10 @@ export class HouseRoom {
     private version: number,
   ) {
     this.snapshotVersion = version;
+  }
+
+  private now() {
+    return Date.now();
   }
 
   /** Load the latest snapshot and replay the log after it. */
@@ -74,6 +89,11 @@ export class HouseRoom {
       if (ops.length < 1000) break;
     }
     room.members = await store.listMembers(house.id);
+    const saved = await store.loadLife(house.id);
+    if (saved) {
+      room.life = Life.restore(saved, room.now());
+      room.life.onBlueprint(room.blueprint, room.now());
+    }
     return room;
   }
 
@@ -123,6 +143,10 @@ export class HouseRoom {
       }
 
       this.peers.add(peer);
+      const now = this.now();
+      const arrived = this.life.ensureAvatar(peer.memberId, this.blueprint, now);
+      this.life.online = this.online();
+      this.startLife();
       peer.send({
         type: "welcome",
         memberId: peer.memberId,
@@ -130,9 +154,12 @@ export class HouseRoom {
         members: this.memberInfo(),
         holds: this.holdsObject(),
         sync,
+        life: this.life.state,
+        now,
       });
       for (const pr of this.presence.values()) if (pr.memberId !== peer.memberId) peer.send({ type: "presence", ...pr });
       this.broadcast({ type: "members", members: this.memberInfo() }, peer);
+      if (arrived) this.lifeChanged(peer);
     });
   }
 
@@ -144,6 +171,8 @@ export class HouseRoom {
     if (released) this.broadcast({ type: "holds", holds: this.holdsObject() });
     if (this.presence.delete(peer.memberId)) this.broadcast({ type: "presence", memberId: peer.memberId, cursor: null, tool: "", drag: null });
     this.broadcast({ type: "members", members: this.memberInfo() });
+    this.life.online = this.online();
+    if (this.peers.size === 0) this.stopLife();
   }
 
   submit(peer: Peer, clientOpId: string, op: Op) {
@@ -180,6 +209,8 @@ export class HouseRoom {
       this.blueprint = r.blueprint;
       this.version = applied.version;
       this.broadcast({ type: "applied", ...applied });
+      // Anyone sitting on a chair that just went stands up, walks re-route round new furniture, and so on.
+      if (this.life.onBlueprint(this.blueprint, this.now())) this.lifeChanged();
 
       // Anything that no longer exists can't be held (removing a wall also removes its doors and windows).
       let released = false;
@@ -208,6 +239,76 @@ export class HouseRoom {
     this.broadcast({ type: "presence", ...pr }, peer);
   }
 
+  // --- life in the house ---
+
+  private online() {
+    return new Set([...this.peers].map((p) => p.memberId));
+  }
+
+  /** A player asks their character to do something. */
+  act(peer: Peer, intent: LifeIntent) {
+    if (!this.peers.has(peer)) return;
+    const now = this.now();
+    const bp = this.blueprint;
+    const id = peer.memberId;
+    let r: LifeReject | null;
+    switch (intent.do) {
+      case "walk":
+        r = this.life.walk(id, bp, [intent.x, intent.z], now);
+        break;
+      case "use":
+        r = this.life.use(id, bp, intent.objectId, intent.action, now);
+        break;
+      case "stop":
+        r = this.life.stop(id, now);
+        break;
+      case "cook":
+        r = this.life.cook(id, bp, intent.recipeId, intent.objectId, now);
+        break;
+      case "help":
+        r = this.life.help(id, bp, now);
+        break;
+      case "cancel":
+        r = this.life.cancelCooking();
+        break;
+      case "eat":
+        r = this.life.eat(id, bp, intent.dishId, now);
+        break;
+    }
+    if (r) peer.send({ type: "lifeRejected", reason: r });
+    else this.lifeChanged();
+  }
+
+  /** Tell everyone (or everyone but one, who already has it) and save soon. */
+  private lifeChanged(except?: Peer) {
+    this.broadcast({ type: "life", life: this.life.state, now: this.now() }, except);
+    if (!this.lifeSave) this.lifeSave = setTimeout(() => void this.saveLife(), LIFE_SAVE_MS);
+  }
+
+  private async saveLife() {
+    if (this.lifeSave) clearTimeout(this.lifeSave);
+    this.lifeSave = null;
+    try {
+      await this.store.saveLife(this.house.id, this.life.saved(this.now()));
+    } catch (e) {
+      console.error(`[room ${this.house.id}] failed to save life`, e);
+    }
+  }
+
+  private startLife() {
+    this.lifeTimer ??= setInterval(() => {
+      if (this.life.tick(this.blueprint, this.now())) this.lifeChanged();
+    }, LIFE_TICK_MS);
+  }
+
+  private stopLife() {
+    if (this.lifeTimer) clearInterval(this.lifeTimer);
+    this.lifeTimer = null;
+    // one last look with nobody online, so a meal on the go stops where it is
+    this.life.online = this.online();
+    if (this.life.tick(this.blueprint, this.now()) || this.lifeSave) void this.saveLife();
+  }
+
   /** Write a snapshot if anything changed since the last one, and trim old history. Call only from the queue. */
   private async snapshot() {
     if (this.version === this.snapshotVersion) return;
@@ -219,12 +320,16 @@ export class HouseRoom {
 
   /** Snapshot after any ops still in the queue (before unloading or shutting down). */
   flush() {
-    return this.enqueue(() => this.snapshot());
+    return this.enqueue(async () => {
+      await this.snapshot();
+      await this.saveLife();
+    });
   }
 
   /** Close every connection (server shutdown). */
   closeAll(code: number, reason: string) {
     for (const p of this.peers) p.close(code, reason);
     this.peers.clear();
+    this.stopLife();
   }
 }

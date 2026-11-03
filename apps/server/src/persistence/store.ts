@@ -1,4 +1,4 @@
-import type { AppliedOp, Blueprint } from "@cg/shared";
+import type { AppliedOp, Blueprint, LifeState } from "@cg/shared";
 
 /**
  * Everything the server keeps on disk goes through this interface, so SQLite can be swapped for Postgres later
@@ -49,6 +49,10 @@ export interface Store {
   findClientOp(houseId: string, memberId: string, clientOpId: string): Promise<number | null>;
   /** Drop log entries at or below this version (they're covered by a snapshot). */
   pruneOps(houseId: string, upTo: number): Promise<void>;
+
+  /** Where everyone was and what was cooking. Not part of the house's history: it's simply overwritten. */
+  loadLife(houseId: string): Promise<LifeState | null>;
+  saveLife(houseId: string, life: LifeState): Promise<void>;
 
   close(): void;
 }

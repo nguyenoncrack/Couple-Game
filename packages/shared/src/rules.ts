@@ -48,7 +48,7 @@ export const REJECT_TEXT: Record<RejectReason | "held" | "rate-limited" | "inval
 
 const fail = (reason: RejectReason): ApplyResult => ({ ok: false, reason });
 
-export function footprintOf(item: FurnitureItem, o: { x: number; z: number; rot: Rot }) {
+export function footprintOf(item: Pick<FurnitureItem, "footprint">, o: { x: number; z: number; rot: Rot }) {
   const [w, d] = rotatedSize(item.footprint[0], item.footprint[1], o.rot);
   return { x: o.x, z: o.z, w, d };
 }

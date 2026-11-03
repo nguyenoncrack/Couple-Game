@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { AppliedOp, Blueprint, Op } from "@cg/shared";
+import type { AppliedOp, Blueprint, LifeState, Op } from "@cg/shared";
 import type { AddMemberResult, HouseRow, MemberRow, Snapshot, Store } from "./store";
 
 const SCHEMA = `
@@ -34,6 +34,11 @@ const SCHEMA = `
     primary key (house_id, version)
   );
   create unique index if not exists ops_client on ops(house_id, member_id, client_op_id);
+  create table if not exists life (
+    house_id text primary key references houses(id) on delete cascade,
+    state text not null,
+    updated_at integer not null
+  );
 `;
 
 type Row = Record<string, unknown>;
@@ -137,6 +142,17 @@ export class SqliteStore implements Store {
 
   async pruneOps(houseId: string, upTo: number) {
     this.db.prepare("delete from ops where house_id = ? and version <= ?").run(houseId, upTo);
+  }
+
+  async loadLife(houseId: string) {
+    const r = this.db.prepare("select state from life where house_id = ?").get(houseId) as Row | undefined;
+    return r ? (JSON.parse(r.state as string) as LifeState) : null;
+  }
+
+  async saveLife(houseId: string, life: LifeState) {
+    this.db
+      .prepare("insert into life (house_id, state, updated_at) values (?, ?, ?) on conflict(house_id) do update set state = excluded.state, updated_at = excluded.updated_at")
+      .run(houseId, JSON.stringify(life), Date.now());
   }
 
   close() {

@@ -1,7 +1,7 @@
-import { catalog, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
-import { useState } from "react";
+import { catalog, cookingDone, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
+import { useEffect, useState } from "react";
 import type { WallMode } from "../render/House";
-import { redo, setTool, submit, undo, useGame, type Tool } from "../state/game";
+import { act, redo, serverNow, setMode, setTool, submit, undo, useGame, type Tool } from "../state/game";
 import { cameraApi } from "../render/CameraRig";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
 import { Icon } from "./icons";
@@ -9,15 +9,17 @@ import { Icon } from "./icons";
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
   const status = useGame((s) => s.status);
+  const live = useGame((s) => s.mode === "live");
   return (
     <div className="hud">
       <TopBar onLeave={onLeave} />
       {status === "reconnecting" && <div className="banner">Reconnecting… your changes are kept and will sync.</div>}
-      <ToolPanel />
-      <SelectionCard />
-      <StarterOffer />
+      {!live && <ToolPanel />}
+      {!live && <SelectionCard />}
+      {!live && <StarterOffer />}
+      <CookingCard />
       <CameraButtons />
-      <Toolbar />
+      {live ? <LiveBar /> : <Toolbar />}
       <Toasts />
       {status === "gone" && <Gone onLeave={onLeave} />}
     </div>
@@ -146,6 +148,15 @@ function HelpCard({ onClose }: { onClose: () => void }) {
         <li>
           <b>T</b> switches walls between up, cutaway and down
         </li>
+        <li>
+          <b>L</b> switches between building and living in the house
+        </li>
+        <li>
+          Living: <b>click</b> the floor to walk, <b>click</b> a sofa, bed, stove or plate for what you can do
+        </li>
+        <li>
+          Living: <b>F</b> keeps the camera on you, <b>X</b> stands still
+        </li>
       </ul>
       <button className="close" onClick={onClose} aria-label="Close">
         ×
@@ -176,14 +187,60 @@ export function cycleWallMode() {
 
 export const TOOL_KEYS = Object.fromEntries(TOOLS.map((t) => [t.key, t.tool]));
 
-function Toolbar() {
-  const tool = useGame((s) => s.tool);
+/** Build or Live, at the start of the bar in both. */
+function ModeSwitch() {
+  const mode = useGame((s) => s.mode);
+  return (
+    <div className="mode-switch" title="Build or live in the house (L)">
+      <button className={mode === "build" ? "on" : ""} onClick={() => setMode("build")}>
+        <Icon.hammer /> Build
+      </button>
+      <button className={mode === "live" ? "on" : ""} onClick={() => setMode("live")}>
+        <Icon.person /> Live
+      </button>
+    </div>
+  );
+}
+
+function WallModeButton() {
   const mode = useGame((s) => s.wallMode);
   const wallMode = WALL_MODES.find((m) => m.mode === mode) ?? WALL_MODES[0]!;
+  return (
+    <button className={`slot round ${wallMode.mode !== "up" ? "active" : ""}`} onClick={cycleWallMode} title="Walls: up, cutaway, down (T)">
+      <wallMode.icon />
+      <span className="slot-label">{wallMode.label}</span>
+    </button>
+  );
+}
+
+function LiveBar() {
+  const follow = useGame((s) => s.follow);
+  const busy = useGame((s) => Boolean(s.me && s.life?.avatars[s.me]?.use));
+  return (
+    <div className="toolbar">
+      <ModeSwitch />
+      <span className="toolbar-gap" />
+      <WallModeButton />
+      <button className={`slot round ${follow ? "active" : ""}`} onClick={() => useGame.setState({ follow: !follow })} title="Keep the camera on you (F)">
+        <Icon.follow />
+        <span className="slot-label">Follow</span>
+      </button>
+      <button className="slot round" onClick={() => act({ do: "stop" })} disabled={!busy} title="Stand up, stop what you're doing (X)">
+        <Icon.stand />
+        <span className="slot-label">Stand</span>
+      </button>
+    </div>
+  );
+}
+
+function Toolbar() {
+  const tool = useGame((s) => s.tool);
   const canUndo = useGame((s) => s.canUndo);
   const canRedo = useGame((s) => s.canRedo);
   return (
     <div className="toolbar">
+      <ModeSwitch />
+      <span className="toolbar-gap" />
       {TOOLS.map((t) => (
         <button key={t.tool} className={`slot ${tool === t.tool ? "active" : ""}`} onClick={() => setTool(t.tool)} title={`${t.label} (${t.key})`}>
           <span className="slot-key">{t.key}</span>
@@ -192,10 +249,7 @@ function Toolbar() {
         </button>
       ))}
       <span className="toolbar-gap" />
-      <button className={`slot round ${wallMode.mode !== "up" ? "active" : ""}`} onClick={cycleWallMode} title="Walls: up, cutaway, down (T)">
-        <wallMode.icon />
-        <span className="slot-label">{wallMode.label}</span>
-      </button>
+      <WallModeButton />
       <span className="toolbar-gap" />
       <button className="slot round small" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">
         <Icon.undo />
@@ -386,6 +440,69 @@ function StarterOffer() {
       <button className="btn primary" disabled={!online} onClick={() => submit(starterHouseOp())}>
         <Icon.house /> Build the starter house
       </button>
+    </div>
+  );
+}
+
+/** The meal on the go: each step, how far along, who's where, and a hand to lend. */
+function CookingCard() {
+  const cooking = useGame((s) => s.life?.cooking ?? null);
+  const avatars = useGame((s) => s.life?.avatars);
+  const members = useGame((s) => s.members);
+  const me = useGame((s) => s.me);
+  const [, tick] = useState(0);
+  // progress moves between server updates: redraw a few times a second while cooking
+  useEffect(() => {
+    if (!cooking) return;
+    const t = window.setInterval(() => tick((n) => n + 1), 200);
+    return () => window.clearInterval(t);
+  }, [cooking]);
+  if (!cooking || !avatars) return null;
+  const recipe = catalog.recipes.get(cooking.recipeId);
+  if (!recipe) return null;
+  const done = cookingDone(cooking, recipe, serverNow());
+  const cooks = Object.values(avatars).filter((a) => a.use?.station);
+  const amCooking = Boolean(me && avatars[me]?.use?.station);
+  const name = (id: string) => (id === me ? "You" : (members.find((m) => m.id === id)?.name ?? "Someone"));
+  return (
+    <div className="card cooking-card">
+      <div className="kicker">
+        <Icon.pot /> Cooking
+      </div>
+      <div className="sel-name">{recipe.name}</div>
+      <ol className="steps">
+        {recipe.steps.map((st, i) => {
+          const pct = i < cooking.step ? 100 : i > cooking.step ? 0 : (done / st.seconds) * 100;
+          const at = cooks.filter((a) => a.use!.station === st.station).map((a) => name(a.memberId));
+          return (
+            <li key={i} className={i < cooking.step ? "done" : i === cooking.step ? "now" : ""}>
+              <span className="step-name">
+                {st.action[0]!.toUpperCase() + st.action.slice(1)} <span className="step-where">at the {st.station}</span>
+              </span>
+              <span className="bar">
+                <span style={{ width: `${pct}%` }} />
+              </span>
+              {i === cooking.step && (
+                <span className="step-who">{cooking.rate > 1
+                    ? `${cooks.map((a) => name(a.memberId)).join(" & ")}, together: faster`
+                    : cooking.rate > 0
+                      ? `${at.join(" & ") || "Someone"} on it`
+                      : `Waiting for someone at the ${st.station}`}</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="sel-actions">
+        {!amCooking && (
+          <button className="btn primary" onClick={() => act({ do: "help" })}>
+            Lend a hand
+          </button>
+        )}
+        <button className="btn danger" onClick={() => act({ do: "cancel" })}>
+          Stop cooking
+        </button>
+      </div>
     </div>
   );
 }

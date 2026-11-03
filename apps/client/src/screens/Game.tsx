@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { SavedHouse } from "../net/session";
 import { Scene } from "../render/Scene";
-import { connect, disconnect, redo, setTool, undo, useGame, type Tool } from "../state/game";
+import { act, connect, disconnect, redo, setMode, setTool, undo, useGame, type Tool } from "../state/game";
 import { cycleWallMode, Hud, TOOL_KEYS } from "../ui/Hud";
 
 export function Game({ house, onLeave }: { house: SavedHouse; onLeave: () => void }) {
@@ -28,9 +28,16 @@ export function Game({ house, onLeave }: { house: SavedHouse; onLeave: () => voi
         return;
       }
       if (e.altKey) return;
+      const s = useGame.getState();
+      if (k === "l") return setMode(s.mode === "live" ? "build" : "live");
+      if (k === "t") return cycleWallMode();
+      if (s.mode === "live") {
+        if (k === "f") useGame.setState({ follow: !s.follow });
+        else if (k === "x") act({ do: "stop" });
+        return;
+      }
       const tool = TOOL_KEYS[e.key] as Tool | undefined;
       if (tool) setTool(tool);
-      else if (k === "t") cycleWallMode();
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);

@@ -2,6 +2,7 @@ import { CameraControls, CameraControlsImpl } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { useGame } from "../state/game";
 
 const { ACTION } = CameraControlsImpl;
 
@@ -22,6 +23,9 @@ export const autoPan = { active: false };
 export function cameraGestureActive() {
   return held.has(" ") || held.has("alt");
 }
+
+/** Where my character is, written every frame; the camera keeps it centred while following is on. */
+export const cameraFollow = { target: null as { x: number; z: number } | null };
 
 let controls: CameraControlsImpl | null = null;
 let home: (() => void) | null = null;
@@ -147,6 +151,10 @@ export function CameraRig({ w, d }: { w: number; d: number }) {
     }
     if (x) void c.truck(x * speed, 0, true);
     if (z) void c.forward(z * speed, true);
+    const follow = useGame.getState().follow;
+    // panning by hand means you want to look elsewhere
+    if (follow && (x || z)) useGame.setState({ follow: false });
+    else if (follow && cameraFollow.target) void c.moveTo(cameraFollow.target.x, 0, cameraFollow.target.z, true);
   });
 
   return <CameraControls ref={setCc} makeDefault />;

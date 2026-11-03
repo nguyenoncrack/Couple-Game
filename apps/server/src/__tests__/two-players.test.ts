@@ -252,3 +252,69 @@ describe("disconnects and saving", () => {
     await tab2.disconnect();
   });
 });
+
+describe("living together", () => {
+  it("gives each player a character who can walk and sit, one to a seat", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    expect(Object.keys(wa.life.avatars)).toEqual([wa.memberId]);
+    const wb = await b.connect();
+    expect(Object.keys(wb.life.avatars).sort()).toEqual([wa.memberId, wb.memberId].sort());
+
+    a.op("opA0000001", { t: "object.place", level: 0, id: "chair00001", catalogId: "dining_chair", x: 5, z: 5, rot: 0 });
+    await b.next("applied");
+    a.send({ type: "life", intent: { do: "use", objectId: "chair00001", action: "sit" } });
+    await b.next("life", (m) => m.life.avatars[wa.memberId]?.use?.objectId === "chair00001");
+    b.send({ type: "life", intent: { do: "use", objectId: "chair00001", action: "sit" } });
+    expect((await b.next("lifeRejected")).reason).toBe("taken");
+
+    b.send({ type: "life", intent: { do: "walk", x: 2, z: 2 } });
+    const seen = await a.next("life", (m) => m.life.avatars[wb.memberId]!.path.at(-1)![0] === 2.5);
+    expect(seen.life.avatars[wb.memberId]!.path.at(-1)).toEqual([2.5, 2.5]);
+
+    // the chair goes: whoever was on it is back on their feet
+    b.op("opB0000001", { t: "object.remove", level: 0, id: "chair00001" });
+    await a.next("life", (m) => m.life.avatars[wa.memberId]!.use === null);
+    await a.disconnect();
+    await b.disconnect();
+  });
+
+  it("cooks only while the cook is here", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    await b.connect();
+    a.op("opA0000001", {
+      t: "batch",
+      ops: [
+        { t: "object.place", level: 0, id: "counter001", catalogId: "counter", x: 12, z: 17, rot: 0 },
+        { t: "object.place", level: 0, id: "stove00001", catalogId: "stove", x: 13, z: 17, rot: 0 },
+      ],
+    });
+    await a.next("applied");
+    a.send({ type: "life", intent: { do: "cook", recipeId: "pancakes", objectId: "counter001" } });
+    await b.next("life", (m) => (m.life.cooking?.rate ?? 0) > 0);
+    await a.disconnect();
+    const paused = await b.next("life", (m) => m.life.cooking?.rate === 0);
+    expect(paused.life.cooking).toMatchObject({ recipeId: "pancakes", step: 0, startedBy: wa.memberId });
+    await b.disconnect();
+  });
+
+  it("remembers where everyone was after a restart", async () => {
+    const { a, houseId } = await couple();
+    const wa = await a.connect();
+    a.op("opA0000001", { t: "object.place", level: 0, id: "chair00001", catalogId: "dining_chair", x: 5, z: 5, rot: 0 });
+    await a.next("applied");
+    a.send({ type: "life", intent: { do: "use", objectId: "chair00001", action: "sit" } });
+    await a.next("life", (m) => m.life.avatars[wa.memberId]?.use?.objectId === "chair00001");
+    await a.disconnect();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const old = app;
+    await startApp();
+    const again = new Player(`${base.replace("http", "ws")}/ws`, houseId, a.token);
+    const welcome = await again.connect();
+    expect(welcome.life.avatars[wa.memberId]).toMatchObject({ use: { objectId: "chair00001", action: "sit" } });
+    await again.disconnect();
+    await old.close();
+  });
+});

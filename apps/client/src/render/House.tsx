@@ -11,7 +11,7 @@ import { pencilMaterial, shadowMaterial } from "./pencil";
 export const WALL_H = 2.7;
 export const WALL_DOWN_H = 0.32;
 export const WALL_T = 0.14;
-const FLOOR_Y = 0.04;
+export const FLOOR_Y = 0.04;
 
 export interface Run {
   dir: "h" | "v";

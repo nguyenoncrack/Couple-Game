@@ -1,10 +1,13 @@
 import {
   applyOp,
   inverseOp,
+  LIFE_TEXT,
   newId,
   REJECT_TEXT,
   type Blueprint,
   type HouseState,
+  type LifeIntent,
+  type LifeState,
   type MemberInfo,
   type Op,
   type Presence,
@@ -25,6 +28,15 @@ import type { WallMode } from "../render/House";
 
 export type Tool = "select" | "wall" | "wallErase" | "floor" | "floorErase" | "buy";
 export type Status = "connecting" | "online" | "reconnecting" | "gone";
+/** Build: change the house. Live: be in it, with your character. */
+export type Mode = "build" | "live";
+
+/** What the interaction menu is open on: a piece of furniture or a plate, and where to show it. */
+export interface Menu {
+  objectId?: string;
+  dishId?: string;
+  at: [number, number, number];
+}
 
 interface Pending {
   clientOpId: string;
@@ -61,6 +73,13 @@ export interface GameState {
   canRedo: boolean;
   catalogOpen: boolean;
   toasts: Toast[];
+
+  mode: Mode;
+  /** Characters, the meal on the go and plates out, as the server last said. */
+  life: LifeState | null;
+  menu: Menu | null;
+  /** Keep the camera on my character. */
+  follow: boolean;
 }
 
 export const useGame = create<GameState>(() => ({
@@ -84,6 +103,10 @@ export const useGame = create<GameState>(() => ({
   canRedo: false,
   catalogOpen: false,
   toasts: [],
+  mode: "build",
+  life: null,
+  menu: null,
+  follow: false,
 }));
 
 const get = useGame.getState;
@@ -91,6 +114,13 @@ const set = useGame.setState;
 
 let conn: Connection | null = null;
 let toastSeq = 0;
+
+/** Server clock minus mine. Character positions are worked out from server times. */
+let clockOffset = 0;
+export const serverNow = () => Date.now() + clockOffset;
+function syncClock(now: number) {
+  clockOffset = now - Date.now();
+}
 
 export function toast(text: string) {
   const id = ++toastSeq;
@@ -138,7 +168,8 @@ function handle(msg: ServerMsg) {
           if (a.by === msg.memberId) pending = pending.filter((p) => p.clientOpId !== a.clientOpId);
         }
       }
-      set({ me: msg.memberId, members: msg.members, holds: msg.holds });
+      syncClock(msg.now);
+      set({ me: msg.memberId, members: msg.members, holds: msg.holds, life: msg.life });
       if (s.house) updateHouse(s.house.houseId, { houseName: msg.house.name, inviteCode: msg.house.inviteCode, lastOpened: Date.now() });
       set((st) => ({ house: st.house && { ...st.house, houseName: msg.house.name, inviteCode: msg.house.inviteCode } }));
       settle(confirmed, pending);
@@ -195,14 +226,25 @@ function handle(msg: ServerMsg) {
     case "error":
       console.warn("[server]", msg.code, msg.message);
       break;
+    case "life": {
+      syncClock(msg.now);
+      // a plate that's been eaten can't keep its menu open
+      const menu = s.menu?.dishId && !msg.life.dishes.some((d) => d.id === s.menu!.dishId) ? null : s.menu;
+      set({ life: msg.life, menu });
+      break;
+    }
+    case "lifeRejected":
+      toast(LIFE_TEXT[msg.reason] ?? "That didn't work.");
+      break;
     case "pong":
+      syncClock(msg.now);
       break;
   }
 }
 
 export function connect(house: SavedHouse) {
   disconnect();
-  set({ house, status: "connecting", confirmed: null, pending: [], view: null, holds: {}, presence: {}, selection: null, placing: null, tool: "select" });
+  set({ house, status: "connecting", confirmed: null, pending: [], view: null, holds: {}, presence: {}, selection: null, placing: null, tool: "select", life: null, menu: null });
   undoStack.length = 0;
   redoStack.length = 0;
   set({ canUndo: false, canRedo: false });
@@ -330,5 +372,17 @@ export function setTool(tool: Tool) {
   set({ tool, placing: tool === "buy" ? get().placing : null, selection: tool === "select" ? get().selection : null, catalogOpen: tool === "buy" });
 }
 
+/** Ask my character to do something; the server answers with new life (or a reason it can't). */
+export function act(intent: LifeIntent) {
+  set({ menu: null });
+  conn?.send({ type: "life", intent });
+}
+
+export function setMode(mode: Mode) {
+  if (mode === get().mode) return;
+  if (get().selection) hold(null);
+  set({ mode, menu: null, selection: null, placing: null, catalogOpen: false, tool: "select", ...(mode === "build" ? { follow: false } : {}) });
+}
+
 // Handy for poking at the game from the console while developing.
-if (import.meta.env.DEV) Object.assign(window, { __game: useGame, __submit: submit, __undo: undo, __redo: redo });
+if (import.meta.env.DEV) Object.assign(window, { __game: useGame, __submit: submit, __undo: undo, __redo: redo, __act: act });
