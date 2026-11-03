@@ -10,8 +10,10 @@
     "dev": "concurrently -k -n server,client -c magenta,cyan \"npm run dev -w @cg/server\" \"npm run dev -w @cg/client\"",
     "build": "npm run build -w @cg/client",
     "start": "npm run start -w @cg/server",
+    "dev:cloudflare": "npm run dev -w @cg/worker",
+    "deploy": "npm run deploy -w @cg/worker",
     "test": "vitest run",
-    "typecheck": "tsc -p packages/shared && tsc -p apps/server && tsc -p apps/client"
+    "typecheck": "tsc -p packages/shared && tsc -p apps/server && tsc -p apps/client && tsc -p apps/worker"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

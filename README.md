@@ -11,14 +11,39 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and make a house (start from the starter house or an empty lot), then open the invite link in another browser (or another device on
-the same network) to join as the second player. Data is saved to `data/game.sqlite`.
+Open http://localhost:5173, make an account (a name and a password) and make a house (start from the starter house
+or an empty lot). Then open the invite link in another browser (or another device on the same network), make a
+second account and you're in as the second player. Data is saved to `data/game.sqlite`.
 
 ```bash
 npm test          # building and life rules + two-player server tests
 npm run typecheck
 npm run build && npm start   # production: the server also serves the built client on :8787
+npm run dev:cloudflare       # the Cloudflare version, locally (wrangler dev on :8787; stop `npm run dev` first)
 ```
+
+## Put it online (free, on Cloudflare)
+
+The game runs on Cloudflare's free plan: a Worker serves the website and the API, and Durable Objects (with their own
+SQLite) keep accounts and houses. You need a free Cloudflare account; no credit card.
+
+```bash
+npx wrangler login      # opens the browser once to connect your Cloudflare account
+npm run deploy          # builds the website and uploads everything
+```
+
+It prints the address, like `https://home-for-two.<your-name>.workers.dev`. Send that to your partner. Run
+`npm run deploy` again after any change; houses and accounts stay. `npx wrangler tail` shows the live logs.
+
+What the free plan allows (per day): 100,000 requests (every 20 WebSocket messages count as one) and 13,000 GB-s
+of Durable Object time, which is roughly 28 hours of a house being open. That's plenty for a handful of couples.
+To stay inside it, a house lets everyone go after 30 minutes with nobody doing anything ("the house is napping",
+one click to come back), and a tab that's been hidden for 5 minutes lets go until you look at it again.
+
+Passwords are hashed with 50,000 PBKDF2 rounds on Cloudflare (100,000 on Node) so that signing in stays inside the
+free plan's 10 ms of CPU per request. On the $5 paid plan you can raise `PASSWORD_ROUNDS` in
+`apps/worker/wrangler.jsonc` to 100000 (the most Workers allow); existing passwords keep working either way. If
+signing in ever fails with "error 1102", lower it instead.
 
 ## Controls
 
@@ -48,12 +73,14 @@ packages/shared   pure TypeScript, no rendering or networking
                   lot), state.ts (characters, cooking, plates; positions from path + start time), engine.ts (the rules)
   catalog/        furniture.json, openings.json, pieces.json, recipes.json, starter.json, checked when loaded
   protocol.ts     WebSocket messages
-apps/server       Node + ws + SQLite (node:sqlite)
-  http/           create a house, join with a code
-  rooms/          one HouseRoom per active house; ops are applied one at a time; life ticks while anyone's in
-  persistence/    Store interface + SQLite version (snapshot + append-only op log)
+apps/server       Node + ws + SQLite (node:sqlite); everything but app.ts, index.ts and node-sqlite.ts also runs on Cloudflare
+  auth/           password and token hashing (Web Crypto), the sign-in cookie
+  http/api.ts     accounts and sign-in, your houses, make one, join with a code, leave (fetch-style Request → Response)
+  rooms/          one HouseRoom per active house; ops are applied one at a time; life wakes up only when something's due
+  persistence/    Directory (accounts, houses, members) and HouseStore (snapshot + append-only op log + life), over SQL
+apps/worker       Cloudflare: the Worker, a directory Durable Object and one Durable Object per house
 apps/client       Vite + React + react-three-fiber
-  net/            WebSocket with reconnect, saved houses
+  net/            the API, WebSocket with reconnect and napping
   state/          confirmed house + my pending edits = what I see
   render/         pencil shaders, the kit model builder, furniture models, walls, floors, lot, characters, food
   tools/          build-mode pointer handling and previews; live-mode clicks and the interaction menu
@@ -75,7 +102,11 @@ apps/client       Vite + React + react-three-fiber
 - **Saving.** Every accepted op is on disk before it's broadcast. Snapshots are written every 100 ops and when a house
   unloads. After a crash the op log rebuilds the house.
 - **Many houses.** Rooms load when someone joins and unload when the house is empty. They share nothing.
-- **Membership.** At most two members per house. Tokens are stored only as hashes, and join attempts are rate-limited.
+- **Accounts.** A name and a password; names are unique however they're capitalised. Signing in sets an HttpOnly
+  cookie; only hashes of passwords (PBKDF2) and sign-in tokens are stored. Changing your password signs you out
+  everywhere else. Houses a browser joined before accounts move to whichever account signs in there first.
+- **Membership.** At most two members per house. The WebSocket only accepts pages from the game's own address, and
+  sign-ins, sign-ups, joins and connections are rate-limited. When the last person leaves a house, it's deleted.
 - **Living together.** Characters, the meal on the go and plates on the table are life state, separate from the
   blueprint: no ops, no undo. The server owns it and sends all of it whenever it changes. A walk is sent as its path
   and start time on the server clock, so both screens work out where a character is every frame without more

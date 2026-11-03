@@ -1,16 +1,16 @@
+import type { HouseSummary } from "@cg/shared";
 import { useEffect } from "react";
-import type { SavedHouse } from "../net/session";
 import { Scene } from "../render/Scene";
 import { act, connect, disconnect, redo, setMode, setTool, undo, useGame, type Tool } from "../state/game";
 import { cycleWallMode, Hud, TOOL_KEYS } from "../ui/Hud";
 
-export function Game({ house, onLeave }: { house: SavedHouse; onLeave: () => void }) {
+export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => void }) {
   const ready = useGame((s) => s.view !== null);
 
   useEffect(() => {
     connect(house);
     return () => disconnect();
-  }, [house.houseId, house.token]);
+  }, [house.houseId]);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {

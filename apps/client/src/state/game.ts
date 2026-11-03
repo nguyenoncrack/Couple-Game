@@ -6,6 +6,7 @@ import {
   REJECT_TEXT,
   type Blueprint,
   type HouseState,
+  type HouseSummary,
   type LifeIntent,
   type LifeState,
   type MemberInfo,
@@ -17,7 +18,6 @@ import {
 } from "@cg/shared";
 import { create } from "zustand";
 import { Connection } from "../net/connection";
-import { updateHouse, type SavedHouse } from "../net/session";
 import type { WallMode } from "../render/House";
 
 /**
@@ -27,7 +27,7 @@ import type { WallMode } from "../render/House";
  */
 
 export type Tool = "select" | "wall" | "wallErase" | "floor" | "floorErase" | "buy";
-export type Status = "connecting" | "online" | "reconnecting" | "gone";
+export type Status = "connecting" | "online" | "reconnecting" | "asleep" | "gone";
 /** Build: change the house. Live: be in it, with your character. */
 export type Mode = "build" | "live";
 
@@ -49,7 +49,7 @@ interface Toast {
 }
 
 export interface GameState {
-  house: SavedHouse | null;
+  house: HouseSummary | null;
   me: string | null;
   members: MemberInfo[];
   status: Status;
@@ -170,7 +170,6 @@ function handle(msg: ServerMsg) {
       }
       syncClock(msg.now);
       set({ me: msg.memberId, members: msg.members, holds: msg.holds, life: msg.life });
-      if (s.house) updateHouse(s.house.houseId, { houseName: msg.house.name, inviteCode: msg.house.inviteCode, lastOpened: Date.now() });
       set((st) => ({ house: st.house && { ...st.house, houseName: msg.house.name, inviteCode: msg.house.inviteCode } }));
       settle(confirmed, pending);
       // Anything still pending may or may not have reached the server before we dropped; the server ignores repeats.
@@ -242,13 +241,13 @@ function handle(msg: ServerMsg) {
   }
 }
 
-export function connect(house: SavedHouse) {
+export function connect(house: HouseSummary) {
   disconnect();
   set({ house, status: "connecting", confirmed: null, pending: [], view: null, holds: {}, presence: {}, selection: null, placing: null, tool: "select", life: null, menu: null });
   undoStack.length = 0;
   redoStack.length = 0;
   set({ canUndo: false, canRedo: false });
-  conn = new Connection(house.houseId, house.token, {
+  conn = new Connection(house.houseId, {
     knownVersion: () => get().confirmed?.version ?? 0,
     onMessage: handle,
     // While we're cut off, my partner's cursor and holds are stale; the welcome after reconnecting resends them.
@@ -256,9 +255,14 @@ export function connect(house: SavedHouse) {
     onFatal: (code) =>
       set({
         status: "gone",
-        goneReason: code === 4409 ? "You opened this house in another tab or device." : code === 4404 ? "This house doesn't exist anymore." : "This browser isn't a member of that house.",
+        goneReason: code === 4409 ? "You opened this house in another tab or device." : code === 4404 ? "This house doesn't exist anymore." : "You're not in that house, or you've been signed out.",
       }),
   });
+}
+
+/** Back into a house that went to sleep while nobody was around. */
+export function wake() {
+  conn?.wake();
 }
 
 export function disconnect() {

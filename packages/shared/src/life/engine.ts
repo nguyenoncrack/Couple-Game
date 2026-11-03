@@ -314,6 +314,23 @@ export class Life {
   }
 
   /**
+   * The next moment `tick` could change anything (a step finishing, a cook reaching their station, a last bite), or
+   * null if nothing is due. The server sleeps until then instead of checking all the time.
+   */
+  nextEvent(now: number): number | null {
+    let next = Infinity;
+    for (const a of Object.values(this.state.avatars)) {
+      const arrive = arrivalTime(a);
+      if (a.use?.station && arrive > now) next = Math.min(next, arrive);
+      if (a.use?.action === "eat" && a.use.until !== undefined) next = Math.min(next, a.use.until);
+    }
+    const c = this.state.cooking;
+    const step = c && this.cat.recipes.get(c.recipeId)?.steps[c.step];
+    if (c && step && c.rate > 0) next = Math.min(next, c.updatedAt + ((step.seconds - c.done) / c.rate) * 1000);
+    return next === Infinity ? null : Math.max(next, now);
+  }
+
+  /**
    * The house changed under everyone's feet: anyone using furniture that moved or went stops, walks that are
    * now blocked find another way (or stop), anyone furniture landed on steps aside, and plates on a table that
    * went are cleared. True if anything changed.

@@ -2,6 +2,9 @@
   "name": "@cg/server",
   "private": true,
   "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "start": "NODE_ENV=production tsx src/index.ts"

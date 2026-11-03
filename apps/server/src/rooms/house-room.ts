@@ -13,7 +13,7 @@ import {
   type Presence,
   type ServerMsg,
 } from "@cg/shared";
-import type { HouseRow, MemberRow, Store } from "../persistence/store";
+import type { HouseRow, HouseStore, MemberRow } from "../persistence/store";
 
 /** The object, door or window with this ID, if it exists. */
 function find(bp: Blueprint, id: string) {
@@ -36,10 +36,15 @@ const MAX_CATCHUP = 500;
 /** Write a fresh snapshot after this many ops, and keep this many ops of history behind it. */
 const SNAPSHOT_EVERY = 100;
 const KEEP_HISTORY = 1000;
-/** How often time moves on for meals and plates while someone's in. */
-const LIFE_TICK_MS = 250;
 /** Life changes all the time; save it at most this often. */
 const LIFE_SAVE_MS = 2000;
+/**
+ * With nobody doing anything for this long (a tab left open overnight), everyone is let go, so a house doesn't stay
+ * running for nothing. Keep-alive pings don't count. Clients show a "come back" button instead of reconnecting.
+ */
+export const IDLE_MS = 30 * 60_000;
+
+type Timer = ReturnType<typeof setTimeout>;
 
 /**
  * The authority for one house while anyone is in it. Ops are handled strictly one at a time (a promise queue),
@@ -55,12 +60,18 @@ export class HouseRoom {
   private members: MemberRow[] = [];
   private snapshotVersion: number;
   private life = new Life(emptyLife());
-  private lifeTimer: NodeJS.Timeout | null = null;
-  private lifeSave: NodeJS.Timeout | null = null;
+  private lifeTimer: Timer | null = null;
+  private lifeSave: Timer | null = null;
+  private lastActive = 0;
+  private idleTimer: Timer | null = null;
+  /** How long nobody may do anything before the house closes everyone's connection. */
+  private idleMs = IDLE_MS;
 
   private constructor(
     readonly house: HouseRow,
-    private store: Store,
+    private store: HouseStore,
+    /** Who's in the house, from the directory (it can change while the room is open: the partner joins). */
+    private listMembers: () => Promise<MemberRow[]>,
     private blueprint: Blueprint,
     private version: number,
   ) {
@@ -72,11 +83,12 @@ export class HouseRoom {
   }
 
   /** Load the latest snapshot and replay the log after it. */
-  static async load(house: HouseRow, store: Store): Promise<HouseRoom> {
+  static async load(house: HouseRow, store: HouseStore, listMembers: () => Promise<MemberRow[]>, idleMs = IDLE_MS): Promise<HouseRoom> {
     const snap = await store.loadSnapshot(house.id);
     if (!snap) throw new Error(`house ${house.id} has no snapshot`);
-    const room = new HouseRoom(house, store, upgradeBlueprint(snap.blueprint), snap.version);
+    const room = new HouseRoom(house, store, listMembers, upgradeBlueprint(snap.blueprint), snap.version);
     room.snapshotVersion = snap.version;
+    room.idleMs = idleMs;
     for (;;) {
       const ops = await store.opsSince(house.id, room.version, 1000);
       for (const a of ops) {
@@ -88,7 +100,7 @@ export class HouseRoom {
       }
       if (ops.length < 1000) break;
     }
-    room.members = await store.listMembers(house.id);
+    room.members = await listMembers();
     const saved = await store.loadLife(house.id);
     if (saved) {
       room.life = Life.restore(saved, room.now());
@@ -133,7 +145,7 @@ export class HouseRoom {
           p.close(CLOSE.replaced, "opened somewhere else");
         }
       }
-      this.members = await this.store.listMembers(this.house.id);
+      this.members = await this.listMembers();
 
       let sync: Extract<ServerMsg, { type: "welcome" }>["sync"] = { kind: "snapshot", state: this.state };
       const missed = this.version - knownVersion;
@@ -145,8 +157,7 @@ export class HouseRoom {
       this.peers.add(peer);
       const now = this.now();
       const arrived = this.life.ensureAvatar(peer.memberId, this.blueprint, now);
-      this.life.online = this.online();
-      this.startLife();
+      this.touch();
       peer.send({
         type: "welcome",
         memberId: peer.memberId,
@@ -159,7 +170,9 @@ export class HouseRoom {
       });
       for (const pr of this.presence.values()) if (pr.memberId !== peer.memberId) peer.send({ type: "presence", ...pr });
       this.broadcast({ type: "members", members: this.memberInfo() }, peer);
-      if (arrived) this.lifeChanged(peer);
+      // back online: a meal they were cooking picks up again
+      if (this.lifeOnline() || arrived) this.lifeChanged(peer);
+      else this.scheduleLife();
     });
   }
 
@@ -171,7 +184,8 @@ export class HouseRoom {
     if (released) this.broadcast({ type: "holds", holds: this.holdsObject() });
     if (this.presence.delete(peer.memberId)) this.broadcast({ type: "presence", memberId: peer.memberId, cursor: null, tool: "", drag: null });
     this.broadcast({ type: "members", members: this.memberInfo() });
-    this.life.online = this.online();
+    // a meal they were cooking waits for them
+    if (this.lifeOnline()) this.lifeChanged();
     if (this.peers.size === 0) this.stopLife();
   }
 
@@ -245,9 +259,35 @@ export class HouseRoom {
     return new Set([...this.peers].map((p) => p.memberId));
   }
 
+  /** Someone came or went: catch life up to now with the new line-up. True if anything changed. */
+  private lifeOnline() {
+    const now = this.now();
+    // time up to now passed with the old line-up, then it changes
+    const before = this.life.tick(this.blueprint, now);
+    this.life.online = this.online();
+    return this.life.tick(this.blueprint, now) || before;
+  }
+
+  /** A player did something (not just a keep-alive ping): the house isn't idle. */
+  touch() {
+    this.lastActive = this.now();
+    if (this.idleTimer || !this.peers.size) return;
+    const check = () => {
+      const left = this.lastActive + this.idleMs - this.now();
+      if (!this.peers.size) this.idleTimer = null;
+      else if (left > 0) this.idleTimer = setTimeout(check, left);
+      else {
+        this.idleTimer = null;
+        for (const p of [...this.peers]) p.close(CLOSE.idle, "nobody's been here for a while");
+      }
+    };
+    this.idleTimer = setTimeout(check, this.idleMs);
+  }
+
   /** A player asks their character to do something. */
   act(peer: Peer, intent: LifeIntent) {
     if (!this.peers.has(peer)) return;
+    this.touch();
     const now = this.now();
     const bp = this.blueprint;
     const id = peer.memberId;
@@ -279,10 +319,28 @@ export class HouseRoom {
     else this.lifeChanged();
   }
 
-  /** Tell everyone (or everyone but one, who already has it) and save soon. */
+  /** Tell everyone (or everyone but one, who already has it), save soon, and wait for whatever's next. */
   private lifeChanged(except?: Peer) {
     this.broadcast({ type: "life", life: this.life.state, now: this.now() }, except);
     if (!this.lifeSave) this.lifeSave = setTimeout(() => void this.saveLife(), LIFE_SAVE_MS);
+    this.scheduleLife();
+  }
+
+  /** Sleep until the next thing that can happen in the house (a step done, a bite finished), then deal with it. */
+  private scheduleLife() {
+    if (this.lifeTimer) clearTimeout(this.lifeTimer);
+    this.lifeTimer = null;
+    if (!this.peers.size) return;
+    const at = this.life.nextEvent(this.now());
+    if (at === null) return;
+    this.lifeTimer = setTimeout(
+      () => {
+        this.lifeTimer = null;
+        if (this.life.tick(this.blueprint, this.now())) this.lifeChanged();
+        else this.scheduleLife();
+      },
+      at - this.now() + 5,
+    );
   }
 
   private async saveLife() {
@@ -295,18 +353,13 @@ export class HouseRoom {
     }
   }
 
-  private startLife() {
-    this.lifeTimer ??= setInterval(() => {
-      if (this.life.tick(this.blueprint, this.now())) this.lifeChanged();
-    }, LIFE_TICK_MS);
-  }
-
+  /** Nobody's left: stop the clock and save where everything is. */
   private stopLife() {
-    if (this.lifeTimer) clearInterval(this.lifeTimer);
+    if (this.lifeTimer) clearTimeout(this.lifeTimer);
     this.lifeTimer = null;
-    // one last look with nobody online, so a meal on the go stops where it is
-    this.life.online = this.online();
-    if (this.life.tick(this.blueprint, this.now()) || this.lifeSave) void this.saveLife();
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+    if (this.lifeSave) void this.saveLife();
   }
 
   /** Write a snapshot if anything changed since the last one, and trim old history. Call only from the queue. */
@@ -330,6 +383,7 @@ export class HouseRoom {
   closeAll(code: number, reason: string) {
     for (const p of this.peers) p.close(code, reason);
     this.peers.clear();
+    this.lifeOnline();
     this.stopLife();
   }
 }

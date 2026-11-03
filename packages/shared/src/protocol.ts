@@ -37,8 +37,11 @@ export const LifeIntent = z.discriminatedUnion("do", [
 export type LifeIntent = z.infer<typeof LifeIntent>;
 
 export const ClientMsg = z.discriminatedUnion("type", [
-  /** First message on every connection. `knownVersion` is the last version this client saw (0 if none). */
-  z.object({ type: z.literal("hello"), houseId: Id, token: z.string().min(20).max(100), knownVersion: z.number().int().min(0) }),
+  /**
+   * First message on every connection. Who you are and which house come with the connection itself (the sign-in
+   * cookie and `/ws?house=`); `knownVersion` is the last version this client saw (0 if none).
+   */
+  z.object({ type: z.literal("hello"), knownVersion: z.number().int().min(0) }),
   z.object({ type: z.literal("op"), clientOpId: Id, op: Op }),
   /** Claim (or release, with null) an object while dragging it, so the partner can't grab it at the same time. */
   z.object({ type: z.literal("hold"), objectId: Id.nullable() }),
@@ -96,12 +99,41 @@ export type ServerMsg =
   | { type: "error"; code: string; message: string }
   | { type: "pong"; now: number };
 
+/** The signed-in player, as the API reports them. */
+export interface AccountInfo {
+  id: string;
+  name: string;
+}
+
+/** A house in your list: enough to show it and open it. */
+export interface HouseSummary {
+  houseId: string;
+  houseName: string;
+  inviteCode: string;
+  memberId: string;
+  members: { name: string; color: string; me: boolean }[];
+}
+
+/** `GET /api/me`, and what signing up or in returns. */
+export interface Me {
+  account: AccountInfo;
+  houses: HouseSummary[];
+}
+
+/** A house this browser joined before accounts existed, proven by its old device token. */
+export interface DeviceClaim {
+  houseId: string;
+  token: string;
+}
+
 /** WebSocket close codes the client acts on. */
 export const CLOSE = {
-  /** Bad token or not a member: don't reconnect, send the player home. */
+  /** Not signed in, or not a member: don't reconnect, send the player home. */
   unauthorized: 4401,
   /** The house no longer exists. */
   notFound: 4404,
   /** The same member connected from somewhere else; this tab yields. */
   replaced: 4409,
+  /** Nobody did anything for a long while; come back with a click. */
+  idle: 4408,
 } as const;

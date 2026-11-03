@@ -103,10 +103,14 @@ describe("cooking", () => {
     expect(life.help("ben", bp, t)).toBeNull();
     // the two of them take a counter each
     expect(life.state.avatars.amy!.use!.objectId).not.toBe(life.state.avatars.ben!.use!.objectId);
+    // jump from one event to the next, as the server does
     let served = false;
-    for (; t < 120_000 && !served; t += 250) {
+    for (let steps = 0; steps < 50 && !served; steps++) {
       life.tick(bp, t);
       served = life.state.dishes.length > 0;
+      const next = life.nextEvent(t);
+      if (next === null) break;
+      t = Math.max(next, t + 1);
     }
     expect(served).toBe(true);
     expect(life.state.cooking).toBeNull();

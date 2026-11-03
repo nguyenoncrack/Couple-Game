@@ -1,7 +1,7 @@
 import { catalog, cookingDone, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
 import { useEffect, useState } from "react";
 import type { WallMode } from "../render/House";
-import { act, redo, serverNow, setMode, setTool, submit, undo, useGame, type Tool } from "../state/game";
+import { act, redo, serverNow, setMode, setTool, submit, undo, useGame, wake, type Tool } from "../state/game";
 import { cameraApi } from "../render/CameraRig";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
 import { Icon } from "./icons";
@@ -21,6 +21,7 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       <CameraButtons />
       {live ? <LiveBar /> : <Toolbar />}
       <Toasts />
+      {status === "asleep" && <Asleep onLeave={onLeave} />}
       {status === "gone" && <Gone onLeave={onLeave} />}
     </div>
   );
@@ -44,7 +45,7 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
         <div className="pill title-pill">{house?.houseName ?? "…"}</div>
         <div className={`pill status-pill status-${status}`}>
           <span className="status-dot" />
-          {status === "online" ? "saved" : status === "connecting" ? "connecting" : status === "reconnecting" ? "offline" : "closed"}
+          {status === "online" ? "saved" : status === "connecting" ? "connecting" : status === "reconnecting" ? "offline" : status === "asleep" ? "paused" : "closed"}
         </div>
       </div>
       <div className="topbar-right">
@@ -516,6 +517,26 @@ function Toasts() {
           {t.text}
         </div>
       ))}
+    </div>
+  );
+}
+
+/** The house let go of us after a long quiet spell (or a long-hidden tab); nothing is lost. */
+function Asleep({ onLeave }: { onLeave: () => void }) {
+  return (
+    <div className="overlay">
+      <div className="card gone-card">
+        <h2>The house is napping</h2>
+        <p className="hand">Nobody did anything for a while, so it paused to save energy. Everything is saved.</p>
+        <div className="row">
+          <button className="btn primary" onClick={wake}>
+            Come back in
+          </button>
+          <button className="btn" onClick={onLeave}>
+            Back home
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
