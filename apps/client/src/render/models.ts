@@ -126,7 +126,7 @@ const BUILDERS: Record<string, Builder> = {
     const W = w - 0.2;
     const D = 0.45;
     const z = -d / 2 + D / 2 + 0.04;
-    legs(k, m(shade(wood, 0.7)), W, D, 0.1, 0.02, 0.06);
+    k.at([0, 0, z], 0, () => legs(k, m(shade(wood, 0.7)), W, D, 0.1, 0.02, 0.06));
     k.box(body, [0, 0.33, z], [W, 0.46, D]);
     for (let i = 0; i < 3; i++) {
       const x = -W / 2 + (W / 3) * (i + 0.5);
@@ -236,7 +236,7 @@ const BUILDERS: Record<string, Builder> = {
     const wood = str(p, "wood", "#a57a50");
     const body = m(wood, "wood");
     const z = -d / 2 + 0.28;
-    legs(k, m(shade(wood, 0.8)), 0.48, 0.42, 0.08, 0.02, 0.04);
+    k.at([0, 0, z], 0, () => legs(k, m(shade(wood, 0.8)), 0.48, 0.42, 0.08, 0.02, 0.04));
     k.box(body, [0, 0.33, z], [0.48, 0.5, 0.42]);
     for (let i = 0; i < 2; i++) {
       k.box(m(shade(wood, 1.08), "wood"), [0, 0.22 + i * 0.22, z + 0.215], [0.42, 0.18, 0.012], { outline: 0.006 });
