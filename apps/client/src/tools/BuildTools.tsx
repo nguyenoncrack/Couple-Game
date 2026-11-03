@@ -16,7 +16,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { create } from "zustand";
-import { autoPan, cameraGestureActive } from "../render/CameraRig";
+import { autoPan, cameraGestureActive, multiTouch } from "../render/CameraRig";
 import { addWall, FootprintMarker, Furniture, objectTransform, openingTransform, WALL_DOWN_H, WALL_H, wallRuns, Walls } from "../render/House";
 import type { Kit } from "../render/kit";
 import { KitMesh, Meshes } from "../render/KitMesh";
@@ -45,7 +45,20 @@ interface MoveDrag {
   /** Doors and windows: which wall line, and which way they face. */
   dir: "h" | "v";
   flip: boolean;
+  /** Where the press started on screen; nothing moves until the pointer has really travelled from it. */
+  from: [number, number];
+  armed: boolean;
   moved: boolean;
+}
+
+/** How far (in screen pixels) the pointer must travel before a press on furniture becomes a move, not a click. */
+const DRAG_PX = 8;
+const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.04);
+
+/** The floor point under the pointer. The hit point on a model sits above the floor, in a different cell. */
+function floorUnder(e: ThreeEvent<PointerEvent>): [number, number] {
+  const hit = e.ray.intersectPlane(floorPlane, new THREE.Vector3());
+  return hit ? [hit.x, hit.z] : [e.point.x, e.point.z];
 }
 
 interface BuildState {
@@ -120,6 +133,38 @@ function finishMove() {
   if (o && (o.x !== m.x || o.z !== m.z || o.rot !== m.rot)) submit({ t: "object.move", level: 0, id: m.id, x: m.x, z: m.z, rot: m.rot });
 }
 
+/**
+ * A press with something from the catalog in hand. It's placed when the press ends close to where it began, so
+ * the first finger of a pinch, or a press that turns into a camera drag, doesn't drop anything.
+ */
+let pendingPlace: { p: [number, number]; from: [number, number] } | null = null;
+
+function placeAt(p: [number, number]) {
+  const placing = useGame.getState().placing;
+  if (!placing) return;
+  const { catalogId, rot } = placing;
+  const opening = catalog.openings.get(catalogId);
+  if (opening) {
+    const spot = openingSpotAt(p, opening, null);
+    submit({ t: "opening.place", level: 0, id: newId(), catalogId, ...spot, flip: rot % 2 === 1 });
+    return;
+  }
+  const [x, z] = anchorUnder(p, catalogId, rot);
+  submit({ t: "object.place", level: 0, id: newId(), catalogId, x, z, rot });
+}
+
+function finishPlace(e: PointerEvent) {
+  const pending = pendingPlace;
+  pendingPlace = null;
+  if (pending && Math.hypot(e.clientX - pending.from[0], e.clientY - pending.from[1]) < DRAG_PX) placeAt(pending.p);
+}
+
+/** A second finger came down: the camera has the gesture, so drop whatever the first finger started. */
+function cancelForCamera() {
+  pendingPlace = null;
+  if (getB().drag || getB().move) setB({ drag: null, move: null });
+}
+
 function finishDrag() {
   const { drag } = getB();
   const s = useGame.getState();
@@ -185,8 +230,9 @@ export function BuildTools() {
 
   // Let go of a drag even if the pointer is released over the HUD or outside the window.
   useEffect(() => {
-    const up = () => {
+    const up = (e: PointerEvent) => {
       downAt.current = null;
+      finishPlace(e);
       finishDrag();
       finishMove();
     };
@@ -250,8 +296,16 @@ export function BuildTools() {
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     const p: [number, number] = [e.point.x, e.point.z];
     setB({ pointer: p });
+    if (multiTouch()) return cancelForCamera();
     const s = useGame.getState();
-    const { drag, move } = getB();
+    const { drag } = getB();
+    let { move } = getB();
+    if (move && !move.armed) {
+      const travelled = Math.hypot(e.nativeEvent.clientX - move.from[0], e.nativeEvent.clientY - move.from[1]);
+      if (travelled < DRAG_PX) return;
+      move = { ...move, armed: true };
+      setB({ move });
+    }
     if (drag) {
       if (s.tool === "wall" || s.tool === "wallErase") setB({ drag: { ...drag, end: straighten(drag.start, cornerAt(p)) } });
       else setB({ drag: { ...drag, end: cellAt(p) } });
@@ -271,6 +325,7 @@ export function BuildTools() {
   };
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
+    if (multiTouch()) return cancelForCamera();
     if (e.button !== 0 || cameraGestureActive()) return;
     const p: [number, number] = [e.point.x, e.point.z];
     const s = useGame.getState();
@@ -288,19 +343,9 @@ export function BuildTools() {
         setB({ drag: { start: c, end: c } });
         break;
       }
-      case "buy": {
-        if (!s.placing) return;
-        const { catalogId, rot } = s.placing;
-        const opening = catalog.openings.get(catalogId);
-        if (opening) {
-          const spot = openingSpotAt(p, opening, null);
-          submit({ t: "opening.place", level: 0, id: newId(), catalogId, ...spot, flip: rot % 2 === 1 });
-          break;
-        }
-        const [x, z] = anchorUnder(p, catalogId, rot);
-        submit({ t: "object.place", level: 0, id: newId(), catalogId, x, z, rot });
+      case "buy":
+        if (s.placing) pendingPlace = { p, from: [e.nativeEvent.clientX, e.nativeEvent.clientY] };
         break;
-      }
       case "select":
         select(null);
         break;
@@ -322,8 +367,9 @@ export function BuildTools() {
     }
     const o = s.view!.levels[0]!.objects[id]!;
     select(id);
-    const c = cellAt([e.point.x, e.point.z]);
-    setB({ move: { kind: "object", id, offset: [o.x - c[0], o.z - c[1]], x: o.x, z: o.z, rot: o.rot, dir: "h", flip: false, moved: false } });
+    const c = cellAt(floorUnder(e));
+    const from: [number, number] = [e.nativeEvent.clientX, e.nativeEvent.clientY];
+    setB({ move: { kind: "object", id, offset: [o.x - c[0], o.z - c[1]], x: o.x, z: o.z, rot: o.rot, dir: "h", flip: false, from, armed: false, moved: false } });
   };
 
   const onOpeningDown = (id: string, e: ThreeEvent<PointerEvent>) => {
@@ -340,7 +386,8 @@ export function BuildTools() {
     }
     const o = s.view!.levels[0]!.openings[id]!;
     select(id);
-    setB({ move: { kind: "opening", id, offset: [0, 0], x: o.x, z: o.z, rot: 0, dir: o.dir, flip: o.flip, moved: false } });
+    const from: [number, number] = [e.nativeEvent.clientX, e.nativeEvent.clientY];
+    setB({ move: { kind: "opening", id, offset: [0, 0], x: o.x, z: o.z, rot: 0, dir: o.dir, flip: o.flip, from, armed: false, moved: false } });
   };
 
   return (

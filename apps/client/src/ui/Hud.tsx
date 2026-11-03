@@ -4,6 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { WallMode } from "../render/House";
 import { act, redo, serverNow, setMode, setTool, submit, undo, useGame, wake, type Tool } from "../state/game";
 import { cameraApi } from "../render/CameraRig";
+import { useThumbnail } from "../render/thumbnails";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
 import { together } from "../state/together";
 import { ChatButton, ChatPanel } from "./Chat";
@@ -126,13 +127,13 @@ function HelpCard({ onClose }: { onClose: () => void }) {
       <div className="kicker">Controls</div>
       <ul className="hand">
         <li>
-          <b>Right-drag</b> or <b>Option + drag</b> to look around
+          <b>Two fingers</b> on a trackpad or screen to pan, <b>pinch</b> to zoom, <b>twist</b> to turn
         </li>
         <li>
-          <b>Space + drag</b>, <b>Shift + right-drag</b> or <b>W A S D</b> to pan
+          <b>Right-drag</b> or <b>Option + drag</b> to look around; mouse <b>wheel</b> zooms
         </li>
         <li>
-          <b>Scroll</b> or <b>pinch</b> to zoom, <b>Q / E</b> to turn, <b>H</b> for the whole lot
+          Keys: <b>W A S D</b> pan, <b>Q / E</b> turn, <b>H</b> for the whole lot
         </li>
         <li>Dragging near the screen edge while building moves the view along</li>
         <li>
@@ -344,6 +345,17 @@ function itemColor(item: FurnitureItem | OpeningItem) {
 /** What a catalog entry shows as its size: a footprint, or how many wall tiles wide. */
 const itemSize = (i: FurnitureItem | OpeningItem) => ("footprint" in i ? `${i.footprint[0]}×${i.footprint[1]}` : `${i.width} wide`);
 
+/** The item drawn small, with its size; its main colour stands in until the picture is ready. */
+function ItemPicture({ item, size = true }: { item: FurnitureItem | OpeningItem; size?: boolean }) {
+  const picture = useThumbnail(item.id);
+  return (
+    <span className={`item-chip ${picture ? "drawn" : ""}`} style={picture ? undefined : { background: itemColor(item) }}>
+      {picture && <img src={picture} alt="" draggable={false} />}
+      {size && <span className="item-size">{itemSize(item)}</span>}
+    </span>
+  );
+}
+
 function ToolPanel() {
   const tool = useGame((s) => s.tool);
   const wallStyle = useGame((s) => s.wallStyle);
@@ -406,9 +418,7 @@ function ToolPanel() {
               className={`item ${placing?.catalogId === i.id ? "active" : ""}`}
               onClick={() => useGame.setState({ placing: placing?.catalogId === i.id ? null : { catalogId: i.id, rot: 0 } })}
             >
-              <span className="item-chip" style={{ background: itemColor(i) }}>
-                <span className="item-size">{itemSize(i)}</span>
-              </span>
+              <ItemPicture item={i} />
               <span className="item-name">{i.name}</span>
               <span className="item-price">${i.price}</span>
             </button>
@@ -437,8 +447,13 @@ function SelectionCard() {
   const item = opening ?? catalog.furniture.get(o.catalogId);
   return (
     <div className="card selection-card">
-      <div className="kicker">Selected</div>
-      <div className="sel-name">{item?.name ?? o.catalogId}</div>
+      <div className="sel-head">
+        {item && <ItemPicture item={item} size={false} />}
+        <div>
+          <div className="kicker">Selected</div>
+          <div className="sel-name">{item?.name ?? o.catalogId}</div>
+        </div>
+      </div>
       <div className="sel-actions">
         <button className="btn" onClick={rotateSelected}>
           {opening ? (
