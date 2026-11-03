@@ -111,7 +111,9 @@ export class Kit {
     const center = new THREE.Vector3();
     for (const p of this.parts) {
       const g = p.geo.index ? p.geo.toNonIndexed() : p.geo.clone();
-      for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal") g.deleteAttribute(k);
+      for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal" && k !== "uv") g.deleteAttribute(k);
+      // every part needs the same attributes to merge; uv lets a surface (pool water) know where its edges are
+      if (!g.attributes.uv) g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(g.attributes.position!.count * 2), 2));
       g.applyMatrix4(p.m);
       center.setFromMatrixPosition(p.m);
       const n = g.attributes.position!.count;

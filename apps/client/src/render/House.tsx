@@ -215,7 +215,7 @@ function WallRun({ run, openings, height }: { run: Run; openings: { o: PlacedOpe
       make={(k) => {
         const style = catalog.wallStyles.get(run.style);
         const gaps = openings.map(({ o, item }) => ({ ...openingSpan(o, item), sill: item.sill, top: item.top }));
-        addWall(k, run, height, pencilMaterial(style?.color ?? "#efe3cc", { finish: style?.finish, rim: false }), pencilMaterial(TRIM), gaps);
+        addWall(k, run, height, pencilMaterial(style?.color ?? "#f6eddc", { finish: style?.finish, rim: false }), pencilMaterial(TRIM), gaps);
       }}
     />
   );

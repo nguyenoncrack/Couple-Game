@@ -10,6 +10,7 @@ import { LifeProps } from "./LifeProps";
 import { Lot } from "./Lot";
 import { PartnerPresence } from "./Partner";
 import { FOG } from "./pencil";
+import { Sunlight } from "./Sunlight";
 
 /** The 3D view. Reads the house I see (`view`) and draws it; never changes it directly. */
 export function Scene() {
@@ -36,6 +37,7 @@ export function Scene() {
       <Characters />
       <LifeProps />
       <PartnerPresence />
+      <Sunlight w={lot.w} d={lot.d} />
     </Canvas>
   );
 }
