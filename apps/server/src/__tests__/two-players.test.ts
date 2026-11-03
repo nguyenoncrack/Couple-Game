@@ -428,6 +428,36 @@ describe("living together", () => {
     await a.disconnect();
   });
 
+  it("syncs two PS5 players on separate seats and keeps gaming across a reconnect", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    const wb = await b.connect();
+    a.op("gaming0001", { t: "batch", ops: [
+      { t: "object.place", level: 0, id: "console001", catalogId: "ps5_setup", x: 14, z: 15, rot: 0 },
+      { t: "object.place", level: 0, id: "tv00000001", catalogId: "tv_stand", x: 11, z: 15, rot: 0 },
+      { t: "object.place", level: 0, id: "sofa000001", catalogId: "sofa_cozy", x: 11, z: 18, rot: 2 },
+    ] });
+    await a.next("applied");
+    a.send({ type: "life", intent: { do: "use", objectId: "console001", action: "play" } });
+    b.send({ type: "life", intent: { do: "use", objectId: "console001", action: "play" } });
+    const bothPlaying = (m: Extract<ServerMsg, { type: "life" }>) => m.life.avatars[wa.memberId]?.use?.action === "play" && m.life.avatars[wb.memberId]?.use?.action === "play";
+    const first = await a.next("life", bothPlaying);
+    const second = await b.next("life", bothPlaying);
+    expect(first.life).toEqual(second.life);
+    const ana = first.life.avatars[wa.memberId]!.use!;
+    const ben = first.life.avatars[wb.memberId]!.use!;
+    expect(ana).toMatchObject({ objectId: "sofa000001", consoleId: "console001", tv: "tv00000001" });
+    expect(ana.slot).not.toBe(ben.slot);
+    await a.disconnect();
+    const again = await a.connect();
+    expect(again.life.avatars[wa.memberId]!.use).toEqual(ana);
+    a.send({ type: "life", intent: { do: "stop" } });
+    const stopped = await b.next("life", (m) => m.life.avatars[wa.memberId]?.use === null);
+    expect(stopped.life.avatars[wb.memberId]!.use).toEqual(ben);
+    await a.disconnect();
+    await b.disconnect();
+  });
+
   it("cooks only while the cook is here", async () => {
     const { a, b } = await couple();
     const wa = await a.connect();

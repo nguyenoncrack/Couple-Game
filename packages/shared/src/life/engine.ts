@@ -4,6 +4,7 @@ import type { Rot } from "../grid";
 import { newId } from "../ids";
 import { footprintOf } from "../rules";
 import { canSee, screenOf, seatsFacing, slotsFor, slotsOf, stationSlots, tvFacing, type PlacedSlot } from "./interactions";
+import { gamingSpots } from "./gaming";
 import { buildNav, canStep, findPath, nearestWalkable, slide, walkable, type Cell, type Nav } from "./nav";
 import {
   activityAt,
@@ -60,6 +61,7 @@ export const LIFE_TEXT: Record<LifeReject, string> = {
 
 /** The furniture action a use is based on (eating or watching TV from a seat is sitting, cuddling is sleeping). */
 const slotAction = (u: Use): Action =>
+  u.action === "play" ? (u.tv === u.objectId ? "watch" : "sit") :
   u.action === "eat" || (u.action === "watch" && u.tv !== u.objectId) ? "sit" : u.action === "cuddle" ? "sleep" : (u.action as Action);
 const together = (u: Use | null | undefined) => u?.action === "hug" || u?.action === "kiss";
 /** Quick things that are over by themselves after a while. */
@@ -186,7 +188,26 @@ export class Life {
     const o = this.level(bp).objects[objectId];
     if (!a || !o) return "nothing-to-do";
     if (action === "watch") return this.watch(a, bp, o.id, now);
+    if (action === "play") return this.play(a, bp, o.id, now);
     return this.goUse(a, buildNav(bp, 0, this.cat), slotsOf(o, action, this.cat), now);
+  }
+
+  /** Reserve a controller and a seat facing the console's nearest TV, falling back to an open floor spot. */
+  private play(a: Avatar, bp: Blueprint, objectId: string, now: number): LifeReject | null {
+    const level = this.level(bp);
+    const console = level.objects[objectId]!;
+    const controllers = slotsOf(console, "play", this.cat).length;
+    if (!controllers) return "nothing-to-do";
+    const used = Object.values(this.state.avatars).filter((other) => other.memberId !== a.memberId && other.use?.consoleId === console.id).length;
+    if (used >= controllers) return "taken";
+    const nav = buildNav(bp, 0, this.cat);
+    const spots = gamingSpots(level, console, nav, this.cat);
+    if (!spots) return "no-tv";
+    const extra: Partial<Use> = { action: "play", tv: spots.tv.id, consoleId: console.id };
+    const seated = spots.seats.length ? this.goUse(a, nav, spots.seats, now, extra) : "nothing-to-do";
+    if (!seated) return null;
+    if (spots.floor.length) return this.goUse(a, nav, spots.floor, now, extra);
+    return seated === "nothing-to-do" ? "unreachable" : seated;
   }
 
   /**
@@ -279,7 +300,7 @@ export class Life {
     }
 
     // a sitter gets up for a hug; someone cooking, eating or asleep is busy
-    if (p.use && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge" && p.use.action !== "watch") return "partner-busy";
+    if (p.use && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge" && p.use.action !== "watch" && p.use.action !== "play") return "partner-busy";
     const nav = buildNav(bp, 0, this.cat);
     // they stop where they are (the cell they're stepping into); you go beside them, with no wall in between
     const [px, pz] = this.origin(p, now).cell;
@@ -531,6 +552,14 @@ export class Life {
           if (u.pose) a.face = u.pose.face;
           a.use = null;
           changed = true;
+        } else if (u.action === "play") {
+          const console = u.consoleId ? level.objects[u.consoleId] : undefined;
+          const spots = console && slotsOf(console, "play", this.cat).length ? gamingSpots(level, console, nav, this.cat) : null;
+          const valid = spots && spots.tv.id === u.tv && [...spots.seats, ...spots.floor].some((spot) => spot.objectId === u.objectId && spot.slot === u.slot);
+          if (!valid) {
+            a.use = u.objectId === u.tv ? null : { ...u, action: "sit", tv: undefined, consoleId: undefined };
+            changed = true;
+          }
         } else if (u.action === "watch" && u.tv !== u.objectId) {
           const tv = u.tv ? level.objects[u.tv] : undefined;
           if (!tv || !canSee(s, tv, this.cat)) {

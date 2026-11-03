@@ -7,6 +7,7 @@ import type { Kit } from "./kit";
 import { KitMesh } from "./KitMesh";
 import { FLOOR_Y, objectTransform } from "./House";
 import { pencilMaterial } from "./pencil";
+import { ConsoleScreen } from "./ConsoleScreen";
 
 /**
  * Food and kitchenware: plates on the table, and the bowl, board, pan or pot in use while a meal is made. Also
@@ -251,11 +252,12 @@ function InUse({ level }: { level: Level }) {
   useArrivals(life);
   if (!life) return null;
   const now = serverNow();
-  const shown = new Map<string, "tv" | "bath" | "tap">();
+  const shown = new Map<string, "tv" | "game" | "bath" | "tap">();
   for (const a of Object.values(life.avatars)) {
     const u = a.use;
     if (!u || activityAt(a, now) !== u.action) continue;
-    if (u.action === "watch" && u.tv) shown.set(u.tv, "tv");
+    if (u.action === "watch" && u.tv && !shown.has(u.tv)) shown.set(u.tv, "tv");
+    if (u.action === "play" && u.tv) shown.set(u.tv, "game");
     if (u.action === "bathe" && u.objectId) shown.set(u.objectId, "bath");
     if (u.action === "wash" && u.objectId) shown.set(u.objectId, "tap");
   }
@@ -269,6 +271,7 @@ function InUse({ level }: { level: Level }) {
         return (
           <group key={id} position={position} rotation-y={rotationY}>
             {what === "tv" && <Screen seed={i * 3.1} />}
+            {what === "game" && <ConsoleScreen />}
             {what === "bath" && <Bubbles />}
             {what === "tap" && (pedestal ? <Tap top={1.04} bottom={0.83} /> : <Tap top={1.06} bottom={0.77} />)}
           </group>
