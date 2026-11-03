@@ -16,8 +16,15 @@ export const EAT_MS = 9000;
 export const HELP_BONUS = 0.5;
 /** Plates left out at once; older ones are cleared away. */
 export const MAX_DISHES = 4;
+/** How long a hug and a kiss last. */
+export const HUG_MS = 4000;
+export const KISS_MS = 3000;
 
-export type LifeAction = Action | "eat";
+/** Things the two of you do together: hug and kiss standing up, cuddle when you're both in the same bed. */
+export const SOCIAL = ["hug", "kiss", "cuddle", "uncuddle"] as const;
+export type Social = (typeof SOCIAL)[number];
+
+export type LifeAction = Action | "eat" | "hug" | "kiss" | "cuddle";
 
 /** What a character is going to do (or is doing) once they get where they're walking. */
 export interface Use {
@@ -28,9 +35,13 @@ export interface Use {
   station?: Station;
   /** Where they settle when they arrive: lot metres, height, facing. Null to stay standing where the path ends. */
   pose: { x: number; z: number; y: number; face: Rot } | null;
-  /** Eating: the plate, and when the last bite is. */
+  /** Eating: the plate, and when the last bite is. A hug or kiss: when it's over. */
   dishId?: string;
   until?: number;
+  /** Hugging, kissing or cuddling: who with. */
+  with?: string;
+  /** A hug or kiss starts once you've both got there; until then you wait, facing each other. */
+  startsAt?: number;
 }
 
 export interface Avatar {
@@ -110,6 +121,7 @@ export function positionAt(a: Pick<Avatar, "path" | "startedAt">, t: number): { 
 /** What a character is doing at time `t`: walking, or (once there) their use's action, or standing idle. */
 export function activityAt(a: Avatar, t: number): LifeAction | "walk" | "idle" {
   if (t < arrivalTime(a)) return "walk";
+  if (a.use?.startsAt !== undefined && t < a.use.startsAt) return "idle";
   return a.use?.action ?? "idle";
 }
 

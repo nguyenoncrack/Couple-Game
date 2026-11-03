@@ -5,7 +5,7 @@ import { edgesBetween } from "../grid";
 import { slotsOf, toWorld } from "../life/interactions";
 import { Life } from "../life/engine";
 import { buildNav, findPath, walkable } from "../life/nav";
-import { arrivalTime, cookingRate, emptyLife, positionAt } from "../life/state";
+import { activityAt, arrivalTime, cookingRate, emptyLife, positionAt, type Avatar } from "../life/state";
 import { Op } from "../ops";
 import { applyOp } from "../rules";
 import { starterHouseOp } from "../starter";
@@ -61,7 +61,13 @@ describe("walking", () => {
   });
 
   it("knows where a walker is part way along", () => {
-    const a = { path: [[0.5, 0.5], [2.5, 0.5]] as [number, number][], startedAt: 1000 };
+    const a = {
+      path: [
+        [0.5, 0.5],
+        [2.5, 0.5],
+      ] as [number, number][],
+      startedAt: 1000,
+    };
     expect(arrivalTime(a)).toBeCloseTo(1000 + (2 / 2.2) * 1000);
     expect(positionAt(a, 1000 + 1000 / 2.2)).toMatchObject({ x: 1.5, z: 0.5, next: 1 });
     expect(positionAt(a, 99_999)).toMatchObject({ x: 2.5, heading: null });
@@ -160,5 +166,100 @@ describe("the house changing", () => {
     expect(life.onBlueprint(bp, 60_000)).toBe(true);
     const end = life.state.avatars.amy!.path.at(-1)!;
     expect([Math.floor(end[0]), Math.floor(end[1])]).not.toEqual([2, 2]);
+  });
+});
+
+describe("together", () => {
+  /** Amy at (1,1) and Ben at (4,1) on an open lot, both settled. */
+  function pair(bp: Blueprint) {
+    const life = new Life(emptyLife());
+    life.ensureAvatar("amy", bp, 0);
+    life.ensureAvatar("ben", bp, 0);
+    life.walk("amy", bp, [1, 1], 0);
+    life.walk("ben", bp, [4, 1], 0);
+    return { life, amy: () => life.state.avatars.amy!, ben: () => life.state.avatars.ben! };
+  }
+  const cell = (a: Avatar) => a.path.at(-1)!.map(Math.floor);
+
+  it("walks over for a hug, and you meet face to face once you're both there", () => {
+    const bp = emptyBlueprint(6, 6);
+    const { life, amy, ben } = pair(bp);
+    const t = 60_000;
+    expect(life.social("amy", bp, "hug", t)).toBeNull();
+    expect(cell(amy())).toEqual([3, 1]);
+    expect(amy().use).toMatchObject({ action: "hug", with: "ben" });
+    expect(ben().use).toMatchObject({ action: "hug", with: "amy" });
+    // facing each other across the cell edge, close together
+    expect(amy().use!.pose!.face).toBe(3);
+    expect(ben().use!.pose!.face).toBe(1);
+    expect(ben().use!.pose!.x - amy().use!.pose!.x).toBeCloseTo(0.46);
+    // Ben waits while Amy walks over, then they hug, then it's over
+    const start = ben().use!.startsAt!;
+    expect(start).toBe(arrivalTime(amy()));
+    expect(activityAt(ben(), start - 1)).toBe("idle");
+    expect(activityAt(ben(), start + 1)).toBe("hug");
+    expect(life.nextEvent(start)).toBe(amy().use!.until);
+    expect(life.tick(bp, amy().use!.until!)).toBe(true);
+    expect(amy().use).toBeNull();
+    expect(ben().use).toBeNull();
+    expect(ben().face).toBe(1);
+  });
+
+  it("ends for both when either one moves off", () => {
+    const bp = emptyBlueprint(6, 6);
+    const { life, amy, ben } = pair(bp);
+    life.social("amy", bp, "kiss", 60_000);
+    expect(ben().use?.action).toBe("kiss");
+    life.walk("ben", bp, [5, 5], 61_000);
+    expect(amy().use).toBeNull();
+  });
+
+  it("gets a sitter up, but not someone busy, away, or behind a wall", () => {
+    let bp = apply(emptyBlueprint(6, 6), { t: "object.place", level: 0, id: "chair00001", catalogId: "dining_chair", x: 4, z: 2, rot: 0 });
+    const { life, ben } = pair(bp);
+    life.use("ben", bp, "chair00001", "sit", 0);
+    expect(life.social("amy", bp, "hug", 60_000)).toBeNull();
+    expect(ben().use?.action).toBe("hug");
+
+    life.online = new Set(["amy"]);
+    expect(life.social("amy", bp, "kiss", 70_000)).toBe("partner-away");
+    life.online = null;
+
+    bp = apply(bp, { t: "object.place", level: 0, id: "bed0000001", catalogId: "bed_double", x: 0, z: 3, rot: 0 });
+    life.use("ben", bp, "bed0000001", "sleep", 80_000);
+    expect(life.social("amy", bp, "hug", 200_000)).toBe("partner-busy");
+
+    // Ben goes through a door to the far side, then the door is walled up
+    let walled = apply(split(), { t: "opening.place", level: 0, id: "door000001", catalogId: "door_wood", dir: "h", x: 4, z: 3, flip: false });
+    const two = new Life(emptyLife());
+    two.ensureAvatar("amy", walled, 0);
+    two.ensureAvatar("ben", walled, 0);
+    expect(two.walk("ben", walled, [4, 1], 0)).toBeNull();
+    walled = apply(walled, { t: "opening.remove", level: 0, id: "door000001" });
+    expect(two.social("amy", walled, "hug", 60_000)).toBe("unreachable");
+    // nothing changed for Ben
+    expect(two.state.avatars.ben!.use).toBeNull();
+    expect(cell(two.state.avatars.ben!)).toEqual([4, 1]);
+  });
+
+  it("cuddles only when you're both in the same bed, and getting up ends it for both", () => {
+    const bp = apply(emptyBlueprint(8, 8), { t: "object.place", level: 0, id: "bed0000001", catalogId: "bed_double", x: 3, z: 3, rot: 0 });
+    const { life, amy, ben } = pair(bp);
+    life.use("amy", bp, "bed0000001", "sleep", 0);
+    expect(life.social("amy", bp, "cuddle", 60_000)).toBe("not-in-bed");
+    life.use("ben", bp, "bed0000001", "sleep", 60_000);
+    expect(life.social("amy", bp, "cuddle", 120_000)).toBeNull();
+    expect(amy().use).toMatchObject({ action: "cuddle", with: "ben", objectId: "bed0000001" });
+    expect(ben().use).toMatchObject({ action: "cuddle", with: "amy" });
+    expect(life.social("ben", bp, "uncuddle", 130_000)).toBeNull();
+    expect(amy().use?.action).toBe("sleep");
+    life.social("amy", bp, "cuddle", 140_000);
+    life.stop("ben", 150_000);
+    expect(ben().use).toBeNull();
+    expect(amy().use).toMatchObject({ action: "sleep", with: undefined });
+    // a cuddle is saved as it is; a hug isn't
+    life.use("ben", bp, "bed0000001", "sleep", 150_000);
+    life.social("amy", bp, "cuddle", 200_000);
+    expect(Life.restore(life.saved(200_000), 0).state.avatars.amy!.use?.action).toBe("cuddle");
   });
 });

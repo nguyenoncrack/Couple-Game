@@ -72,6 +72,15 @@ export const HOUSE_SCHEMA = [
     state text not null,
     updated_at integer not null
   )`,
+  `create table if not exists chat (
+    house_id text not null,
+    id text not null,
+    member_id text not null,
+    text text not null,
+    at integer not null,
+    primary key (house_id, id)
+  )`,
+  `create index if not exists chat_at on chat(house_id, at)`,
 ];
 
 export function createTables(sql: Sql, schema: string[]) {

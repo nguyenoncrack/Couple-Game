@@ -1,4 +1,4 @@
-import type { AppliedOp, Blueprint, LifeState } from "@cg/shared";
+import type { AppliedOp, Blueprint, ChatMessage, LifeState } from "@cg/shared";
 
 /**
  * Everything the server keeps goes through two interfaces, so the same rooms and routes run on Node with one SQLite
@@ -83,6 +83,11 @@ export interface HouseStore {
   /** Where everyone was and what was cooking. Not part of the house's history: it's simply overwritten. */
   loadLife(houseId: string): Promise<LifeState | null>;
   saveLife(houseId: string, life: LifeState): Promise<void>;
+
+  /** Keep something said in the house, dropping the oldest beyond `keep`. */
+  appendChat(houseId: string, message: ChatMessage, keep: number): Promise<void>;
+  /** The last `limit` things said, oldest first. */
+  recentChat(houseId: string, limit: number): Promise<ChatMessage[]>;
 
   /** Forget a house entirely (its last member left). */
   deleteHouse(houseId: string): Promise<void>;

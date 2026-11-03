@@ -3,7 +3,7 @@ import type { HouseState } from "./blueprint";
 import { ACTIONS } from "./catalog";
 import type { Rot } from "./grid";
 import type { LifeReject } from "./life/engine";
-import type { LifeState } from "./life/state";
+import { SOCIAL, type LifeState } from "./life/state";
 import { Id, Op } from "./ops";
 
 /** Messages over the house WebSocket. Client messages are checked on the server; server messages are trusted. */
@@ -33,8 +33,18 @@ export const LifeIntent = z.discriminatedUnion("do", [
   z.object({ do: z.literal("help") }),
   z.object({ do: z.literal("cancel") }),
   z.object({ do: z.literal("eat"), dishId: Id }),
+  /** Hug or kiss your partner, or cuddle up (and stop) when you're both in the same bed. */
+  z.object({ do: z.literal("social"), action: z.enum(SOCIAL) }),
 ]);
 export type LifeIntent = z.infer<typeof LifeIntent>;
+
+/** Longest chat message, in characters. */
+export const CHAT_MAX = 240;
+
+/** Tidy a chat message: no control characters, no runs of blank lines, trimmed and cut to length. Empty if nothing's left. */
+export function cleanChat(text: string): string {
+  return [...text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").replace(/\n{3,}/g, "\n\n").trim()].slice(0, CHAT_MAX).join("").trim();
+}
 
 export const ClientMsg = z.discriminatedUnion("type", [
   /**
@@ -48,8 +58,20 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("presence"), cursor: Cursor, tool: z.string().max(20), drag: Drag }),
   z.object({ type: z.literal("life"), intent: LifeIntent }),
   z.object({ type: z.literal("ping") }),
+  /** Say something: it shows in a bubble over your head and in the chat. */
+  z.object({ type: z.literal("chat"), text: z.string().max(CHAT_MAX * 2) }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;
+
+/** One thing someone said in the house. */
+export interface ChatMessage {
+  id: string;
+  /** The member who said it. */
+  by: string;
+  text: string;
+  /** Server clock milliseconds. */
+  at: number;
+}
 
 export interface MemberInfo {
   id: string;
@@ -83,9 +105,12 @@ export type ServerMsg =
       /** Either a full snapshot, or the ops the client missed since its `knownVersion`. */
       sync: { kind: "snapshot"; state: HouseState } | { kind: "ops"; ops: AppliedOp[] };
       life: LifeState;
+      /** The last things said in the house, oldest first. */
+      chat: ChatMessage[];
       /** The server clock, for working out where characters are between updates. */
       now: number;
     }
+  | { type: "chat"; message: ChatMessage }
   /** Everyone's characters, the meal on the go and the plates out. Sent whole whenever any of it changes. */
   | { type: "life"; life: LifeState; now: number }
   | { type: "lifeRejected"; reason: LifeReject }

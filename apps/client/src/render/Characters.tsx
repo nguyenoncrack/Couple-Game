@@ -1,10 +1,10 @@
 import { activityAt, positionAt, type Avatar, type MemberInfo } from "@cg/shared";
 import { Html } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as THREE from "three";
 import { serverNow, useGame } from "../state/game";
-import { cameraFollow } from "./CameraRig";
+import { cameraFollow, cameraGestureActive } from "./CameraRig";
 import { FLOOR_Y } from "./House";
 import type { Kit } from "./kit";
 import { KitMesh } from "./KitMesh";
@@ -14,7 +14,8 @@ import { pencilMaterial } from "./pencil";
 /**
  * The two of you, drawn in pencil like the furniture. Each character is a few jointed parts (body, arms, thighs,
  * shins) so they can walk, sit, lie down and cook. Where they are comes from the server's life state: a path and
- * the time they set off, so both screens work out the same position every frame without more messages.
+ * the time they set off, so both screens work out the same position every frame without more messages. Things
+ * you say float over your head for a few seconds; hearts float up while you hug, kiss or cuddle.
  */
 
 const SKIN = ["#f1d2b6", "#e2b48f", "#c68d63", "#9a6644", "#6e4630"];
@@ -105,8 +106,10 @@ interface Pose {
   thighs: [number, number];
   knees: [number, number];
   arms: [number, number];
-  /** Arms out to the sides a little. */
+  /** Arms out to the sides a little (negative wraps them round in front). */
   spread: number;
+  /** Turned about the spine before leaning back, to lie on one side (cuddling). */
+  roll: number;
 }
 
 const ease = (from: number, to: number, k: number) => from + (to - from) * k;
@@ -123,6 +126,7 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         knees: [Math.max(0, -w) * 0.7, Math.max(0, w) * 0.7],
         arms: [-w * 0.45, w * 0.45],
         spread: 0.08,
+        roll: 0,
       };
     }
     case "sit":
@@ -133,6 +137,7 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         knees: [1.5, 1.5],
         arms: [-0.35, -0.35],
         spread: 0.1,
+        roll: 0,
       };
     case "eat": {
       const bite = Math.max(0, Math.sin(s * 2.4));
@@ -144,6 +149,7 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
           knees: [0, 0],
           arms: [-0.9, -1.1 - bite * 1.2],
           spread: 0.1,
+          roll: 0,
         };
       return {
         hip: (seatY ?? 0.45) + 0.05,
@@ -152,6 +158,7 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         knees: [1.5, 1.5],
         arms: [-0.9, -1.1 - bite * 1.2],
         spread: 0.1,
+        roll: 0,
       };
     }
     case "sleep":
@@ -162,6 +169,7 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         knees: [0.05, 0.05],
         arms: [0, 0],
         spread: 0.18,
+        roll: 0,
       };
     case "lounge":
       return {
@@ -171,6 +179,23 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         knees: [0.15, 0.05],
         arms: [-0.2, -2.6],
         spread: 0.25,
+        roll: 0,
+      };
+    case "hug": {
+      const sway = Math.sin(s * 1.4) * 0.05;
+      return { hip: HIP, lean: -0.05, thighs: [0, 0], knees: [0.04, 0.04], arms: [-1.35 + sway, -1.35 - sway], spread: -0.6, roll: 0 };
+    }
+    case "kiss":
+      return { hip: HIP + 0.02, lean: -0.09, thighs: [0, 0.05], knees: [0, 0.18], arms: [-0.85, -0.85], spread: -0.45, roll: 0 };
+    case "cuddle":
+      return {
+        hip: (seatY ?? 0.5) + 0.14,
+        lean: Math.PI / 2 - 0.12,
+        thighs: [-0.35, -0.2],
+        knees: [0.45, 0.3],
+        arms: [-1.25, -0.55],
+        spread: 0.05,
+        roll: 1.15,
       };
     case "cook": {
       const stir = Math.sin(s * 5);
@@ -181,6 +206,7 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         knees: [0, 0],
         arms: [-1.0 + stir * 0.15, -1.15 - stir * 0.15],
         spread: 0.15,
+        roll: 0,
       };
     }
     case "prep": {
@@ -192,6 +218,7 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         knees: [0, 0],
         arms: [-1.05, -0.9 - chop * 0.45],
         spread: 0.1,
+        roll: 0,
       };
     }
     default: {
@@ -203,6 +230,7 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         knees: [0, 0],
         arms: [0.05, 0.05],
         spread: 0.1,
+        roll: 0,
       };
     }
   }
@@ -216,8 +244,30 @@ function turnToward(from: number, to: number, k: number) {
   return from + d * k;
 }
 
-function Character({ avatar, member, mine }: { avatar: Avatar; member: MemberInfo; mine: boolean }) {
+/** How long something said stays over your head: longer for more words. */
+const bubbleMs = (text: string) => Math.min(12_000, 3500 + text.length * 70);
+
+/** The last thing this person said, while it's still fresh. */
+function SpeechBubble({ memberId }: { memberId: string }) {
+  const last = useGame((s) => s.chat.findLast((m) => m.by === memberId) ?? null);
+  const [, redraw] = useState(0);
+  const left = last ? last.at + bubbleMs(last.text) - serverNow() : 0;
+  useEffect(() => {
+    if (left <= 0) return;
+    const t = window.setTimeout(() => redraw((n) => n + 1), left);
+    return () => window.clearTimeout(t);
+  }, [last?.id, left > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!last || left <= 0) return null;
+  return (
+    <div key={last.id} className="speech hand">
+      {last.text}
+    </div>
+  );
+}
+
+function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner: Avatar | null; member: MemberInfo; mine: boolean }) {
   const looks = useMemo(() => looksFor(member.id, member.color), [member.id, member.color]);
+  const live = useGame((s) => s.mode === "live");
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const armL = useRef<THREE.Group>(null);
@@ -227,6 +277,8 @@ function Character({ avatar, member, mine }: { avatar: Avatar; member: MemberInf
   const kneeL = useRef<THREE.Group>(null);
   const kneeR = useRef<THREE.Group>(null);
   const zzz = useRef<HTMLDivElement>(null);
+  const hearts = useRef<HTMLDivElement>(null);
+  const tag = useRef<HTMLDivElement>(null);
   const first = useRef(true);
   // Html made in the scene's very first commit can lose its React root in development; add the tag a tick later.
   const [tagged, setTagged] = useState(false);
@@ -242,10 +294,20 @@ function Character({ avatar, member, mine }: { avatar: Avatar; member: MemberInf
     const p = positionAt(avatar, t);
     const activity = activityAt(avatar, t);
     const posed = activity !== "walk" && activity !== "idle" && avatar.use?.pose;
-    const tx = posed ? avatar.use!.pose!.x : p.x;
-    const tz = posed ? avatar.use!.pose!.z : p.z;
+    let tx = posed ? avatar.use!.pose!.x : p.x;
+    let tz = posed ? avatar.use!.pose!.z : p.z;
     const face = posed ? avatar.use!.pose!.face : avatar.face;
     const yaw = p.heading ?? (-face * Math.PI) / 2;
+    // cuddling: shuffle over towards your partner and turn onto your side to face them
+    let roll = 0;
+    const near = activity === "cuddle" && partner?.use?.pose;
+    if (near) {
+      const dx = near.x - tx;
+      const dz = near.z - tz;
+      tx += dx * 0.25;
+      tz += dz * 0.25;
+      roll = Math.sign(dx * Math.cos(yaw) - dz * Math.sin(yaw) || 1);
+    }
     const snap = first.current;
     first.current = false;
     const k = snap ? 1 : 1 - Math.exp(-dt * 14);
@@ -258,6 +320,7 @@ function Character({ avatar, member, mine }: { avatar: Avatar; member: MemberInf
     const b = body.current;
     b.position.y = ease(b.position.y, pose.hip, j);
     b.rotation.x = ease(b.rotation.x, -pose.lean, j);
+    b.rotation.y = ease(b.rotation.y, pose.roll * roll, j);
     const limbs: [React.RefObject<THREE.Group | null>, number][] = [
       [armL, pose.arms[0]],
       [armR, pose.arms[1]],
@@ -270,11 +333,29 @@ function Character({ avatar, member, mine }: { avatar: Avatar; member: MemberInf
     if (armL.current) armL.current.rotation.z = ease(armL.current.rotation.z, -pose.spread, j);
     if (armR.current) armR.current.rotation.z = ease(armR.current.rotation.z, pose.spread, j);
     if (zzz.current) zzz.current.style.opacity = activity === "sleep" ? "1" : "0";
+    // close together: hearts float up, and the name tags step aside so they don't pile up on each other
+    const close = activity === "hug" || activity === "kiss" || activity === "cuddle";
+    if (hearts.current) hearts.current.style.display = close ? "" : "none";
+    if (tag.current) tag.current.dataset.close = close ? "1" : "";
     if (mine) cameraFollow.target = { x: g.position.x, z: g.position.z };
   });
 
+  // in Live mode, click your partner for what you can do together
+  const clickable = live && !mine;
+  const pick = (e: ThreeEvent<PointerEvent>) => {
+    if (e.button !== 0 || cameraGestureActive() || !root.current) return;
+    e.stopPropagation();
+    const g = root.current.position;
+    useGame.setState({ menu: { memberId: member.id, at: [g.x, 2.3, g.z] } });
+  };
+
   return (
-    <group ref={root} position={[avatar.path[0]![0], FLOOR_Y, avatar.path[0]![1]]}>
+    <group ref={root} position={[avatar.path[0]![0], FLOOR_Y, avatar.path[0]![1]]} onPointerDown={clickable ? pick : undefined}>
+      {clickable && (
+        <mesh visible={false} position={[0, 0.9, 0]}>
+          <cylinderGeometry args={[0.3, 0.3, 1.8, 8]} />
+        </mesh>
+      )}
       <group ref={body} position={[0, HIP, 0]}>
         <KitMesh make={(k) => torso(k, looks)} deps={[looks]} />
         <group ref={armL} position={[-SHOULDER, TORSO - 0.06, 0]}>
@@ -293,7 +374,13 @@ function Character({ avatar, member, mine }: { avatar: Avatar; member: MemberInf
         ))}
         {tagged && (
           <Html position={[0, TORSO + 0.62, 0]} center distanceFactor={9} zIndexRange={[10, 0]} style={{ pointerEvents: "none" }}>
-            <div className={`pin-tag char-tag ${member.online ? "" : "away"}`} style={{ borderColor: member.color }}>
+            <div ref={tag} className={`pin-tag char-tag ${member.online ? "" : "away"}`} style={{ borderColor: member.color }}>
+              <SpeechBubble memberId={member.id} />
+              <div ref={hearts} className="hearts" style={{ display: "none" }}>
+                <span>♥</span>
+                <span>♥</span>
+                <span>♥</span>
+              </div>
               <span className="pin-dot" style={{ background: member.color }} />
               {mine ? "You" : member.name}
               {!member.online && <span className="pin-tool"> · away</span>}
@@ -318,7 +405,8 @@ export function Characters() {
     <>
       {Object.values(life.avatars).map((a) => {
         const m = members.find((x) => x.id === a.memberId);
-        return m ? <Character key={a.memberId} avatar={a} member={m} mine={a.memberId === me} /> : null;
+        const partner = Object.values(life.avatars).find((o) => o.memberId !== a.memberId) ?? null;
+        return m ? <Character key={a.memberId} avatar={a} partner={partner} member={m} mine={a.memberId === me} /> : null;
       })}
     </>
   );

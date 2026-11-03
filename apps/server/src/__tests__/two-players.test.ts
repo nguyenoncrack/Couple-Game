@@ -385,6 +385,39 @@ describe("living together", () => {
     await b.disconnect();
   });
 
+  it("talks, keeps the last things said, and hugs", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    const wb = await b.connect();
+    expect(wa.chat).toEqual([]);
+    a.send({ type: "chat", text: "  hi love \u0007 " });
+    const heard = await b.next("chat");
+    expect(heard.message).toMatchObject({ by: wa.memberId, text: "hi love" });
+    expect((await a.next("chat")).message.id).toBe(heard.message.id);
+    a.send({ type: "chat", text: "   " });
+    b.send({ type: "chat", text: "x".repeat(400) });
+    expect((await a.next("chat")).message.text).toHaveLength(240);
+    // flooding is slowed down
+    for (let i = 0; i < 10; i++) b.send({ type: "chat", text: `spam ${i}` });
+    expect((await b.next("error")).code).toBe("rate-limited");
+
+    b.send({ type: "life", intent: { do: "social", action: "hug" } });
+    const hug = await a.next("life", (m) => m.life.avatars[wa.memberId]?.use?.action === "hug");
+    expect(hug.life.avatars[wb.memberId]!.use).toMatchObject({ action: "hug", with: wa.memberId });
+    b.send({ type: "life", intent: { do: "social", action: "cuddle" } });
+    expect((await b.next("lifeRejected")).reason).toBe("not-in-bed");
+    await a.disconnect();
+    await b.next("members", (m) => !m.members.find((x) => x.id === wa.memberId)!.online);
+    b.send({ type: "life", intent: { do: "social", action: "kiss" } });
+    expect((await b.next("lifeRejected")).reason).toBe("partner-away");
+    await b.disconnect();
+
+    // coming back, the chat is still there, oldest first
+    const again = await a.connect();
+    expect(again.chat.map((m) => m.text).slice(0, 2)).toEqual(["hi love", "x".repeat(240)]);
+    await a.disconnect();
+  });
+
   it("cooks only while the cook is here", async () => {
     const { a, b } = await couple();
     const wa = await a.connect();

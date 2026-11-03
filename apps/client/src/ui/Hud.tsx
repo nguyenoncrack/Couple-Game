@@ -1,9 +1,12 @@
 import { catalog, cookingDone, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { WallMode } from "../render/House";
 import { act, redo, serverNow, setMode, setTool, submit, undo, useGame, wake, type Tool } from "../state/game";
 import { cameraApi } from "../render/CameraRig";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
+import { together } from "../state/together";
+import { ChatButton, ChatPanel } from "./Chat";
 import { Icon } from "./icons";
 import { CatalogSearch } from "./CatalogSearch";
 import { searchCatalog } from "./filterCatalog";
@@ -22,6 +25,7 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       <CookingCard />
       <CameraButtons />
       {live ? <LiveBar /> : <Toolbar />}
+      <ChatPanel />
       <Toasts />
       {status === "asleep" && <Asleep onLeave={onLeave} />}
       {status === "gone" && <Gone onLeave={onLeave} />}
@@ -70,6 +74,7 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
             <Icon.link />
           </button>
         )}
+        <ChatButton />
         <button className="pill icon-pill" onClick={() => setHelpOpen((v) => !v)} title="Controls">
           <Icon.help />
         </button>
@@ -219,10 +224,30 @@ function WallModeButton() {
 function LiveBar() {
   const follow = useGame((s) => s.follow);
   const busy = useGame((s) => Boolean(s.me && s.life?.avatars[s.me]?.use));
+  const { here, inBed, cuddling } = useGame(useShallow(together));
   return (
     <div className="toolbar">
       <ModeSwitch />
       <span className="toolbar-gap" />
+      {here && inBed && (
+        <button className={`slot round ${cuddling ? "active" : ""}`} onClick={() => act({ do: "social", action: cuddling ? "uncuddle" : "cuddle" })} title={cuddling ? "Stop cuddling" : "Cuddle up"}>
+          <Icon.hug />
+          <span className="slot-label">{cuddling ? "Let go" : "Cuddle"}</span>
+        </button>
+      )}
+      {here && !inBed && (
+        <>
+          <button className="slot round" onClick={() => act({ do: "social", action: "hug" })} title="Go and hug your partner">
+            <Icon.hug />
+            <span className="slot-label">Hug</span>
+          </button>
+          <button className="slot round" onClick={() => act({ do: "social", action: "kiss" })} title="Go and kiss your partner">
+            <Icon.kiss />
+            <span className="slot-label">Kiss</span>
+          </button>
+        </>
+      )}
+      {here && <span className="toolbar-gap" />}
       <WallModeButton />
       <button className={`slot round ${follow ? "active" : ""}`} onClick={() => useGame.setState({ follow: !follow })} title="Keep the camera on you (F)">
         <Icon.follow />

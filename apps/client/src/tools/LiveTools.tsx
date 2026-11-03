@@ -5,7 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { cameraGestureActive } from "../render/CameraRig";
 import { FLOOR_Y, Furniture, objectTransform, Walls } from "../render/House";
-import { act, sharePresence, useGame } from "../state/game";
+import { act, openChat, sharePresence, useGame } from "../state/game";
+import { together } from "../state/together";
 
 /**
  * Pointer handling in Live mode: click the floor to walk there, click furniture or a plate for what you can do
@@ -105,16 +106,25 @@ function Menu() {
   const level = useGame((s) => s.view?.levels[0]);
   const life = useGame((s) => s.life);
   const me = useGame((s) => s.me);
+  const members = useGame((s) => s.members);
   if (!menu || !level || !life || !me) return null;
+  const us = together({ life, members, me });
   const mine = life.avatars[me];
   const options: { label: string; run: () => void }[] = [];
   let title = "";
+  let body = "";
 
   if (menu.objectId) {
     const o = level.objects[menu.objectId];
     if (!o) return null;
     title = catalog.furniture.get(o.catalogId)?.name ?? "";
     if (mine?.use?.objectId === o.id && !mine.use.station) options.push({ label: "Get up", run: () => act({ do: "stop" }) });
+    if (us.inBed && us.here && mine?.use?.objectId === o.id)
+      options.push(
+        us.cuddling
+          ? { label: "Stop cuddling", run: () => act({ do: "social", action: "uncuddle" }) }
+          : { label: "Cuddle up ♥", run: () => act({ do: "social", action: "cuddle" }) },
+      );
     for (const action of new Set(actionsOf(o))) {
       if (action === "cook" || action === "prep") {
         if (life.cooking) {
@@ -136,6 +146,29 @@ function Menu() {
           run: () => act({ do: "use", objectId: o.id, action }),
         });
     }
+  } else if (menu.memberId) {
+    const who = members.find((m) => m.id === menu.memberId);
+    if (!who) return null;
+    title = who.name;
+    if (!who.online) {
+      body = `${who.name} is away right now. Leave them a message?`;
+    } else if (us.inBed)
+      options.push(
+        us.cuddling
+          ? { label: "Stop cuddling", run: () => act({ do: "social", action: "uncuddle" }) }
+          : { label: "Cuddle up ♥", run: () => act({ do: "social", action: "cuddle" }) },
+      );
+    else {
+      options.push({ label: "Hug", run: () => act({ do: "social", action: "hug" }) });
+      options.push({ label: "Kiss ♥", run: () => act({ do: "social", action: "kiss" }) });
+    }
+    options.push({
+      label: "Say something…",
+      run: () => {
+        useGame.setState({ menu: null });
+        openChat(true);
+      },
+    });
   } else if (menu.dishId) {
     const d = life.dishes.find((x) => x.id === menu.dishId);
     if (!d) return null;
@@ -151,6 +184,7 @@ function Menu() {
     <Html position={menu.at} center zIndexRange={[30, 20]}>
       <div className="card live-menu" onPointerDown={(e) => e.stopPropagation()}>
         <div className="kicker">{title}</div>
+        {body && <p className="hand">{body}</p>}
         {options.length ? (
           options.map((o) => (
             <button key={o.label} className="btn" onClick={o.run}>

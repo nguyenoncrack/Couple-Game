@@ -12,11 +12,14 @@ import {
   cookingDone,
   cookingRate,
   EAT_MS,
+  HUG_MS,
+  KISS_MS,
   MAX_DISHES,
   positionAt,
   type Avatar,
   type Dish,
   type LifeState,
+  type Social,
   type Use,
 } from "./state";
 
@@ -26,7 +29,18 @@ import {
  * (`onBlueprint`). Each call returns a reason if the request can't be done, or null if the state changed.
  */
 
-export type LifeReject = "unreachable" | "taken" | "nothing-to-do" | "already-cooking" | "no-kitchen" | "not-cooking" | "no-dish" | "unknown-recipe";
+export type LifeReject =
+  | "unreachable"
+  | "taken"
+  | "nothing-to-do"
+  | "already-cooking"
+  | "no-kitchen"
+  | "not-cooking"
+  | "no-dish"
+  | "unknown-recipe"
+  | "partner-away"
+  | "partner-busy"
+  | "not-in-bed";
 
 export const LIFE_TEXT: Record<LifeReject, string> = {
   unreachable: "Can't get there from here.",
@@ -37,7 +51,14 @@ export const LIFE_TEXT: Record<LifeReject, string> = {
   "not-cooking": "Nothing's cooking right now.",
   "no-dish": "That plate's gone.",
   "unknown-recipe": "That recipe isn't in the book.",
+  "partner-away": "Your partner isn't here right now.",
+  "partner-busy": "Your partner's busy. Try again in a moment.",
+  "not-in-bed": "Get into the same bed first.",
 };
+
+/** The furniture action a use is based on (eating at a seat is sitting, cuddling is sleeping). */
+const slotAction = (u: Use): Action => (u.action === "eat" ? "sit" : u.action === "cuddle" ? "sleep" : (u.action as Action));
+const together = (u: Use | null | undefined) => u?.action === "hug" || u?.action === "kiss";
 
 const center = ([x, z]: Cell): [number, number] => [x + 0.5, z + 0.5];
 
@@ -67,7 +88,8 @@ export class Life {
     const nav = buildNav(bp, 0, this.cat);
     const others = new Set(Object.values(this.state.avatars).map((a) => cellOf(a).join(":")));
     let spot = nearestWalkable(nav, [Math.floor(bp.lot.w / 2), bp.lot.d - 1]) ?? [0, 0];
-    if (others.has(spot.join(":"))) spot = nearestWalkable({ ...nav, blocked: Uint8Array.from(nav.blocked, (b, i) => (i === spot[1] * nav.w + spot[0] ? 1 : b)) }, spot) ?? spot;
+    if (others.has(spot.join(":")))
+      spot = nearestWalkable({ ...nav, blocked: Uint8Array.from(nav.blocked, (b, i) => (i === spot[1] * nav.w + spot[0] ? 1 : b)) }, spot) ?? spot;
     this.state.avatars[memberId] = { memberId, path: [center(spot)], startedAt: now, face: 2, use: null };
     return true;
   }
@@ -79,11 +101,26 @@ export class Life {
     return { at: [p.x, p.z] as [number, number], cell: [Math.floor(target[0]), Math.floor(target[1])] as Cell };
   }
 
+  /**
+   * Doing something else ends what you were doing with your partner, for them too: a hug or kiss stops, and
+   * cuddling turns back into sleeping side by side.
+   */
+  private letGo(a: Avatar) {
+    const p = a.use?.with ? this.state.avatars[a.use.with] : undefined;
+    if (!p || p.use?.with !== a.memberId) return;
+    if (p.use.action === "cuddle") p.use = { ...p.use, action: "sleep", with: undefined };
+    else {
+      if (p.use.pose) p.face = p.use.pose.face;
+      p.use = null;
+    }
+  }
+
   /** Walk a character to the nearest of `goals`, to do `use` when they get there. */
   private walkTo(a: Avatar, nav: Nav, goals: Cell[], use: Use | null, now: number): LifeReject | null {
     const o = this.origin(a, now);
     const cells = findPath(nav, o.cell, goals);
     if (!cells) return "unreachable";
+    this.letGo(a);
     const points = cells.map(center);
     const first = points[0]!;
     if (Math.hypot(first[0] - o.at[0], first[1] - o.at[1]) > 1e-3) points.unshift(o.at);
@@ -116,7 +153,13 @@ export class Life {
     }
     if (!best) return "unreachable";
     const { s } = best;
-    return this.walkTo(a, nav, [best.cells[best.cells.length - 1]!], { objectId: s.objectId, action: s.action, slot: s.slot, station: s.station, pose: s.pose, ...extra }, now);
+    return this.walkTo(
+      a,
+      nav,
+      [best.cells[best.cells.length - 1]!],
+      { objectId: s.objectId, action: s.action, slot: s.slot, station: s.station, pose: s.pose, ...extra },
+      now,
+    );
   }
 
   walk(memberId: string, bp: Blueprint, cell: Cell, now: number): LifeReject | null {
@@ -144,8 +187,66 @@ export class Life {
       a.path = [[p.x, p.z], a.path[p.next]!];
       a.startedAt = now;
     }
+    this.letGo(a);
     if (a.use?.pose) a.face = a.use.pose.face;
     a.use = null;
+    return null;
+  }
+
+  // --- together ---
+
+  private isHere(memberId: string) {
+    return !this.online || this.online.has(memberId);
+  }
+
+  /** Hug or kiss your partner (you go to them), or cuddle up when you're both in the same bed. */
+  social(memberId: string, bp: Blueprint, action: Social, now: number): LifeReject | null {
+    const a = this.state.avatars[memberId];
+    const p = Object.values(this.state.avatars).find((o) => o.memberId !== memberId);
+    if (!a) return "nothing-to-do";
+    if (!p || !this.isHere(p.memberId)) return "partner-away";
+
+    if (action === "cuddle" || action === "uncuddle") {
+      const bed = a.use?.objectId;
+      const inBed = (u: Use | null) => u?.objectId === bed && (u?.action === "sleep" || u?.action === "cuddle");
+      if (!bed || !inBed(a.use) || !inBed(p.use) || now < arrivalTime(a) || now < arrivalTime(p)) return "not-in-bed";
+      const to = action === "cuddle" ? "cuddle" : "sleep";
+      a.use = { ...a.use!, action: to, with: to === "cuddle" ? p.memberId : undefined };
+      p.use = { ...p.use!, action: to, with: to === "cuddle" ? a.memberId : undefined };
+      return null;
+    }
+
+    // a sitter gets up for a hug; someone cooking, eating or asleep is busy
+    if (p.use && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge") return "partner-busy";
+    const nav = buildNav(bp, 0, this.cat);
+    // they stop where they are (the cell they're stepping into); you go beside them, with no wall in between
+    const [px, pz] = this.origin(p, now).cell;
+    const beside: Cell[] = [];
+    for (const [dx, dz] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const)
+      if (walkable(nav, px + dx, pz + dz) && canStep(nav, px, pz, px + dx, pz + dz)) beside.push([px + dx, pz + dz]);
+    if (!beside.length || !findPath(nav, this.origin(a, now).cell, beside)) return "unreachable";
+    this.stop(p.memberId, now);
+    this.walkTo(a, nav, beside, null, now);
+
+    // close together, facing each other, halfway between the two cells
+    const [ax, az] = cellOf(a);
+    const mx = (ax + px) / 2 + 0.5;
+    const mz = (az + pz) / 2 + 0.5;
+    const gap = action === "kiss" ? 0.21 : 0.23;
+    const startsAt = Math.max(arrivalTime(a), arrivalTime(p));
+    const until = startsAt + (action === "kiss" ? KISS_MS : HUG_MS);
+    const settle = (who: Avatar, other: Avatar, dx: number, dz: number) => {
+      const face = rotToward(dx, dz);
+      who.face = face;
+      who.use = { objectId: null, action, slot: 0, pose: { x: mx - dx * gap, z: mz - dz * gap, y: 0, face }, with: other.memberId, startsAt, until };
+    };
+    settle(a, p, px - ax, pz - az);
+    settle(p, a, ax - px, az - pz);
     return null;
   }
 
@@ -248,7 +349,14 @@ export class Life {
     const spot = best ?? { id: null, x: near.x, z: near.z };
     // plates already on that table shuffle along
     const already = this.state.dishes.filter((d) => d.surfaceId === spot.id && spot.id !== null).length;
-    const dish: Dish = { id: this.makeId(), recipeId, x: spot.x + (already % 2 ? 0.45 : -0.45) * Math.ceil(already / 2), z: spot.z, surfaceId: spot.id, portions: this.cat.recipes.get(recipeId)?.serves ?? 1 };
+    const dish: Dish = {
+      id: this.makeId(),
+      recipeId,
+      x: spot.x + (already % 2 ? 0.45 : -0.45) * Math.ceil(already / 2),
+      z: spot.z,
+      surfaceId: spot.id,
+      portions: this.cat.recipes.get(recipeId)?.serves ?? 1,
+    };
     this.state.dishes.push(dish);
     while (this.state.dishes.length > MAX_DISHES) {
       const i = this.state.dishes.findIndex((d) => !Object.values(this.state.avatars).some((a) => a.use?.dishId === d.id));
@@ -263,6 +371,12 @@ export class Life {
     let changed = false;
     for (const a of Object.values(this.state.avatars)) {
       const u = a.use;
+      if (together(u) && u!.until !== undefined && now >= u!.until) {
+        if (u!.pose) a.face = u!.pose.face;
+        a.use = null;
+        changed = true;
+        continue;
+      }
       if (u?.action !== "eat" || u.until === undefined || now < u.until) continue;
       const dish = this.state.dishes.find((d) => d.id === u.dishId);
       if (dish) {
@@ -303,7 +417,11 @@ export class Life {
       if (!ready && finishers[0]) this.sendToStation(finishers[0], bp, next, now);
       changed = true;
     }
-    const rate = cookingRate(recipe, c.step, this.workers(now).map((a) => a.use!.station!));
+    const rate = cookingRate(
+      recipe,
+      c.step,
+      this.workers(now).map((a) => a.use!.station!),
+    );
     if (rate !== c.rate) {
       c.done = cookingDone(c, recipe, now);
       c.updatedAt = now;
@@ -322,7 +440,7 @@ export class Life {
     for (const a of Object.values(this.state.avatars)) {
       const arrive = arrivalTime(a);
       if (a.use?.station && arrive > now) next = Math.min(next, arrive);
-      if (a.use?.action === "eat" && a.use.until !== undefined) next = Math.min(next, a.use.until);
+      if ((a.use?.action === "eat" || together(a.use)) && a.use!.until !== undefined) next = Math.min(next, a.use!.until);
     }
     const c = this.state.cooking;
     const step = c && this.cat.recipes.get(c.recipeId)?.steps[c.step];
@@ -343,8 +461,9 @@ export class Life {
       const u = a.use;
       if (u?.objectId) {
         const o = level.objects[u.objectId];
-        const s = o ? slotsOf(o, u.action === "eat" ? "sit" : (u.action as Action), this.cat)[u.slot] : undefined;
+        const s = o ? slotsOf(o, slotAction(u), this.cat)[u.slot] : undefined;
         if (!s || !u.pose || s.pose.x !== u.pose.x || s.pose.z !== u.pose.z || s.pose.face !== u.pose.face) {
+          this.letGo(a);
           if (u.pose) a.face = u.pose.face;
           a.use = null;
           changed = true;
@@ -381,7 +500,8 @@ export class Life {
     for (const d of this.state.dishes) {
       if (d.surfaceId && !level.objects[d.surfaceId]) {
         changed = true;
-        for (const a of Object.values(this.state.avatars)) if (a.use?.dishId === d.id) a.use = a.use.objectId ? { ...a.use, action: "sit", dishId: undefined, until: undefined } : null;
+        for (const a of Object.values(this.state.avatars))
+          if (a.use?.dishId === d.id) a.use = a.use.objectId ? { ...a.use, action: "sit", dishId: undefined, until: undefined } : null;
       } else kept.push(d);
     }
     this.state.dishes = kept;
@@ -393,7 +513,14 @@ export class Life {
     const state: LifeState = { avatars: {}, cooking: null, dishes: saved.dishes ?? [] };
     for (const a of Object.values(saved.avatars ?? {})) {
       const end = a.path[a.path.length - 1]!;
-      const use = a.use?.action === "eat" ? (a.use.objectId ? { ...a.use, action: "sit" as const, dishId: undefined, until: undefined } : null) : a.use;
+      const use =
+        a.use?.action === "eat"
+          ? a.use.objectId
+            ? { ...a.use, action: "sit" as const, dishId: undefined, until: undefined }
+            : null
+          : together(a.use)
+            ? null
+            : a.use;
       state.avatars[a.memberId] = { ...a, path: [end], startedAt: now, use };
     }
     if (saved.cooking) state.cooking = { ...saved.cooking, rate: 0, updatedAt: now };
@@ -406,7 +533,7 @@ export class Life {
     for (const a of Object.values(this.state.avatars)) {
       const end = a.path[a.path.length - 1]!;
       const settled = activityAt(a, now) !== "walk";
-      avatars[a.memberId] = { ...a, path: [end], startedAt: 0, use: settled || a.use?.action !== "eat" ? a.use : null };
+      avatars[a.memberId] = { ...a, path: [end], startedAt: 0, use: together(a.use) ? null : settled || a.use?.action !== "eat" ? a.use : null };
     }
     const c = this.state.cooking;
     const recipe = c && this.cat.recipes.get(c.recipeId);

@@ -1,8 +1,10 @@
 import {
   applyOp,
+  cleanChat,
   CLOSE,
   emptyLife,
   Life,
+  newId,
   upgradeBlueprint,
   type AppliedOp,
   type Blueprint,
@@ -14,6 +16,7 @@ import {
   type ServerMsg,
 } from "@cg/shared";
 import type { HouseRow, HouseStore, MemberRow } from "../persistence/store";
+import { RateLimiter } from "../rate-limit";
 
 /** The object, door or window with this ID, if it exists. */
 function find(bp: Blueprint, id: string) {
@@ -43,6 +46,9 @@ const LIFE_SAVE_MS = 2000;
  * running for nothing. Keep-alive pings don't count. Clients show a "come back" button instead of reconnecting.
  */
 export const IDLE_MS = 30 * 60_000;
+/** Chat kept per house, and how much of it a player gets when they come in. */
+const CHAT_KEEP = 200;
+const CHAT_HISTORY = 50;
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -56,6 +62,8 @@ export class HouseRoom {
   /** object or opening ID → memberId currently dragging it. */
   private holds = new Map<string, string>();
   private presence = new Map<string, Presence>();
+  /** Per member: a few messages in a row, then one every two seconds. */
+  private chatLimit = new RateLimiter(6, 0.5);
   private queue: Promise<unknown> = Promise.resolve();
   private members: MemberRow[] = [];
   private snapshotVersion: number;
@@ -154,6 +162,7 @@ export class HouseRoom {
         if (ops.length === missed) sync = { kind: "ops", ops };
       }
 
+      const chat = await this.store.recentChat(this.house.id, CHAT_HISTORY);
       this.peers.add(peer);
       const now = this.now();
       const arrived = this.life.ensureAvatar(peer.memberId, this.blueprint, now);
@@ -166,6 +175,7 @@ export class HouseRoom {
         holds: this.holdsObject(),
         sync,
         life: this.life.state,
+        chat,
         now,
       });
       for (const pr of this.presence.values()) if (pr.memberId !== peer.memberId) peer.send({ type: "presence", ...pr });
@@ -314,9 +324,29 @@ export class HouseRoom {
       case "eat":
         r = this.life.eat(id, bp, intent.dishId, now);
         break;
+      case "social":
+        r = this.life.social(id, bp, intent.action, now);
+        break;
     }
     if (r) peer.send({ type: "lifeRejected", reason: r });
     else this.lifeChanged();
+  }
+
+  /** Say something to the house: kept with it, and sent to everyone (the speaker too, so both show the same). */
+  say(peer: Peer, text: string) {
+    if (!this.peers.has(peer)) return;
+    const clean = cleanChat(text);
+    if (!clean) return;
+    if (!this.chatLimit.take(peer.memberId)) {
+      peer.send({ type: "error", code: "rate-limited", message: "Slow down a little." });
+      return;
+    }
+    this.touch();
+    const message = { id: newId(12), by: peer.memberId, text: clean, at: this.now() };
+    return this.enqueue(async () => {
+      await this.store.appendChat(this.house.id, message, CHAT_KEEP);
+      this.broadcast({ type: "chat", message });
+    });
   }
 
   /** Tell everyone (or everyone but one, who already has it), save soon, and wait for whatever's next. */

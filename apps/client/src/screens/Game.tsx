@@ -1,7 +1,7 @@
 import type { HouseSummary } from "@cg/shared";
 import { useEffect } from "react";
 import { Scene } from "../render/Scene";
-import { act, connect, disconnect, redo, setMode, setTool, undo, useGame, type Tool } from "../state/game";
+import { act, connect, disconnect, openChat, redo, setMode, setTool, undo, useGame, type Tool } from "../state/game";
 import { cycleWallMode, Hud, TOOL_KEYS } from "../ui/Hud";
 
 export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => void }) {
@@ -28,6 +28,10 @@ export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => v
         return;
       }
       if (e.altKey) return;
+      if (e.key === "Enter" && !e.shiftKey && !e.repeat) {
+        e.preventDefault();
+        return openChat(true);
+      }
       const s = useGame.getState();
       if (k === "l") return setMode(s.mode === "live" ? "build" : "live");
       if (k === "t") return cycleWallMode();

@@ -1,4 +1,4 @@
-import type { AppliedOp, Blueprint, LifeState, Op } from "@cg/shared";
+import type { AppliedOp, Blueprint, ChatMessage, LifeState, Op } from "@cg/shared";
 import type { Row, Sql } from "./sql";
 import type { AccountRow, AddMemberResult, Directory, HouseRow, HouseStore, MemberRow, Snapshot } from "./store";
 
@@ -196,9 +196,28 @@ export class SqlHouseStore implements HouseStore {
     );
   }
 
+  async appendChat(houseId: string, m: ChatMessage, keep: number) {
+    this.sql.tx(() => {
+      this.sql.run("insert into chat (house_id, id, member_id, text, at) values (?, ?, ?, ?, ?)", houseId, m.id, m.by, m.text, m.at);
+      this.sql.run(
+        "delete from chat where house_id = ? and rowid not in (select rowid from chat where house_id = ? order by at desc, rowid desc limit ?)",
+        houseId,
+        houseId,
+        keep,
+      );
+    });
+  }
+
+  async recentChat(houseId: string, limit: number) {
+    return this.sql
+      .all("select id, member_id, text, at from chat where house_id = ? order by at desc, rowid desc limit ?", houseId, limit)
+      .reverse()
+      .map((r) => ({ id: r.id as string, by: r.member_id as string, text: r.text as string, at: r.at as number }));
+  }
+
   async deleteHouse(houseId: string) {
     this.sql.tx(() => {
-      for (const t of ["snapshots", "ops", "life"]) this.sql.run(`delete from ${t} where house_id = ?`, houseId);
+      for (const t of ["snapshots", "ops", "life", "chat"]) this.sql.run(`delete from ${t} where house_id = ?`, houseId);
     });
   }
 }
