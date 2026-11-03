@@ -61,7 +61,7 @@ export function LiveTools() {
   const level = view.levels[0]!;
 
   const walk = (e: ThreeEvent<PointerEvent>) => {
-    if (e.button !== 0 || cameraGestureActive()) return;
+    if (e.button !== 0 || cameraGestureActive() || useGame.getState().firstPerson) return;
     const x = Math.floor(e.point.x);
     const z = Math.floor(e.point.z);
     if (x < 0 || z < 0 || x >= view.lot.w || z >= view.lot.d) return;
@@ -75,7 +75,7 @@ export function LiveTools() {
   };
 
   const onObjectDown = (id: string, e: ThreeEvent<PointerEvent>) => {
-    if (cameraGestureActive()) return;
+    if (cameraGestureActive() || useGame.getState().firstPerson) return;
     if (!openObjectMenu(level, id)) walk(e);
   };
 

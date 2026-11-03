@@ -20,6 +20,7 @@ import {
 import { create } from "zustand";
 import { Connection } from "../net/connection";
 import type { WallMode } from "../render/House";
+import { captureFirstPersonMouse, releaseFirstPersonMouse } from "../input/firstPersonMouse";
 
 /**
  * Game state on the client. The server's confirmed house plus my edits it hasn't confirmed yet (`pending`) make
@@ -465,6 +466,8 @@ export function setMode(mode: Mode) {
 export function setFirstPerson(on: boolean) {
   if (get().mode !== "live" || on === get().firstPerson) return;
   set({ firstPerson: on, menu: null, ...(on ? {} : { follow: true }) });
+  if (on) captureFirstPersonMouse();
+  else releaseFirstPersonMouse();
 }
 
 // Handy for poking at the game from the console while developing.

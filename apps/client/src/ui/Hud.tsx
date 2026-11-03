@@ -13,6 +13,7 @@ import { ChatButton, ChatPanel } from "./Chat";
 import { Icon } from "./icons";
 import { CatalogSearch } from "./CatalogSearch";
 import { searchCatalog } from "./filterCatalog";
+import { captureFirstPersonMouse, useFirstPersonMouse } from "../input/firstPersonMouse";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -175,8 +176,8 @@ function HelpCard({ onClose }: { onClose: () => void }) {
           Living: <b>F</b> keeps the camera on you, <b>X</b> stands still
         </li>
         <li>
-          Living: <b>V</b> sees through your own eyes. <b>W A S D</b> walk, <b>right-drag</b> or <b>two fingers</b> look
-          around, <b>E</b> uses what you're looking at
+          Living: <b>V</b> sees through your own eyes and captures the mouse. <b>W A S D</b> walk, move the
+          mouse to look, <b>E</b> uses what's ahead. <b>Esc</b> frees the cursor; <b>V</b> returns to the usual view.
         </li>
       </ul>
       <button className="close" onClick={onClose} aria-label="Close">
@@ -236,11 +237,19 @@ function WallModeButton() {
 
 /** In first person: a dot in the middle of the view, and how to get about. */
 function FirstPersonHint() {
+  const locked = useFirstPersonMouse((s) => s.locked);
+  const error = useFirstPersonMouse((s) => s.error);
+  const menu = useGame((s) => Boolean(s.menu) || s.chatOpen);
   return (
     <>
-      <div className="crosshair" aria-hidden />
+      {locked && <div className="crosshair" aria-hidden />}
+      {!locked && !menu && <div className="card fp-resume">
+        <button className="btn primary" onClick={() => captureFirstPersonMouse()}>Click to look around</button>
+        <p className="hand">{error ?? "Mouse released · WASD movement is paused."}</p>
+        <p className="hand">Press V to return to the usual view.</p>
+      </div>}
       <div className="fp-hint hand">
-        <b>W A S D</b> walk · <b>right-drag</b> or <b>two fingers</b> look · <b>E</b> use what's ahead · <b>V</b> or <b>Esc</b> to step out
+        <b>W A S D</b> walk · <b>Mouse</b> look · <b>E</b> use · <b>Esc</b> free cursor · <b>V</b> step out
       </div>
     </>
   );

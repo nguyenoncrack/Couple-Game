@@ -1364,6 +1364,17 @@ button.pill:active,
 .catalog .items { flex-shrink: 0; }
 
 /* First person: a dot to aim with, and how to get about. */
+.fp-resume {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(340px, calc(100% - 32px));
+  padding: 22px;
+  text-align: center;
+}
+.fp-resume .btn { width: 100%; }
+.fp-resume p { margin: 12px 0 0; }
 .crosshair {
   position: absolute;
   left: 50%;

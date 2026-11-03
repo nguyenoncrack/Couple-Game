@@ -19,6 +19,7 @@ export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => v
     const key = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLElement && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
       const k = e.key.toLowerCase();
+      if (e.repeat && (k === "v" || k === "l" || k === "t")) return;
       if (e.metaKey || e.ctrlKey) {
         if (k === "z") {
           e.preventDefault();
