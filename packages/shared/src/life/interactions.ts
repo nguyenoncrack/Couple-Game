@@ -33,6 +33,8 @@ export interface PlacedSlot {
   around: Cell[];
   /** Where the character settles: lot coordinates in metres, height, and facing. */
   pose: { x: number; z: number; y: number; face: Rot };
+  /** Over after this long, for quick things. */
+  seconds?: number;
 }
 
 function place(o: PlacedObject, item: { footprint: [number, number] }, it: Interaction, i: number, s: InteractionSlot): PlacedSlot {
@@ -52,6 +54,7 @@ function place(o: PlacedObject, item: { footprint: [number, number] }, it: Inter
     }),
     around,
     pose: { x: px, z: pz, y: s.y, face: ((s.face + o.rot) % 4) as Rot },
+    seconds: it.seconds,
   };
 }
 
@@ -65,6 +68,11 @@ export function slotsOf(o: PlacedObject, action?: Action, cat: Catalog = default
     it.slots.forEach((s, i) => out.push(place(o, item, it, i, s)));
   }
   return out;
+}
+
+/** Every slot for this action in the house. */
+export function slotsFor(level: Level, action: Action, cat: Catalog = defaultCatalog): PlacedSlot[] {
+  return Object.values(level.objects).flatMap((o) => slotsOf(o, action, cat));
 }
 
 /** Every station of this kind in the house. */
@@ -82,4 +90,47 @@ export function actionsOf(o: PlacedObject, cat: Catalog = defaultCatalog): Actio
 /** Unit direction a facing points along. */
 export function faceDir(face: Rot): [number, number] {
   return [[0, 1] as [number, number], [-1, 0] as [number, number], [0, -1] as [number, number], [1, 0] as [number, number]][face]!;
+}
+
+/** The middle of a TV's screen and the way it faces, if this object is one (something you can watch). */
+export function screenOf(o: PlacedObject, cat: Catalog = defaultCatalog): { x: number; z: number; face: Rot } | null {
+  const item = cat.furniture.get(o.catalogId);
+  if (!item?.interactions?.some((i) => i.action === "watch")) return null;
+  const [x, z] = toWorld(item, o, item.footprint[0] / 2, 0.3);
+  return { x, z, face: o.rot };
+}
+
+/** Can you see a screen from a seat: in front of it, facing it, not too close or far? */
+function inView(seat: PlacedSlot["pose"], screen: { x: number; z: number; face: Rot }) {
+  const vx = screen.x - seat.x;
+  const vz = screen.z - seat.z;
+  const dist = Math.hypot(vx, vz);
+  if (dist < 1.2 || dist > 7) return false;
+  const [sx, sz] = faceDir(seat.face);
+  const [tx, tz] = faceDir(screen.face);
+  return (sx * vx + sz * vz) / dist > 0.5 && -(tx * vx + tz * vz) / dist > 0.5;
+}
+
+/** The TV a seat looks at, if any (the nearest, if there are a few). */
+export function tvFacing(level: Level, seat: PlacedSlot, cat: Catalog = defaultCatalog): PlacedObject | null {
+  let best: { o: PlacedObject; dist: number } | null = null;
+  for (const o of Object.values(level.objects)) {
+    const screen = screenOf(o, cat);
+    if (!screen || !inView(seat.pose, screen)) continue;
+    const dist = Math.hypot(screen.x - seat.pose.x, screen.z - seat.pose.z);
+    if (!best || dist < best.dist) best = { o, dist };
+  }
+  return best?.o ?? null;
+}
+
+/** Is this TV in view from a seat? */
+export function canSee(seat: PlacedSlot, tv: PlacedObject, cat: Catalog = defaultCatalog) {
+  const screen = screenOf(tv, cat);
+  return Boolean(screen && inView(seat.pose, screen));
+}
+
+/** Seats in the house with a view of this TV. */
+export function seatsFacing(level: Level, tv: PlacedObject, cat: Catalog = defaultCatalog): PlacedSlot[] {
+  const screen = screenOf(tv, cat);
+  return screen ? slotsFor(level, "sit", cat).filter((s) => inView(s.pose, screen)) : [];
 }

@@ -8,7 +8,10 @@ import { KitMesh } from "./KitMesh";
 import { FLOOR_Y, objectTransform } from "./House";
 import { pencilMaterial } from "./pencil";
 
-/** Food and kitchenware: plates on the table, and the bowl, board, pan or pot in use while a meal is made. */
+/**
+ * Food and kitchenware: plates on the table, and the bowl, board, pan or pot in use while a meal is made. Also
+ * the things furniture does while it's used: a TV that's on, bubbles in a bath, a running tap.
+ */
 
 const PORCELAIN = "#f6f2ea";
 const METAL = "#a9a59d";
@@ -187,6 +190,94 @@ function Servings({ level }: { level: Level }) {
   );
 }
 
+/** A TV that's on: the screen glows and flickers through a few soft colours. */
+function Screen({ seed }: { seed: number }) {
+  const ref = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(({ clock }) => {
+    const m = ref.current;
+    if (!m) return;
+    const t = clock.elapsedTime + seed;
+    const scene = Math.floor(t / 2.6);
+    const hue = (0.52 + Math.sin(scene * 12.9898) * 0.18 + 1) % 1;
+    m.color.setHSL(hue, 0.45, 0.62 + Math.sin(t * 7) * 0.03 + Math.sin(t * 2.3) * 0.04);
+  });
+  return (
+    <mesh position={[0, 1.08, -0.204]} raycast={() => null}>
+      <planeGeometry args={[1.28, 0.55]} />
+      <meshBasicMaterial ref={ref} toneMapped={false} />
+    </mesh>
+  );
+}
+
+/** Bubbles drifting about on the bath water. */
+function Bubbles() {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    ref.current?.children.forEach((c, i) => {
+      const t = clock.elapsedTime * 0.4 + i * 1.7;
+      c.position.set(Math.sin(t + i) * 0.6, 0.5 + Math.abs(Math.sin(t * 2.1)) * 0.02, Math.cos(t * 0.8 + i * 2) * 0.22);
+    });
+  });
+  return (
+    <group ref={ref}>
+      {[0.07, 0.05, 0.09, 0.06, 0.08, 0.05, 0.07].map((r, i) => (
+        <mesh key={i} scale={[r, r * 0.6, r]} raycast={() => null}>
+          <sphereGeometry args={[1, 10, 8]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.85} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Water running from the tap into the basin. */
+function Tap({ top, bottom }: { top: number; bottom: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    const m = ref.current;
+    if (m) m.scale.x = m.scale.z = 1 + Math.sin(clock.elapsedTime * 30) * 0.15;
+  });
+  return (
+    <mesh ref={ref} position={[0, (top + bottom) / 2, -0.25]} raycast={() => null}>
+      <cylinderGeometry args={[0.012, 0.016, top - bottom, 8]} />
+      <meshBasicMaterial color="#cfe6ee" transparent opacity={0.8} />
+    </mesh>
+  );
+}
+
+/** What furniture does while someone's settled in and using it. */
+function InUse({ level }: { level: Level }) {
+  const life = useGame((s) => s.life);
+  useArrivals(life);
+  if (!life) return null;
+  const now = serverNow();
+  const shown = new Map<string, "tv" | "bath" | "tap">();
+  for (const a of Object.values(life.avatars)) {
+    const u = a.use;
+    if (!u || activityAt(a, now) !== u.action) continue;
+    if (u.action === "watch" && u.tv) shown.set(u.tv, "tv");
+    if (u.action === "bathe" && u.objectId) shown.set(u.objectId, "bath");
+    if (u.action === "wash" && u.objectId) shown.set(u.objectId, "tap");
+  }
+  return (
+    <>
+      {[...shown].map(([id, what], i) => {
+        const o = level.objects[id];
+        if (!o) return null;
+        const { position, rotationY } = objectTransform(o);
+        const pedestal = (catalog.furniture.get(o.catalogId)?.model.kind ?? "") === "pedsink";
+        return (
+          <group key={id} position={position} rotation-y={rotationY}>
+            {what === "tv" && <Screen seed={i * 3.1} />}
+            {what === "bath" && <Bubbles />}
+            {what === "tap" && (pedestal ? <Tap top={1.04} bottom={0.83} /> : <Tap top={1.06} bottom={0.77} />)}
+          </group>
+        );
+      })}
+    </>
+  );
+}
+
 export function LifeProps() {
   const life = useGame((s) => s.life);
   const level = useGame((s) => s.view?.levels[0]);
@@ -198,6 +289,7 @@ export function LifeProps() {
       ))}
       <CookingProps level={level} />
       <Servings level={level} />
+      <InUse level={level} />
     </>
   );
 }

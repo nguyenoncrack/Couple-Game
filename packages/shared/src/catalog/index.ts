@@ -12,8 +12,11 @@ import recipesData from "./recipes.json";
 
 const hex = z.string().regex(/^#[0-9a-f]{6}$/i);
 
-/** Things a character can do with a piece of furniture. Station actions are where recipe steps happen. */
-export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep"] as const;
+/**
+ * Things a character can do with a piece of furniture. Station actions are where recipe steps happen. Watching
+ * is done from a seat facing a TV (or the floor in front of it, if there's none).
+ */
+export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep", "watch", "swim", "bathe", "toilet", "wash"] as const;
 export const STATIONS = ["stove", "counter"] as const;
 
 /**
@@ -29,8 +32,14 @@ const Slot = z.object({
   face: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
 });
 
+/** `seconds`: a quick thing (washing your hands) that's over after that long, rather than lasting until you get up. */
 const Interaction = z
-  .object({ action: z.enum(ACTIONS), station: z.enum(STATIONS).optional(), slots: z.array(Slot).min(1).max(6) })
+  .object({
+    action: z.enum(ACTIONS),
+    station: z.enum(STATIONS).optional(),
+    seconds: z.number().positive().max(120).optional(),
+    slots: z.array(Slot).min(1).max(6),
+  })
   .refine((i) => (i.action === "cook" || i.action === "prep") === Boolean(i.station), "cook and prep need a station; nothing else has one");
 
 const FurnitureItem = z.object({

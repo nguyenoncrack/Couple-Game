@@ -1,4 +1,4 @@
-import { normalizeAppearance, activityAt, positionAt, type Avatar, type MemberInfo } from "@cg/shared";
+import { normalizeAppearance, activityAt, arrivalTime, faceDir, positionAt, type Avatar, type MemberInfo } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -11,7 +11,7 @@ import { KitMesh } from "./KitMesh";
 
 /**
  * The two of you, drawn in pencil like the furniture. Each character is a few jointed parts (body, arms, thighs,
- * shins) so they can walk, sit, lie down and cook. Where they are comes from the server's life state: a path and
+ * shins) so they can walk, sit, lie down, cook, bathe and swim. Where they are comes from the server's life state: a path and
  * the time they set off, so both screens work out the same position every frame without more messages. Things
  * you say float over your head for a few seconds; hearts float up while you hug, kiss or cuddle.
  */
@@ -139,6 +139,44 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         roll: 0,
       };
     }
+    case "watch":
+      // on the sofa, leaning back; on the floor, hugging your knees
+      if ((seatY ?? 0) < 0.2)
+        return { hip: 0.14, lean: -0.1, thighs: [-2.0, -2.0], knees: [2.2, 2.2], arms: [-0.95, -0.95], spread: -0.2, roll: 0 };
+      return {
+        hip: (seatY ?? 0.45) + 0.05,
+        lean: 0.2 + Math.sin(s * 0.7) * 0.02,
+        thighs: [-1.45, -1.45],
+        knees: [1.45, 1.45],
+        arms: [-0.55, -0.45],
+        spread: 0.12,
+        roll: 0,
+      };
+    case "toilet":
+      return { hip: (seatY ?? 0.44) + 0.05, lean: -0.18, thighs: [-1.5, -1.5], knees: [1.5, 1.5], arms: [-0.85, -0.85], spread: 0.05, roll: 0 };
+    case "wash": {
+      const rub = Math.sin(s * 11) * 0.12;
+      return { hip: HIP, lean: -0.1, thighs: [0, 0], knees: [0, 0], arms: [-0.95 + rub, -0.95 - rub], spread: -0.28, roll: 0 };
+    }
+    case "bathe": {
+      // lying back in the water, legs out, arms along the rim
+      const sway = Math.sin(s * 0.9) * 0.03;
+      return { hip: (seatY ?? 0.3) + 0.05, lean: 0.5 + sway, thighs: [-1.15, -1.1], knees: [0.45, 0.35], arms: [0.25, 0.25], spread: 1.0, roll: 0 };
+    }
+    case "swim": {
+      // front crawl: face down, arms windmilling, legs kicking
+      const stroke = Math.sin(s * 2.6);
+      const kick = Math.sin(s * 9) * 0.25;
+      return {
+        hip: 0.16 + Math.sin(s * 5.2) * 0.015,
+        lean: -1.45,
+        thighs: [kick, -kick],
+        knees: [0.12, 0.12],
+        arms: [-1.6 - stroke * 1.4, -1.6 + stroke * 1.4],
+        spread: 0.15,
+        roll: 0,
+      };
+    }
     default: {
       const breathe = Math.sin(s * 1.6) * 0.012;
       return {
@@ -152,6 +190,17 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
       };
     }
   }
+}
+
+/** Swimming laps: this far either side of the middle of your lane, at this speed (metres, metres a second). */
+const LAP_HALF = 1.5;
+const SWIM_SPEED = 0.7;
+
+/** How far along the lane a swimmer is from its middle at time `t`, and whether they're on the way back. */
+function lap(since: number) {
+  const len = LAP_HALF * 2;
+  const u = ((since / 1000) * SWIM_SPEED + LAP_HALF) % (len * 2);
+  return u < len ? { along: u - LAP_HALF, back: false } : { along: len * 2 - u - LAP_HALF, back: true };
 }
 
 /** Shortest way round from one angle to another. */
@@ -195,6 +244,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
   const kneeL = useRef<THREE.Group>(null);
   const kneeR = useRef<THREE.Group>(null);
   const zzz = useRef<HTMLDivElement>(null);
+  const ripple = useRef<THREE.Mesh>(null);
   const hearts = useRef<HTMLDivElement>(null);
   const tag = useRef<HTMLDivElement>(null);
   const first = useRef(true);
@@ -215,7 +265,14 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     let tx = posed ? avatar.use!.pose!.x : p.x;
     let tz = posed ? avatar.use!.pose!.z : p.z;
     const face = posed ? avatar.use!.pose!.face : avatar.face;
-    const yaw = p.heading ?? (-face * Math.PI) / 2;
+    let yaw = p.heading ?? (-face * Math.PI) / 2;
+    if (activity === "swim") {
+      const { along, back } = lap(t - arrivalTime(avatar));
+      const [dx, dz] = faceDir(face);
+      tx += dx * along;
+      tz += dz * along;
+      if (back) yaw += Math.PI;
+    }
     // cuddling: shuffle over towards your partner and turn onto your side to face them
     let roll = 0;
     const near = activity === "cuddle" && partner?.use?.pose;
@@ -251,6 +308,12 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     if (armL.current) armL.current.rotation.z = ease(armL.current.rotation.z, -pose.spread, j);
     if (armR.current) armR.current.rotation.z = ease(armR.current.rotation.z, pose.spread, j);
     if (zzz.current) zzz.current.style.opacity = activity === "sleep" ? "1" : "0";
+    if (ripple.current) {
+      ripple.current.visible = activity === "swim";
+      const r = (t / 900) % 1;
+      ripple.current.scale.setScalar(0.6 + r * 0.9);
+      (ripple.current.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - r);
+    }
     // close together: hearts float up, and the name tags step aside so they don't pile up on each other
     const close = activity === "hug" || activity === "kiss" || activity === "cuddle";
     if (hearts.current) hearts.current.style.display = close ? "" : "none";
@@ -274,6 +337,10 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
           <cylinderGeometry args={[0.3, 0.3, 1.8, 8]} />
         </mesh>
       )}
+      <mesh ref={ripple} visible={false} position={[0, 0.075, 0.2]} rotation-x={-Math.PI / 2} raycast={() => null}>
+        <ringGeometry args={[0.42, 0.5, 32]} />
+        <meshBasicMaterial color="#ffffff" transparent depthWrite={false} />
+      </mesh>
       <group ref={body} position={[0, HIP, 0]}>
         <KitMesh make={(k) => torso(k, looks)} deps={[looks]} />
         <group ref={armL} position={[-SHOULDER, TORSO - 0.06, 0]}>

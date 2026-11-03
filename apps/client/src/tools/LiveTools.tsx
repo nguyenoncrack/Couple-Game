@@ -1,4 +1,4 @@
-import { actionsOf, catalog, type Action } from "@cg/shared";
+import { actionsOf, catalog, slotsOf, tvFacing, type Action, type Level, type PlacedObject } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,7 +19,16 @@ const VERB: Record<Action, string> = {
   lounge: "Lounge",
   cook: "Cook",
   prep: "Cook",
+  watch: "Watch TV",
+  swim: "Swim",
+  bathe: "Take a bath",
+  toilet: "Use the toilet",
+  wash: "Wash your hands",
 };
+
+/** Seats can be watched from too, when there's a TV in view. */
+const seatSeesTv = (level: Level, o: PlacedObject) => slotsOf(o, "sit").some((s) => tvFacing(level, s));
+const offers = (level: Level, o: PlacedObject): Action[] => [...new Set(actionsOf(o)), ...(seatSeesTv(level, o) ? (["watch"] as const) : [])];
 
 export function LiveTools() {
   const view = useGame((s) => s.view);
@@ -57,7 +66,7 @@ export function LiveTools() {
   const onObjectDown = (id: string, e: ThreeEvent<PointerEvent>) => {
     if (cameraGestureActive()) return;
     const o = level.objects[id];
-    if (!o || !actionsOf(o).length) return walk(e);
+    if (!o || !offers(level, o).length) return walk(e);
     const { position, item } = objectTransform(o);
     const h = (item.model as { height?: unknown }).height;
     useGame.setState({
@@ -118,14 +127,18 @@ function Menu() {
     const o = level.objects[menu.objectId];
     if (!o) return null;
     title = catalog.furniture.get(o.catalogId)?.name ?? "";
-    if (mine?.use?.objectId === o.id && !mine.use.station) options.push({ label: "Get up", run: () => act({ do: "stop" }) });
+    const using = mine?.use?.objectId === o.id && !mine.use.station;
+    const out = mine?.use?.action === "bathe" || mine?.use?.action === "swim";
+    if (using) options.push({ label: out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });
+    // watching this TV from a seat across the room
+    else if (mine?.use?.tv === o.id) options.push({ label: "Stop watching", run: () => act({ do: "stop" }) });
     if (us.inBed && us.here && mine?.use?.objectId === o.id)
       options.push(
         us.cuddling
           ? { label: "Stop cuddling", run: () => act({ do: "social", action: "uncuddle" }) }
           : { label: "Cuddle up ♥", run: () => act({ do: "social", action: "cuddle" }) },
       );
-    for (const action of new Set(actionsOf(o))) {
+    for (const action of offers(level, o)) {
       if (action === "cook" || action === "prep") {
         if (life.cooking) {
           const name = catalog.recipes.get(life.cooking.recipeId)?.name ?? "the meal";
@@ -140,7 +153,7 @@ function Menu() {
               label: `Make ${r.name.toLowerCase()}`,
               run: () => act({ do: "cook", recipeId: r.id, objectId: o.id }),
             });
-      } else if (mine?.use?.objectId !== o.id)
+      } else if (action === "watch" ? mine?.use?.action !== "watch" || (mine.use.objectId !== o.id && mine.use.tv !== o.id) : !using)
         options.push({
           label: VERB[action],
           run: () => act({ do: "use", objectId: o.id, action }),

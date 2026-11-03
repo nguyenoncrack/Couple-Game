@@ -263,3 +263,88 @@ describe("together", () => {
     expect(Life.restore(life.saved(200_000), 0).state.avatars.amy!.use?.action).toBe("cuddle");
   });
 });
+
+describe("around the house", () => {
+  const place = (bp: Blueprint, id: string, catalogId: string, x: number, z: number, rot: 0 | 1 | 2 | 3 = 0) =>
+    apply(bp, { t: "object.place", level: 0, id, catalogId, x, z, rot });
+  /** Amy and Ben standing on an open lot. */
+  function two(bp: Blueprint) {
+    const life = new Life(emptyLife());
+    life.ensureAvatar("amy", bp, 0);
+    life.ensureAvatar("ben", bp, 0);
+    return { life, amy: () => life.state.avatars.amy!, ben: () => life.state.avatars.ben! };
+  }
+
+  it("watches TV from a seat facing it, picked from either one, and just sits once the TV goes", () => {
+    // the TV faces +z; the sofa across the room faces back at it, the chair beside it faces away
+    let bp = place(emptyBlueprint(8, 8), "tv00000001", "tv_stand", 3, 0);
+    bp = place(bp, "sofa000001", "sofa_cozy", 3, 4, 2);
+    bp = place(bp, "chair00001", "dining_chair", 6, 1, 0);
+    const { life, amy, ben } = two(bp);
+    expect(life.use("amy", bp, "tv00000001", "watch", 0)).toBeNull();
+    expect(amy().use).toMatchObject({ objectId: "sofa000001", action: "watch", tv: "tv00000001" });
+    expect(life.use("ben", bp, "sofa000001", "watch", 0)).toBeNull();
+    expect(ben().use).toMatchObject({ objectId: "sofa000001", action: "watch", tv: "tv00000001" });
+    expect(ben().use!.slot).not.toBe(amy().use!.slot);
+    expect(life.use("ben", bp, "chair00001", "watch", 0)).toBe("no-tv");
+
+    bp = apply(bp, { t: "object.remove", level: 0, id: "tv00000001" });
+    expect(life.onBlueprint(bp, 60_000)).toBe(true);
+    expect(amy().use).toMatchObject({ objectId: "sofa000001", action: "sit", tv: undefined });
+  });
+
+  it("sits on the floor in front of the TV when there's no seat to watch from", () => {
+    const bp = place(emptyBlueprint(8, 8), "tv00000001", "tv_stand", 3, 0);
+    const { life, amy } = two(bp);
+    expect(life.use("amy", bp, "tv00000001", "watch", 0)).toBeNull();
+    expect(amy().use).toMatchObject({ objectId: "tv00000001", action: "watch", tv: "tv00000001" });
+    expect(amy().use!.pose!.face).toBe(2);
+  });
+
+  it("washes your hands after the toilet, and each is over by itself", () => {
+    let bp = place(emptyBlueprint(8, 8), "loo0000001", "toilet", 1, 1);
+    bp = place(bp, "sink000001", "bath_sink", 3, 1);
+    const { life, amy } = two(bp);
+    expect(life.use("amy", bp, "loo0000001", "toilet", 0)).toBeNull();
+    const done = amy().use!.until!;
+    expect(done).toBe(arrivalTime(amy()) + 10_000);
+    expect(life.nextEvent(arrivalTime(amy()))).toBe(done);
+    expect(life.tick(bp, done)).toBe(true);
+    expect(amy().use).toMatchObject({ objectId: "sink000001", action: "wash" });
+    const washed = amy().use!.until!;
+    expect(washed).toBe(arrivalTime(amy()) + 6_000);
+    expect(life.tick(bp, washed)).toBe(true);
+    expect(amy().use).toBeNull();
+    expect(amy().face).toBe(2);
+
+    // with no sink about you just get up; and a quick thing isn't saved part way
+    const alone = place(emptyBlueprint(8, 8), "loo0000001", "toilet", 1, 1);
+    const one = two(alone);
+    one.life.use("amy", alone, "loo0000001", "toilet", 0);
+    expect(one.life.saved(1_000).avatars.amy!.use).toBeNull();
+    one.life.tick(alone, one.amy().use!.until!);
+    expect(one.amy().use).toBeNull();
+  });
+
+  it("shares the bath, and swims laps side by side", () => {
+    let bp = place(emptyBlueprint(12, 10), "tub0000001", "bathtub", 1, 1);
+    bp = place(bp, "pool000001", "pool_rect", 3, 5);
+    const { life, amy, ben } = two(bp);
+    life.use("amy", bp, "tub0000001", "bathe", 0);
+    life.use("ben", bp, "tub0000001", "bathe", 0);
+    expect(amy().use!.pose!.face).not.toBe(ben().use!.pose!.face);
+    // a bath lasts until you get out, saved and all
+    expect(Life.restore(life.saved(60_000), 0).state.avatars.amy!.use?.action).toBe("bathe");
+
+    expect(life.use("amy", bp, "pool000001", "swim", 60_000)).toBeNull();
+    expect(life.use("ben", bp, "pool000001", "swim", 60_000)).toBeNull();
+    for (const a of [amy(), ben()]) {
+      expect(a.use!.action).toBe("swim");
+      expect(a.use!.pose!.x).toBeGreaterThan(3);
+      expect(a.use!.pose!.x).toBeLessThan(9);
+      expect(a.use!.pose!.z).toBeGreaterThan(5);
+      expect(a.use!.pose!.z).toBeLessThan(8);
+    }
+    expect(amy().use!.pose!.z).not.toBe(ben().use!.pose!.z);
+  });
+});

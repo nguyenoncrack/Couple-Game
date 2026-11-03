@@ -486,8 +486,8 @@ const BUILDERS: Record<string, Builder> = {
       k.add(new THREE.TubeGeometry(curve, 24, 0.02, 8, false), metal, [0, 0, 0], 1, { outline: 0.004, normals: true });
     }
     for (const y of [0.16, 0.32, 0.48]) k.add("cyl8", metal, [w / 2 - c - 0.12, y, 0], [0.035, 0.44, 0.035], { rot: [Math.PI / 2, 0, 0], outline: 0.004 });
-    // A round float with a circular tube, rather than a vertically stretched ring.
-    k.add(new THREE.TorusGeometry(0.34, 0.08, 12, 36), m("#e07a5f"), [0.6, 0.11, 0.3], 1, { rot: [Math.PI / 2, 0, 0], outline: 0.006, normals: true });
+    // A round float with a circular tube, rather than a vertically stretched ring, between the two swimming lanes.
+    k.add(new THREE.TorusGeometry(0.28, 0.07, 12, 36), m("#e07a5f"), [0.6, 0.11, 0], 1, { rot: [Math.PI / 2, 0, 0], outline: 0.006, normals: true });
   },
 
   lounger: (k, w, d, p, m) => {
