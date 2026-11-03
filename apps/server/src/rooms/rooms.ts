@@ -34,6 +34,14 @@ export class Rooms {
     return room;
   }
 
+  async refreshAppearance(accountId: string) {
+    const houses = await this.directory.housesFor(accountId);
+    await Promise.all(houses.map(async ({ house }) => {
+      const room = this.rooms.get(house.id);
+      if (room) await (await room).refreshAppearance(accountId);
+    }));
+  }
+
   /** Call when a peer leaves; schedules an unload if the room is now empty. */
   async released(houseId: string) {
     const room = await this.rooms.get(houseId);

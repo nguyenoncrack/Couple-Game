@@ -1,4 +1,4 @@
-import type { AppliedOp, Blueprint, ChatMessage, LifeState, Op } from "@cg/shared";
+import { AppearanceSchema, type Appearance, type AppliedOp, type Blueprint, type ChatMessage, type LifeState, type Op } from "@cg/shared";
 import type { Row, Sql } from "./sql";
 import type { AccountRow, AddMemberResult, Directory, HouseRow, HouseStore, MemberRow, Snapshot } from "./store";
 
@@ -8,7 +8,12 @@ import type { AccountRow, AddMemberResult, Directory, HouseRow, HouseStore, Memb
 export const nameKey = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();
 
 const house = (r: Row): HouseRow => ({ id: r.id as string, name: r.name as string, inviteCode: r.invite_code as string, maxMembers: r.max_members as number });
+function readAppearance(value: unknown): Appearance | null {
+  try { const parsed = AppearanceSchema.safeParse(typeof value === "string" ? JSON.parse(value) : value); return parsed.success ? parsed.data : null; }
+  catch { return null; }
+}
 const member = (r: Row): MemberRow => ({
+  appearance: readAppearance(r.appearance),
   id: r.id as string,
   houseId: r.house_id as string,
   accountId: (r.account_id as string | null) ?? null,
@@ -19,6 +24,13 @@ const member = (r: Row): MemberRow => ({
 
 export class SqlDirectory implements Directory {
   constructor(private sql: Sql) {}
+
+  async getAppearance(accountId: string) {
+    return readAppearance(this.sql.get("select appearance from account_appearances where account_id = ?", accountId)?.appearance);
+  }
+  async setAppearance(accountId: string, appearance: Appearance) {
+    this.sql.run("insert into account_appearances (account_id, appearance) values (?, ?) on conflict(account_id) do update set appearance = excluded.appearance", accountId, JSON.stringify(appearance));
+  }
 
   async createAccount(a: AccountRow, passwordHash: string) {
     return this.sql.tx(() => {
@@ -93,7 +105,7 @@ export class SqlDirectory implements Directory {
   }
 
   async listMembers(houseId: string) {
-    return this.sql.all("select * from members where house_id = ? order by joined_at, rowid", houseId).map(member);
+    return this.sql.all("select m.*, a.appearance from members m left join account_appearances a on a.account_id = m.account_id where m.house_id = ? order by m.joined_at, m.rowid", houseId).map(member);
   }
 
   async addMember(m: MemberRow): Promise<AddMemberResult> {

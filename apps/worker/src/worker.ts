@@ -52,6 +52,10 @@ export class DirectoryDO extends DurableObject<Env> {
     this.directory = new SqlDirectory(sql);
     this.api = createApi({
       directory: this.directory,
+      appearanceChanged: async (id) => {
+        const houses = await this.directory.housesFor(id);
+        await Promise.all(houses.map((h) => house(env, h.house.id).refreshAppearance(id)));
+      },
       initHouse: (id, snap) => house(env, id).init(id, snap),
       dropHouse: (id) => house(env, id).drop(id),
       passwordRounds: env.PASSWORD_ROUNDS ? Number(env.PASSWORD_ROUNDS) : undefined,
@@ -97,6 +101,12 @@ export class HouseDO extends DurableObject<Env> {
     const sql = durableSql(ctx.storage);
     createTables(sql, HOUSE_SCHEMA);
     this.store = new SqlHouseStore(sql);
+  }
+
+  /** Refresh an active room only; sleeping rooms read cosmetics when next opened. */
+  async refreshAppearance(accountId: string) {
+    const active = await this.room;
+    await active?.refreshAppearance(accountId);
   }
 
   /** A brand-new house's first snapshot. */

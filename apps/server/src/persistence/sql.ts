@@ -23,6 +23,10 @@ export const DIRECTORY_SCHEMA = [
     password text not null,
     created_at integer not null
   )`,
+  `create table if not exists account_appearances (
+    account_id text primary key references accounts(id) on delete cascade,
+    appearance text not null
+  )`,
   `create table if not exists sessions (
     token_hash text primary key,
     account_id text not null references accounts(id) on delete cascade,

@@ -1,0 +1,1 @@
+export { HAIRSTYLES, SKIN_TONES, HAIR_COLORS, CLOTHING_COLORS, OUTFITS, DEFAULT_APPEARANCE, normalizeAppearance, changeGender, appearanceColors, type Appearance, type Gender, type Hairstyle } from "@cg/shared";

@@ -1,3 +1,4 @@
+import { CharacterButton } from "../features/character/CharacterButton";
 import { catalog, cookingDone, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -75,6 +76,7 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
             <Icon.link />
           </button>
         )}
+        <CharacterButton compact disabled={status !== "online"} onSaved={(appearance) => useGame.setState((s) => ({ members: s.members.map((m) => m.id === s.me ? { ...m, appearance } : m) }))} />
         <ChatButton />
         <button className="pill icon-pill" onClick={() => setHelpOpen((v) => !v)} title="Controls">
           <Icon.help />

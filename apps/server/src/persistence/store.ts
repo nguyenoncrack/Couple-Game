@@ -1,4 +1,4 @@
-import type { AppliedOp, Blueprint, ChatMessage, LifeState } from "@cg/shared";
+import type { Appearance, AppliedOp, Blueprint, ChatMessage, LifeState } from "@cg/shared";
 
 /**
  * Everything the server keeps goes through two interfaces, so the same rooms and routes run on Node with one SQLite
@@ -23,6 +23,7 @@ export interface HouseRow {
 }
 
 export interface MemberRow {
+  appearance?: Appearance | null;
   id: string;
   houseId: string;
   /** Null for a member from before accounts who hasn't signed in on that browser since. */
@@ -40,6 +41,8 @@ export interface Snapshot {
 export type AddMemberResult = "added" | "full" | "already";
 
 export interface Directory {
+  getAppearance(accountId: string): Promise<Appearance | null>;
+  setAppearance(accountId: string, appearance: Appearance): Promise<void>;
   /** False if the name is taken (names are unique ignoring case and extra spaces). */
   createAccount(account: AccountRow, passwordHash: string): Promise<boolean>;
   accountByName(name: string): Promise<(AccountRow & { passwordHash: string }) | null>;

@@ -80,7 +80,7 @@ async function sendResponse(res: ServerResponse, r: Response) {
 
 export function createApp({ directory, houses, staticDir, roomIdleMs, houseIdleMs }: AppOptions) {
   const rooms = new Rooms(directory, houses, roomIdleMs, houseIdleMs);
-  const api = createApi({ directory, initHouse: (id, snap) => houses.saveSnapshot(id, snap), dropHouse: (id) => houses.deleteHouse(id) });
+  const api = createApi({ directory, appearanceChanged: (id) => rooms.refreshAppearance(id), initHouse: (id, snap) => houses.saveSnapshot(id, snap), dropHouse: (id) => houses.deleteHouse(id) });
   const connectLimit = new RateLimiter(20, 20 / 60);
 
   const http = createServer(async (req, res) => {
