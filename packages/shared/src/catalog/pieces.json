@@ -1,0 +1,19 @@
+{
+  "wallStyles": [
+    { "id": "plaster_cream", "name": "Cream plaster", "color": "#efe3cc", "finish": "plaster" },
+    { "id": "plaster_sage", "name": "Sage plaster", "color": "#c9d4b5", "finish": "plaster" },
+    { "id": "plaster_blush", "name": "Blush plaster", "color": "#ecc9bd", "finish": "plaster" },
+    { "id": "plaster_sky", "name": "Sky plaster", "color": "#bfd3e0", "finish": "plaster" },
+    { "id": "brick_red", "name": "Red brick", "color": "#c4775a", "finish": "brick" },
+    { "id": "wood_panel", "name": "Wood panelling", "color": "#d8b48a", "finish": "wood" }
+  ],
+  "floorMaterials": [
+    { "id": "oak", "name": "Oak boards", "color": "#c99c6c", "finish": "wood" },
+    { "id": "walnut", "name": "Walnut boards", "color": "#9a6b47", "finish": "wood" },
+    { "id": "tile_white", "name": "White tile", "color": "#ebe7df", "finish": "checker" },
+    { "id": "tile_blue", "name": "Blue tile", "color": "#a9c3cf", "finish": "checker" },
+    { "id": "carpet_sand", "name": "Sand carpet", "color": "#d9c7a7", "finish": "carpet" },
+    { "id": "stone", "name": "Stone pavers", "color": "#bdb5a8", "finish": "setts" },
+    { "id": "concrete", "name": "Concrete", "color": "#c8c3b9", "finish": "concrete" }
+  ]
+}

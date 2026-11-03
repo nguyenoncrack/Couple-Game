@@ -1,0 +1,23 @@
+[
+  {
+    "id": "pancakes",
+    "name": "Pancakes",
+    "serves": 2,
+    "ingredients": ["flour", "egg", "milk"],
+    "steps": [
+      { "station": "counter", "action": "mix", "seconds": 8 },
+      { "station": "stove", "action": "fry", "seconds": 15 }
+    ]
+  },
+  {
+    "id": "pasta",
+    "name": "Tomato pasta",
+    "serves": 2,
+    "ingredients": ["pasta", "tomato", "garlic"],
+    "steps": [
+      { "station": "counter", "action": "chop", "seconds": 6 },
+      { "station": "stove", "action": "boil", "seconds": 20 },
+      { "station": "stove", "action": "simmer", "seconds": 10 }
+    ]
+  }
+]
