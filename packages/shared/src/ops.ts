@@ -19,6 +19,7 @@ const single = [
   /** Removing a wall also removes any door or window in it. */
   z.object({ t: z.literal("walls.remove"), level, edges: edgeList }),
   z.object({ t: z.literal("floor.paint"), level, cells: cellList, material: z.string().max(40).nullable() }),
+  z.object({ t: z.literal("roof.paint"), level, cells: cellList, style: z.string().max(40).nullable() }),
   z.object({ t: z.literal("object.place"), level, id: Id, catalogId: z.string().max(40), x: coord, z: coord, rot }),
   z.object({ t: z.literal("object.move"), level, id: Id, x: coord, z: coord, rot }),
   z.object({ t: z.literal("object.remove"), level, id: Id }),

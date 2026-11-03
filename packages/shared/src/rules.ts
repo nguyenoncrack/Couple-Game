@@ -18,6 +18,7 @@ export type RejectReason =
   | "bad-cell"
   | "unknown-style"
   | "unknown-material"
+  | "unknown-roof"
   | "unknown-item"
   | "id-taken"
   | "not-found"
@@ -34,6 +35,7 @@ export const REJECT_TEXT: Record<RejectReason | "held" | "rate-limited" | "inval
   "bad-cell": "That isn't a floor tile.",
   "unknown-style": "That wall style doesn't exist.",
   "unknown-material": "That floor doesn't exist.",
+  "unknown-roof": "That roof doesn't exist.",
   "unknown-item": "That item isn't in the catalog.",
   "id-taken": "Something already uses that ID.",
   "not-found": "That's already gone.",
@@ -162,6 +164,21 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
         else tiles[key] = { material: op.material };
       }
       return { ok: true, blueprint: withLevel(bp, op.level, { ...level, tiles }) };
+    }
+
+    case "roof.paint": {
+      if (op.style !== null && !cat.roofStyles.has(op.style)) return fail("unknown-roof");
+      for (const key of op.cells) {
+        const c = parseCell(key);
+        if (!c) return fail("bad-cell");
+        if (!cellInLot(c.x, c.z, w, d)) return fail("out-of-lot");
+      }
+      const roofs = { ...level.roofs };
+      for (const key of op.cells) {
+        if (op.style === null) delete roofs[key];
+        else roofs[key] = { style: op.style };
+      }
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, roofs }) };
     }
 
     case "object.place": {

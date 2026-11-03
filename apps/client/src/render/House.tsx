@@ -2,7 +2,7 @@ import { catalog, cellKey, footprintOf, parseCell, parseEdge, positionAt, type L
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { serverNow, useGame } from "../state/game";
+import { roofVisible, serverNow, useGame } from "../state/game";
 import type { Kit } from "./kit";
 import { KitMesh, Meshes } from "./KitMesh";
 import { doorParts, modelFor, openingModelFor, shade, type DoorLeaf } from "./models";
@@ -157,8 +157,8 @@ export function Walls({
   hiddenOpening: string | null;
   onOpeningDown: (id: string, e: ThreeEvent<PointerEvent>) => void;
 }) {
-  // walls stand at full height when you're inside looking around
-  const mode = useGame((s) => (s.mode === "live" && s.firstPerson ? "up" : s.wallMode));
+  // walls stand at full height when you're inside looking around, or hold up a roof
+  const mode = useGame((s) => ((s.mode === "live" && s.firstPerson) || roofVisible(s) ? "up" : s.wallMode));
   const groups = useMemo(() => wallGroups(level), [level.walls, level.openings]);
   const full = useRef<(THREE.Group | null)[]>([]);
   const low = useRef<(THREE.Group | null)[]>([]);
@@ -369,9 +369,29 @@ function Placed({ o, onDown }: { o: PlacedObject; onDown: (id: string, e: ThreeE
 }
 
 /** A coloured rectangle drawn on the floor around a footprint (selection, partner's hold, placement check). */
-export function FootprintMarker({ x, z, w, d, color, opacity = 0.9 }: { x: number; z: number; w: number; d: number; color: string; opacity?: number }) {
+export function FootprintMarker({
+  x,
+  z,
+  w,
+  d,
+  color,
+  opacity = 0.9,
+  at = FLOOR_Y,
+  onTop = false,
+}: {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  color: string;
+  opacity?: number;
+  /** Height it's drawn at (the floor, or the top of the walls for a roof). */
+  at?: number;
+  /** Drawn over everything, so it shows through a roof. */
+  onTop?: boolean;
+}) {
   const t = 0.06;
-  const y = FLOOR_Y + 0.02;
+  const y = at + 0.02;
   return (
     <group raycast={() => null}>
       {[
@@ -380,14 +400,14 @@ export function FootprintMarker({ x, z, w, d, color, opacity = 0.9 }: { x: numbe
         [x + t / 2, z + d / 2, t, d],
         [x + w - t / 2, z + d / 2, t, d],
       ].map(([cx, cz, sw, sd], i) => (
-        <mesh key={i} position={[cx!, y, cz!]} raycast={() => null}>
+        <mesh key={i} position={[cx!, y, cz!]} raycast={() => null} renderOrder={onTop ? 10 : 0}>
           <boxGeometry args={[sw!, 0.01, sd!]} />
-          <meshBasicMaterial color={color} transparent opacity={opacity} />
+          <meshBasicMaterial color={color} transparent opacity={opacity} depthTest={!onTop} />
         </mesh>
       ))}
-      <mesh position={[x + w / 2, y - 0.005, z + d / 2]} raycast={() => null}>
+      <mesh position={[x + w / 2, y - 0.005, z + d / 2]} raycast={() => null} renderOrder={onTop ? 9 : 0}>
         <boxGeometry args={[w, 0.004, d]} />
-        <meshBasicMaterial color={color} transparent opacity={0.16} depthWrite={false} />
+        <meshBasicMaterial color={color} transparent opacity={onTop ? 0.22 : 0.16} depthWrite={false} depthTest={!onTop} />
       </mesh>
     </group>
   );

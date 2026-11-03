@@ -1,9 +1,9 @@
 import { CharacterButton } from "../features/character/CharacterButton";
-import { catalog, cookingDone, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
+import { catalog, cookingDone, enclosedCells, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { WallMode } from "../render/House";
-import { act, redo, serverNow, setFirstPerson, setMode, setTool, submit, undo, useGame, wake, type Tool } from "../state/game";
+import { act, redo, roofVisible, serverNow, setFirstPerson, setMode, setRoofShown, setTool, submit, toast, undo, useGame, wake, type Tool } from "../state/game";
 import { cameraApi } from "../render/CameraRig";
 import { useThumbnail } from "../render/thumbnails";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
@@ -167,6 +167,9 @@ function HelpCard({ onClose }: { onClose: () => void }) {
           <b>T</b> switches walls between up, cutaway and down
         </li>
         <li>
+          <b>Roof</b> tool: drag over rooms to cover them, or roof the whole house in one go. <b>O</b> shows or hides the roof
+        </li>
+        <li>
           <b>L</b> switches between building and living in the house
         </li>
         <li>
@@ -194,6 +197,7 @@ const TOOLS: { tool: Tool; label: string; icon: () => React.JSX.Element; key: st
   { tool: "floor", label: "Floor", icon: Icon.floor, key: "4" },
   { tool: "floorErase", label: "Lift floor", icon: Icon.floorErase, key: "5" },
   { tool: "buy", label: "Buy", icon: Icon.buy, key: "6" },
+  { tool: "roof", label: "Roof", icon: Icon.roof, key: "7" },
 ];
 
 export const WALL_MODES: { mode: WallMode; label: string; icon: () => React.JSX.Element }[] = [
@@ -203,6 +207,8 @@ export const WALL_MODES: { mode: WallMode; label: string; icon: () => React.JSX.
 ];
 
 export function cycleWallMode() {
+  // walls stand up under a roof, so the first press takes the roof away to show the walls as they're set
+  if (roofVisible(useGame.getState())) return setRoofShown(false);
   const i = WALL_MODES.findIndex((m) => m.mode === useGame.getState().wallMode);
   useGame.setState({ wallMode: WALL_MODES[(i + 1) % WALL_MODES.length]!.mode });
 }
@@ -225,12 +231,30 @@ function ModeSwitch() {
 }
 
 function WallModeButton() {
-  const mode = useGame((s) => s.wallMode);
+  const mode = useGame((s) => (roofVisible(s) ? "up" : s.wallMode));
   const wallMode = WALL_MODES.find((m) => m.mode === mode) ?? WALL_MODES[0]!;
   return (
     <button className={`slot round ${wallMode.mode !== "up" ? "active" : ""}`} onClick={cycleWallMode} title="Walls: up, cutaway, down (T)">
       <wallMode.icon />
       <span className="slot-label">{wallMode.label}</span>
+    </button>
+  );
+}
+
+export function toggleRoof() {
+  const s = useGame.getState();
+  if (!s.roofShown && !Object.keys(s.view?.levels[0]?.roofs ?? {}).length) toast("No roof yet. Build one with the Roof tool.");
+  setRoofShown(!s.roofShown);
+}
+
+function RoofButton() {
+  const shown = useGame((s) => s.roofShown);
+  const has = useGame((s) => Object.keys(s.view?.levels[0]?.roofs ?? {}).length > 0);
+  const on = shown && has;
+  return (
+    <button className={`slot round ${on ? "active" : ""}`} onClick={toggleRoof} title={on ? "Hide the roof (O)" : "Show the roof (O)"}>
+      {on ? <Icon.roofOn /> : <Icon.roofOff />}
+      <span className="slot-label">{on ? "Roof on" : "Roof off"}</span>
     </button>
   );
 }
@@ -288,6 +312,7 @@ function LiveBar() {
         <span className="slot-label">{firstPerson ? "Step out" : "Eyes"}</span>
       </button>
       {!firstPerson && <WallModeButton />}
+      <RoofButton />
       {!firstPerson && (
         <button className={`slot round ${follow ? "active" : ""}`} onClick={() => useGame.setState({ follow: !follow })} title="Keep the camera on you (F)">
           <Icon.follow />
@@ -319,6 +344,7 @@ function Toolbar() {
       ))}
       <span className="toolbar-gap" />
       <WallModeButton />
+      <RoofButton />
       <span className="toolbar-gap" />
       <button className="slot round small" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">
         <Icon.undo />
@@ -397,6 +423,57 @@ function ItemPicture({ item, size = true }: { item: FurnitureItem | OpeningItem;
   );
 }
 
+/** Put a roof over every room shut in by walls, in the chosen style. */
+function roofHouse() {
+  const s = useGame.getState();
+  const level = s.view?.levels[0];
+  if (!level || !s.view) return;
+  const cells = enclosedCells(level.walls, s.view.lot.w, s.view.lot.d).filter((c) => level.roofs[c]?.style !== s.roofStyle);
+  if (!cells.length) {
+    toast(Object.keys(level.roofs).length ? "The house already has that roof." : "Close in a room with walls first, or drag the roof where you want it.");
+    return;
+  }
+  submit({ t: "roof.paint", level: 0, cells, style: s.roofStyle });
+}
+
+function clearRoof() {
+  const cells = Object.keys(useGame.getState().view?.levels[0]?.roofs ?? {});
+  if (cells.length) submit({ t: "roof.paint", level: 0, cells, style: null });
+}
+
+function RoofPanel() {
+  const roofStyle = useGame((s) => s.roofStyle);
+  const erase = useGame((s) => s.roofErase);
+  const has = useGame((s) => Object.keys(s.view?.levels[0]?.roofs ?? {}).length > 0);
+  return (
+    <div className="card tool-panel">
+      <div className="kicker">Roof</div>
+      <div className="seg">
+        <button className={!erase ? "on" : ""} onClick={() => useGame.setState({ roofErase: false })}>
+          Add
+        </button>
+        <button className={erase ? "on" : ""} onClick={() => useGame.setState({ roofErase: true })}>
+          Remove
+        </button>
+      </div>
+      <div className="swatches">
+        {[...catalog.roofStyles.values()].map((r) => (
+          <Swatch key={r.id} color={r.color} label={r.name} active={!erase && roofStyle === r.id} onClick={() => useGame.setState({ roofStyle: r.id, roofErase: false })} />
+        ))}
+      </div>
+      <div className="row-buttons">
+        <button className="btn" onClick={roofHouse}>
+          Roof the whole house
+        </button>
+        <button className="btn" onClick={clearRoof} disabled={!has}>
+          Take it all off
+        </button>
+      </div>
+      <p className="hint hand">{erase ? "Drag over the roof to take that part off." : "Drag a rectangle over the rooms. The roof slopes up from whatever edge it has, so any shape works."}</p>
+    </div>
+  );
+}
+
 function ToolPanel() {
   const tool = useGame((s) => s.tool);
   const wallStyle = useGame((s) => s.wallStyle);
@@ -429,6 +506,7 @@ function ToolPanel() {
         <p className="hint hand">Drag a rectangle of tiles.</p>
       </div>
     );
+  if (tool === "roof") return <RoofPanel />;
   if (tool === "wallErase" || tool === "floorErase")
     return (
       <div className="card tool-panel slim">

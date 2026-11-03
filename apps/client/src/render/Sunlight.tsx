@@ -169,11 +169,14 @@ export function Sunlight({ w, d }: { w: number; d: number }) {
     }
     if (!passes.on) return;
 
+    // the two pictures take turns, one a frame, which halves their cost; a frame's lag in a shadow doesn't show
+    passes.turn = !passes.turn;
     const hidden = passes.hidden;
     hidden.length = 0;
     scene.traverseVisible((o) => {
       if ((o as THREE.Mesh).isMesh || (o as THREE.Line).isLine || (o as THREE.Points).isPoints || (o as THREE.Sprite).isSprite) {
-        if (!casts(o)) hidden.push(o);
+        // roofs cast nothing: rooms under them keep their daylight, as if lit through the windows
+        if (!casts(o) || o.userData.noShadow) hidden.push(o);
       }
     });
     for (const o of hidden) o.visible = false;
@@ -184,8 +187,6 @@ export function Sunlight({ w, d }: { w: number; d: number }) {
     const clearAlpha = gl.getClearAlpha();
     gl.setClearColor(0x000000, 0);
 
-    // the two pictures take turns, one a frame, which halves their cost; a frame's lag in a shadow doesn't show
-    passes.turn = !passes.turn;
     scene.overrideMaterial = passes.turn ? passes.depthOnly : passes.heights;
     gl.setRenderTarget(passes.turn ? passes.shadow : passes.height);
     gl.clear();

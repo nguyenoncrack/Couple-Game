@@ -28,7 +28,7 @@ import { captureFirstPersonMouse, releaseFirstPersonMouse } from "../input/first
  * on top of the new confirmed house; any that no longer make sense are dropped quietly with a note.
  */
 
-export type Tool = "select" | "wall" | "wallErase" | "floor" | "floorErase" | "buy";
+export type Tool = "select" | "wall" | "wallErase" | "floor" | "floorErase" | "roof" | "buy";
 export type Status = "connecting" | "online" | "reconnecting" | "asleep" | "gone";
 /** Build: change the house. Live: be in it, with your character. */
 export type Mode = "build" | "live";
@@ -67,6 +67,11 @@ export interface GameState {
   tool: Tool;
   wallStyle: string;
   floorMaterial: string;
+  roofStyle: string;
+  /** The roof tool takes roof off instead of putting it on. */
+  roofErase: boolean;
+  /** Roofs drawn or hidden (walls stand up under a roof that's drawn). Remembered on this device. */
+  roofShown: boolean;
   /** The catalog item being placed with the buy tool, and its rotation. */
   placing: { catalogId: string; rot: Rot } | null;
   /** A selected object, door or window. */
@@ -106,6 +111,9 @@ export const useGame = create<GameState>(() => ({
   tool: "select",
   wallStyle: "plaster_cream",
   floorMaterial: "oak",
+  roofStyle: "roof_terracotta",
+  roofErase: false,
+  roofShown: storedRoofShown(),
   placing: null,
   selection: null,
   wallMode: "cut",
@@ -122,6 +130,30 @@ export const useGame = create<GameState>(() => ({
   chatOpen: false,
   unread: 0,
 }));
+
+function storedRoofShown() {
+  try {
+    return localStorage.getItem("roofShown") !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setRoofShown(on: boolean) {
+  set({ roofShown: on });
+  try {
+    localStorage.setItem("roofShown", on ? "1" : "0");
+  } catch {
+    // private window: just this visit then
+  }
+}
+
+/** Tools for working inside the house: the roof steps aside while they're in hand. */
+const INSIDE_TOOLS: Tool[] = ["wall", "wallErase", "floor", "floorErase", "buy"];
+
+/** Is a roof drawn over the house right now? Walls stand up under it. */
+export const roofVisible = (s: GameState) =>
+  s.roofShown && !(s.mode === "build" && INSIDE_TOOLS.includes(s.tool)) && Object.keys(s.view?.levels[0]?.roofs ?? {}).length > 0;
 
 const get = useGame.getState;
 const set = useGame.setState;
@@ -446,6 +478,7 @@ export function heldByPartner(objectId: string): MemberInfo | null {
 }
 
 export function setTool(tool: Tool) {
+  if (tool === "roof" && !get().roofShown) setRoofShown(true);
   set({ tool, placing: tool === "buy" ? get().placing : null, selection: tool === "select" ? get().selection : null, catalogOpen: tool === "buy" });
 }
 

@@ -108,6 +108,7 @@ const pencilFragment = /* glsl */ `
   uniform vec3 uLightDir;
   uniform float uDensity;
   uniform float uRim;
+  uniform float uFill;
   uniform float uSpec;
   uniform float uShine;
   uniform vec3 uHighlight;
@@ -302,6 +303,18 @@ const pencilFragment = /* glsl */ `
         // the sky seen in the surface, stronger at a glance
         float fres = pow(1.0 - max(dot(sn, viewDir), 0.0), 3.0);
         glow = vec3(0.86, 0.94, 1.0) * (0.12 + fres * 0.5);
+      #elif FINISH == 17
+        // shingles: level courses stepping down the slope, tabs staggered course to course, a little shadow
+        // under each course's lower edge
+        float along = an.x > an.z ? vWorldPos.z : vWorldPos.x;
+        float cy = vWorldPos.y / 0.13;
+        float course = floor(cy);
+        float f = fract(cy);
+        float tq = along / 0.34 + mod(course, 2.0) * 0.5 + hash(vec3(course, 1.0, 7.0)) * 0.2;
+        float edge = 1.0 - smoothstep(0.02, 0.09, min(f, 1.0 - f));
+        float seam = (1.0 - smoothstep(0.0, 0.04, abs(fract(tq) - 0.5) - 0.45)) * step(0.12, f);
+        lines = max(edge * 0.5, seam * 0.35);
+        tv = (hash(vec3(course, floor(tq), 6.0)) - 0.5) * 0.12 - smoothstep(0.55, 1.0, f) * 0.07;
       #elif FINISH == 16
         // mountains: forest on the lower slopes, blue-grey rock with faint strata, snow on the high flatter parts
         float m1 = noise(vWorldPos * 0.05);
@@ -323,7 +336,8 @@ const pencilFragment = /* glsl */ `
     // where walls and furniture meet the floor, a soft band low down
     occ = max(occ, (1.0 - smoothstep(0.0, 0.25, vWorldPos.y)) * (1.0 - an.y) * 0.45);
     vec3 fill = mix(BOUNCE, SKY, 0.5 + 0.5 * n.y) * (1.0 - occ * 0.55);
-    vec3 irradiance = fill + SUN * sun * (1.0 - occ * 0.35);
+    // uFill: soft light from the room itself, for surfaces only ever seen from inside (ceilings)
+    vec3 irradiance = fill + SUN * sun * (1.0 - occ * 0.35) + vec3(1.0, 0.95, 0.88) * uFill;
     vec3 lit = toLinear(base) * irradiance;
     // Gloss: a tight glint for polished things plus a broad soft lobe around it, which is all the bloom there is.
     vec3 halfway = normalize(uLightDir + viewDir);
@@ -383,7 +397,7 @@ const pencilFragment = /* glsl */ `
   }
 `;
 
-const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10, water: 11, metal: 12, glass: 13, paint: 14, lake: 15, mountain: 16 } as const;
+const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10, water: 11, metal: 12, glass: 13, paint: 14, lake: 15, mountain: 16, shingle: 17 } as const;
 export type Finish = keyof typeof FINISHES;
 
 /**
@@ -392,6 +406,7 @@ export type Finish = keyof typeof FINISHES;
  */
 const GLOSS: Partial<Record<Finish | "clear", [number, number]>> = {
   wood: [0.12, 22],
+  shingle: [0.06, 16],
   checker: [0.3, 60],
   water: [1, 150],
   lake: [1, 150],
@@ -411,13 +426,15 @@ export interface PencilOptions {
   alpha?: number;
   /** How much distance haze it takes; far scenery like mountains takes less so it still reads. */
   fog?: number;
+  /** Extra soft light from all round, for surfaces the sun and sky never reach (a ceiling). */
+  fill?: number;
 }
 
 const cache = new Map<string, THREE.ShaderMaterial>();
 
 /** Shared pencil material. Calls with the same arguments return the same instance. */
 export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
-  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}`;
+  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}|${opts.fill ?? 0}`;
   let m = cache.get(key);
   if (!m) {
     const ghost = opts.ghost;
@@ -432,6 +449,7 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
         uLightDir: { value: SUN_DIR },
         uDensity: { value: opts.density ?? 6 },
         uRim: { value: opts.rim === false ? 0 : 1 },
+        uFill: { value: opts.fill ?? 0 },
         uSpec: { value: spec },
         uShine: { value: shine },
         uHighlight: { value: srgb(ghost === "bad" ? "#e0675a" : "#9ccf8a") },

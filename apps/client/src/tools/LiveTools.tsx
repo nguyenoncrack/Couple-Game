@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { cameraGestureActive } from "../render/CameraRig";
 import { FLOOR_Y, Furniture, objectTransform, Walls } from "../render/House";
+import { Roofs } from "../render/Roof";
 import { act, openChat, sharePresence, useGame } from "../state/game";
 import { together } from "../state/together";
 
@@ -74,6 +75,12 @@ export function LiveTools() {
     act({ do: "walk", x, z });
   };
 
+  // A press on the roof means the room under it, not the ground somewhere past the house.
+  const onRoofDown = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    walk(e);
+  };
+
   const onObjectDown = (id: string, e: ThreeEvent<PointerEvent>) => {
     if (cameraGestureActive() || useGame.getState().firstPerson) return;
     if (!openObjectMenu(level, id)) walk(e);
@@ -84,6 +91,7 @@ export function LiveTools() {
       <mesh geometry={plane} position={[0, 0.04, 0]} visible={false} onPointerDown={walk} />
       <Walls level={level} hiddenOpening={null} onOpeningDown={(_, e) => walk(e)} />
       <Furniture objects={level.objects} hidden={null} onObjectDown={onObjectDown} />
+      <Roofs roofs={level.roofs} onDown={onRoofDown} />
       {tap && <TapMarker key={tap.at} x={tap.x} z={tap.z} />}
       <Menu />
     </>

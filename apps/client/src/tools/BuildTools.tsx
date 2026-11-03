@@ -21,6 +21,7 @@ import { addWall, FootprintMarker, Furniture, objectTransform, openingTransform,
 import type { Kit } from "../render/kit";
 import { KitMesh, Meshes } from "../render/KitMesh";
 import { modelFor, openingModelFor } from "../render/models";
+import { buildRoof, ROOF_BASE, Roofs } from "../render/Roof";
 import { heldByPartner, hold, sharePresence, submit, toast, useGame } from "../state/game";
 
 /**
@@ -54,6 +55,15 @@ interface MoveDrag {
 /** How far (in screen pixels) the pointer must travel before a press on furniture becomes a move, not a click. */
 const DRAG_PX = 8;
 const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.04);
+
+const roofPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -ROOF_BASE);
+
+/** Where the pointer is on the grid: on the floor, or for the roof tool, level with the tops of the walls. */
+function gridPoint(e: ThreeEvent<PointerEvent>): [number, number] {
+  if (useGame.getState().tool !== "roof") return [e.point.x, e.point.z];
+  const hit = e.ray.intersectPlane(roofPlane, new THREE.Vector3());
+  return hit ? [hit.x, hit.z] : [e.point.x, e.point.z];
+}
 
 /** The floor point under the pointer. The hit point on a model sits above the floor, in a different cell. */
 function floorUnder(e: ThreeEvent<PointerEvent>): [number, number] {
@@ -184,6 +194,16 @@ function finishDrag() {
       const existing = cells.filter((c) => s.view!.levels[0]!.tiles[c]);
       if (existing.length) submit({ t: "floor.paint", level: 0, cells: existing, material: null });
     } else submit({ t: "floor.paint", level: 0, cells, material: s.floorMaterial });
+  } else if (s.tool === "roof") {
+    const cells = cellsBetween(drag.start[0], drag.start[1], drag.end[0], drag.end[1]);
+    const roofs = s.view.levels[0]!.roofs;
+    if (s.roofErase) {
+      const existing = cells.filter((c) => roofs[c]);
+      if (existing.length) submit({ t: "roof.paint", level: 0, cells: existing, style: null });
+    } else {
+      const changed = cells.filter((c) => roofs[c]?.style !== s.roofStyle);
+      if (changed.length) submit({ t: "roof.paint", level: 0, cells: changed, style: s.roofStyle });
+    }
   }
 }
 
@@ -294,7 +314,7 @@ export function BuildTools() {
   const level = view.levels[0]!;
 
   const onMove = (e: ThreeEvent<PointerEvent>) => {
-    const p: [number, number] = [e.point.x, e.point.z];
+    const p = gridPoint(e);
     setB({ pointer: p });
     if (multiTouch()) return cancelForCamera();
     const s = useGame.getState();
@@ -327,7 +347,7 @@ export function BuildTools() {
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     if (multiTouch()) return cancelForCamera();
     if (e.button !== 0 || cameraGestureActive()) return;
-    const p: [number, number] = [e.point.x, e.point.z];
+    const p = gridPoint(e);
     const s = useGame.getState();
     downAt.current = p;
     switch (s.tool) {
@@ -338,7 +358,8 @@ export function BuildTools() {
         break;
       }
       case "floor":
-      case "floorErase": {
+      case "floorErase":
+      case "roof": {
         const c = cellAt(p);
         setB({ drag: { start: c, end: c } });
         break;
@@ -395,19 +416,20 @@ export function BuildTools() {
       <mesh geometry={plane} position={[0, 0.04, 0]} visible={false} onPointerMove={onMove} onPointerDown={onDown} onPointerLeave={() => setB({ pointer: null })} />
       <Walls level={level} hiddenOpening={move?.moved && move.kind === "opening" ? move.id : null} onOpeningDown={onOpeningDown} />
       <Furniture objects={level.objects} hidden={move?.moved && move.kind === "object" ? move.id : null} onObjectDown={onObjectDown} />
-      {tool !== "select" && <Grid w={view.lot.w} d={view.lot.d} />}
+      <Roofs roofs={level.roofs} />
+      {tool !== "select" && <Grid w={view.lot.w} d={view.lot.d} y={tool === "roof" ? ROOF_BASE + 0.01 : 0.05} />}
       <Previews />
     </>
   );
 }
 
-function Grid({ w, d }: { w: number; d: number }) {
+function Grid({ w, d, y }: { w: number; d: number; y: number }) {
   const geo = useMemo(() => {
     const pts: number[] = [];
-    for (let x = 0; x <= w; x++) pts.push(x, 0.05, 0, x, 0.05, d);
-    for (let z = 0; z <= d; z++) pts.push(0, 0.05, z, w, 0.05, z);
+    for (let x = 0; x <= w; x++) pts.push(x, y, 0, x, y, d);
+    for (let z = 0; z <= d; z++) pts.push(0, y, z, w, y, z);
     return new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-  }, [w, d]);
+  }, [w, d, y]);
   return (
     <lineSegments geometry={geo} raycast={() => null}>
       <lineBasicMaterial color="#3a3631" transparent opacity={0.16} depthWrite={false} />
@@ -469,6 +491,20 @@ function Previews() {
     out.push(<FootprintMarker key="floorhover" x={x} z={z} w={1} d={1} color={tool === "floor" ? "#6f9e5c" : "#c4534a"} opacity={0.6} />);
   }
 
+  if (tool === "roof" && level) {
+    const erase = useGame.getState().roofErase;
+    const color = erase ? "#c4534a" : "#6f9e5c";
+    const [ax, az] = drag ? drag.start : pointer ? cellAt(pointer) : [0, 0];
+    const [bx, bz] = drag ? drag.end : [ax, az];
+    if (drag || pointer) {
+      const x0 = Math.min(ax, bx);
+      const z0 = Math.min(az, bz);
+      out.push(<FootprintMarker key="roof" x={x0} z={z0} w={Math.abs(bx - ax) + 1} d={Math.abs(bz - az) + 1} color={color} at={ROOF_BASE} onTop opacity={drag ? 0.9 : 0.6} />);
+    }
+    // while adding, a see-through roof shows the shape it'll make
+    if (drag && !erase) out.push(<RoofGhost key="roofghost" roofs={level.roofs} cells={cellsBetween(drag.start[0], drag.start[1], drag.end[0], drag.end[1])} />);
+  }
+
   if (tool === "buy" && placing && pointer) {
     const opening = catalog.openings.get(placing.catalogId);
     if (opening) {
@@ -494,6 +530,23 @@ function Previews() {
   }
 
   return <>{out}</>;
+}
+
+const roofGhostMat = new THREE.MeshBasicMaterial({ color: "#9ccf8a", transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
+
+/** The roof as it would be with these cells added, see-through. */
+function RoofGhost({ roofs, cells }: { roofs: Record<string, { style: string }>; cells: string[] }) {
+  const key = cells.join(",");
+  return (
+    <KitMesh
+      deps={[roofs, key]}
+      make={(k) => {
+        const next = { ...roofs };
+        for (const c of cells) next[c] = { style: "ghost" };
+        buildRoof(k, next, roofGhostMat);
+      }}
+    />
+  );
 }
 
 /** See-through furniture with a green (fits) or red (doesn't) footprint. */

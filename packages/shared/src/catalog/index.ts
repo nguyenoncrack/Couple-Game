@@ -71,10 +71,12 @@ const OpeningItem = z
   })
   .refine((o) => o.top > o.sill + 0.3, "an opening needs some height");
 
-const Finish = z.enum(["plaster", "wood", "stone", "brick", "checker", "setts", "concrete", "carpet"]);
+const Finish = z.enum(["plaster", "wood", "stone", "brick", "checker", "setts", "concrete", "carpet", "shingle"]);
 
 const WallStyle = z.object({ id: z.string(), name: z.string(), color: hex, finish: Finish });
 const FloorMaterial = z.object({ id: z.string(), name: z.string(), color: hex, finish: Finish });
+/** `ceiling` is the colour of the roof's underside, seen from inside. */
+const RoofStyle = z.object({ id: z.string(), name: z.string(), color: hex, finish: Finish, ceiling: hex });
 
 const Recipe = z.object({
   id: z.string(),
@@ -92,6 +94,7 @@ export type Station = (typeof STATIONS)[number];
 export type OpeningItem = z.infer<typeof OpeningItem>;
 export type WallStyle = z.infer<typeof WallStyle>;
 export type FloorMaterial = z.infer<typeof FloorMaterial>;
+export type RoofStyle = z.infer<typeof RoofStyle>;
 export type Recipe = z.infer<typeof Recipe>;
 export type Finish = z.infer<typeof Finish>;
 
@@ -100,6 +103,7 @@ export interface Catalog {
   openings: Map<string, OpeningItem>;
   wallStyles: Map<string, WallStyle>;
   floorMaterials: Map<string, FloorMaterial>;
+  roofStyles: Map<string, RoofStyle>;
   recipes: Map<string, Recipe>;
 }
 
@@ -113,12 +117,13 @@ function byId<T extends { id: string }>(items: T[], what: string): Map<string, T
 }
 
 export function loadCatalog(raw: { furniture: unknown; openings: unknown; pieces: unknown; recipes: unknown }): Catalog {
-  const pieces = z.object({ wallStyles: z.array(WallStyle), floorMaterials: z.array(FloorMaterial) }).parse(raw.pieces);
+  const pieces = z.object({ wallStyles: z.array(WallStyle), floorMaterials: z.array(FloorMaterial), roofStyles: z.array(RoofStyle) }).parse(raw.pieces);
   return {
     furniture: byId(z.array(FurnitureItem).parse(raw.furniture), "furniture"),
     openings: byId(z.array(OpeningItem).parse(raw.openings), "opening"),
     wallStyles: byId(pieces.wallStyles, "wall style"),
     floorMaterials: byId(pieces.floorMaterials, "floor material"),
+    roofStyles: byId(pieces.roofStyles, "roof style"),
     recipes: byId(z.array(Recipe).parse(raw.recipes), "recipe"),
   };
 }

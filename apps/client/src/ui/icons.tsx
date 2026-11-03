@@ -37,6 +37,23 @@ export const Icon = {
       <path d="M5.4 15v4.3M18.3 15v4.3M6 11.3c0-3 1.2-5.2 5.9-5.2s6 2.2 6 5.2" />
     </svg>
   ),
+  roof: () => (
+    <svg {...base}>
+      <path d="M2.9 13.4 12 5.2l9.1 8.2M5.3 11.3l-.1 1.9M18.8 11.3v1.9" />
+      <path d="M7.4 9.4h9.3M9.6 7.4h4.9" />
+    </svg>
+  ),
+  roofOn: () => (
+    <svg {...base}>
+      <path d="M3.3 11.6 12 4.3l8.7 7.3M6.2 9.8v9.7h11.6V9.8M10.2 19.4v-4.6h3.6v4.6" />
+    </svg>
+  ),
+  roofOff: () => (
+    <svg {...base}>
+      <path d="M3.3 9.4 7.6 5.7M16.4 5.7l4.3 3.7M9.8 4.3h4.4" strokeDasharray="1.6 2.2" />
+      <path d="M6.2 9.8v9.7h11.6V9.8M10.2 19.4v-4.6h3.6v4.6" />
+    </svg>
+  ),
   wallsDown: () => (
     <svg {...base}>
       <path d="M4 19.6h16M6.2 19.5v-4.7h11.6v4.6M6 9.2l6-4.6 6 4.6" strokeDasharray="0" />
