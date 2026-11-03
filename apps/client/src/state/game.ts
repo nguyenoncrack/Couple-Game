@@ -1,10 +1,15 @@
 import {
   applyOp,
   inverseOp,
+  LIFE_TEXT,
   newId,
   REJECT_TEXT,
   type Blueprint,
+  type ChatMessage,
   type HouseState,
+  type HouseSummary,
+  type LifeIntent,
+  type LifeState,
   type MemberInfo,
   type Op,
   type Presence,
@@ -14,7 +19,6 @@ import {
 } from "@cg/shared";
 import { create } from "zustand";
 import { Connection } from "../net/connection";
-import { updateHouse, type SavedHouse } from "../net/session";
 import type { WallMode } from "../render/House";
 
 /**
@@ -24,7 +28,17 @@ import type { WallMode } from "../render/House";
  */
 
 export type Tool = "select" | "wall" | "wallErase" | "floor" | "floorErase" | "buy";
-export type Status = "connecting" | "online" | "reconnecting" | "gone";
+export type Status = "connecting" | "online" | "reconnecting" | "asleep" | "gone";
+/** Build: change the house. Live: be in it, with your character. */
+export type Mode = "build" | "live";
+
+/** What the interaction menu is open on: a piece of furniture, a plate or your partner, and where to show it. */
+export interface Menu {
+  objectId?: string;
+  dishId?: string;
+  memberId?: string;
+  at: [number, number, number];
+}
 
 interface Pending {
   clientOpId: string;
@@ -37,7 +51,7 @@ interface Toast {
 }
 
 export interface GameState {
-  house: SavedHouse | null;
+  house: HouseSummary | null;
   me: string | null;
   members: MemberInfo[];
   status: Status;
@@ -61,6 +75,18 @@ export interface GameState {
   canRedo: boolean;
   catalogOpen: boolean;
   toasts: Toast[];
+
+  mode: Mode;
+  /** Characters, the meal on the go and plates out, as the server last said. */
+  life: LifeState | null;
+  menu: Menu | null;
+  /** Keep the camera on my character. */
+  follow: boolean;
+
+  /** What's been said, oldest first; whether the chat is open, and what came in while it wasn't. */
+  chat: ChatMessage[];
+  chatOpen: boolean;
+  unread: number;
 }
 
 export const useGame = create<GameState>(() => ({
@@ -84,6 +110,13 @@ export const useGame = create<GameState>(() => ({
   canRedo: false,
   catalogOpen: false,
   toasts: [],
+  mode: "build",
+  life: null,
+  menu: null,
+  follow: false,
+  chat: [],
+  chatOpen: false,
+  unread: 0,
 }));
 
 const get = useGame.getState;
@@ -91,6 +124,15 @@ const set = useGame.setState;
 
 let conn: Connection | null = null;
 let toastSeq = 0;
+/** When I last asked for a hug or kiss, so the note about one coming only shows to whoever it's coming to. */
+let askedAt = -Infinity;
+
+/** Server clock minus mine. Character positions are worked out from server times. */
+let clockOffset = 0;
+export const serverNow = () => Date.now() + clockOffset;
+function syncClock(now: number) {
+  clockOffset = now - Date.now();
+}
 
 export function toast(text: string) {
   const id = ++toastSeq;
@@ -138,8 +180,8 @@ function handle(msg: ServerMsg) {
           if (a.by === msg.memberId) pending = pending.filter((p) => p.clientOpId !== a.clientOpId);
         }
       }
-      set({ me: msg.memberId, members: msg.members, holds: msg.holds });
-      if (s.house) updateHouse(s.house.houseId, { houseName: msg.house.name, inviteCode: msg.house.inviteCode, lastOpened: Date.now() });
+      syncClock(msg.now);
+      set({ me: msg.memberId, members: msg.members, holds: msg.holds, life: msg.life, chat: msg.chat });
       set((st) => ({ house: st.house && { ...st.house, houseName: msg.house.name, inviteCode: msg.house.inviteCode } }));
       settle(confirmed, pending);
       // Anything still pending may or may not have reached the server before we dropped; the server ignores repeats.
@@ -193,20 +235,62 @@ function handle(msg: ServerMsg) {
       break;
     }
     case "error":
-      console.warn("[server]", msg.code, msg.message);
+      if (msg.code === "rate-limited") toast(msg.message);
+      else console.warn("[server]", msg.code, msg.message);
+      break;
+    case "chat": {
+      if (s.chat.some((m) => m.id === msg.message.id)) break;
+      const theirs = msg.message.by !== s.me;
+      set({ chat: [...s.chat.slice(-99), msg.message], unread: theirs && !s.chatOpen ? s.unread + 1 : s.unread });
+      break;
+    }
+    case "life": {
+      syncClock(msg.now);
+      // my partner came over for a hug or a kiss: say so, in case I'm looking elsewhere
+      const was = s.me ? s.life?.avatars[s.me]?.use : null;
+      const now = s.me ? msg.life.avatars[s.me]?.use : null;
+      if (now?.with && (now.action === "hug" || now.action === "kiss") && !(was?.with && was.action === now.action)) {
+        const other = msg.life.avatars[now.with];
+        const name = s.members.find((m) => m.id === now.with)?.name ?? "Your partner";
+        if (other?.use?.with === s.me && performance.now() - askedAt > 3000) toast(now.action === "hug" ? `${name} is coming over for a hug ♥` : `${name} is coming over for a kiss ♥`);
+      }
+      // a plate that's been eaten can't keep its menu open
+      const menu = s.menu?.dishId && !msg.life.dishes.some((d) => d.id === s.menu!.dishId) ? null : s.menu;
+      set({ life: msg.life, menu });
+      break;
+    }
+    case "lifeRejected":
+      toast(LIFE_TEXT[msg.reason] ?? "That didn't work.");
       break;
     case "pong":
+      syncClock(msg.now);
       break;
   }
 }
 
-export function connect(house: SavedHouse) {
+export function connect(house: HouseSummary) {
   disconnect();
-  set({ house, status: "connecting", confirmed: null, pending: [], view: null, holds: {}, presence: {}, selection: null, placing: null, tool: "select" });
+  set({
+    house,
+    status: "connecting",
+    confirmed: null,
+    pending: [],
+    view: null,
+    holds: {},
+    presence: {},
+    selection: null,
+    placing: null,
+    tool: "select",
+    life: null,
+    menu: null,
+    chat: [],
+    chatOpen: false,
+    unread: 0,
+  });
   undoStack.length = 0;
   redoStack.length = 0;
   set({ canUndo: false, canRedo: false });
-  conn = new Connection(house.houseId, house.token, {
+  conn = new Connection(house.houseId, {
     knownVersion: () => get().confirmed?.version ?? 0,
     onMessage: handle,
     // While we're cut off, my partner's cursor and holds are stale; the welcome after reconnecting resends them.
@@ -214,9 +298,23 @@ export function connect(house: SavedHouse) {
     onFatal: (code) =>
       set({
         status: "gone",
-        goneReason: code === 4409 ? "You opened this house in another tab or device." : code === 4404 ? "This house doesn't exist anymore." : "This browser isn't a member of that house.",
+        goneReason: code === 4409 ? "You opened this house in another tab or device." : code === 4404 ? "This house doesn't exist anymore." : "You're not in that house, or you've been signed out.",
       }),
   });
+}
+
+/** Say something in the house. */
+export function say(text: string) {
+  conn?.send({ type: "chat", text });
+}
+
+export function openChat(open: boolean) {
+  set(open ? { chatOpen: true, unread: 0 } : { chatOpen: false });
+}
+
+/** Back into a house that went to sleep while nobody was around. */
+export function wake() {
+  conn?.wake();
 }
 
 export function disconnect() {
@@ -330,5 +428,18 @@ export function setTool(tool: Tool) {
   set({ tool, placing: tool === "buy" ? get().placing : null, selection: tool === "select" ? get().selection : null, catalogOpen: tool === "buy" });
 }
 
+/** Ask my character to do something; the server answers with new life (or a reason it can't). */
+export function act(intent: LifeIntent) {
+  set({ menu: null });
+  if (intent.do === "social") askedAt = performance.now();
+  conn?.send({ type: "life", intent });
+}
+
+export function setMode(mode: Mode) {
+  if (mode === get().mode) return;
+  if (get().selection) hold(null);
+  set({ mode, menu: null, selection: null, placing: null, catalogOpen: false, tool: "select", ...(mode === "build" ? { follow: false } : {}) });
+}
+
 // Handy for poking at the game from the console while developing.
-if (import.meta.env.DEV) Object.assign(window, { __game: useGame, __submit: submit, __undo: undo, __redo: redo });
+if (import.meta.env.DEV) Object.assign(window, { __game: useGame, __submit: submit, __undo: undo, __redo: redo, __act: act });

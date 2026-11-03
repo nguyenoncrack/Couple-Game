@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The whole game on Cloudflare's free plan: this Worker serves the website and the API, one Durable Object keeps
+  // accounts and houses (the directory), and each house gets a Durable Object of its own for playing together.
+  "name": "home-for-two",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "../client/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/ws"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "DIRECTORY", "class_name": "DirectoryDO" },
+      { "name": "HOUSE", "class_name": "HouseDO" }
+    ]
+  },
+  // the free plan only has SQLite-backed Durable Objects
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DirectoryDO", "HouseDO"] }],
+  "vars": {
+    // fewer than the 100k default, to stay inside the free plan's CPU time per request (see README)
+    "PASSWORD_ROUNDS": "50000"
+  },
+  "observability": { "enabled": true }
+}

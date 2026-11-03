@@ -1,4 +1,4 @@
-import type { Store } from "../persistence/store";
+import type { Directory, HouseStore } from "../persistence/store";
 import { HouseRoom } from "./house-room";
 
 /**
@@ -7,13 +7,16 @@ import { HouseRoom } from "./house-room";
  */
 export class Rooms {
   private rooms = new Map<string, Promise<HouseRoom>>();
-  private idle = new Map<string, NodeJS.Timeout>();
+  private idle = new Map<string, ReturnType<typeof setTimeout>>();
   /** When each house was last asked for; an unload that started before this is abandoned. */
   private lastGet = new Map<string, number>();
 
   constructor(
-    private store: Store,
+    private directory: Directory,
+    private houses: HouseStore,
     private idleMs = 30_000,
+    /** Passed to each room: how long a house stays open with nobody doing anything. */
+    private houseIdleMs?: number,
   ) {}
 
   async get(houseId: string): Promise<HouseRoom | null> {
@@ -21,10 +24,10 @@ export class Rooms {
     this.cancelUnload(houseId);
     let room = this.rooms.get(houseId);
     if (!room) {
-      const house = await this.store.getHouse(houseId);
+      const house = await this.directory.getHouse(houseId);
       if (!house) return null;
       // Re-check: another connection may have started loading while we looked the house up.
-      room = this.rooms.get(houseId) ?? HouseRoom.load(house, this.store);
+      room = this.rooms.get(houseId) ?? HouseRoom.load(house, this.houses, () => this.directory.listMembers(houseId), this.houseIdleMs);
       this.rooms.set(houseId, room);
       room.catch(() => this.rooms.delete(houseId));
     }

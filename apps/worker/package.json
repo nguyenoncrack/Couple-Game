@@ -1,0 +1,17 @@
+{
+  "name": "@cg/worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build -w @cg/client && wrangler dev",
+    "deploy": "npm run build -w @cg/client && wrangler deploy"
+  },
+  "dependencies": {
+    "@cg/server": "*",
+    "@cg/shared": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261016.1",
+    "wrangler": "4.151.1"
+  }
+}

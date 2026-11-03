@@ -280,6 +280,54 @@ button.pill:active,
   color: var(--ink-soft);
 }
 
+.saved-who {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.saved-member {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* ---------- account ---------- */
+
+.auth-card {
+  width: min(420px, 100%);
+}
+
+.auth-card .row {
+  display: flex;
+  gap: 10px;
+}
+
+.account-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 22px;
+}
+
+.text-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 20px;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.text-btn:hover {
+  color: var(--ink);
+}
+
+.loading-home {
+  justify-content: center;
+  font-size: 24px;
+}
+
 /* ---------- game ---------- */
 
 .game {
@@ -306,6 +354,8 @@ button.pill:active,
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* above the name tags and speech bubbles in the scene (z 0–10), below the click menu (20–30) */
+  z-index: 15;
 }
 
 .hud > * {
@@ -415,7 +465,8 @@ button.pill:active,
   pointer-events: auto;
 }
 
-.popover .close {
+.popover .close,
+.live-menu .close {
   position: absolute;
   top: 8px;
   right: 12px;
@@ -853,6 +904,406 @@ button.pill:active,
   margin: 4px 0 12px;
   font-size: 17px;
   line-height: 1.25;
+}
+
+/* Build / Live switch at the start of the hotbar */
+.mode-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mode-switch button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px 3px 6px;
+  font-family: var(--hand);
+  font-size: 17px;
+  background: #fffdf7;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  color: var(--ink);
+}
+
+.mode-switch button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mode-switch button.on {
+  background: var(--yellow);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+/* What you can do with something, over it in the 3D view */
+.live-menu {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 170px;
+  padding: 10px 12px 12px;
+  animation: pop 0.14s ease-out;
+}
+
+.live-menu .kicker {
+  padding-right: 18px;
+}
+
+.live-menu .btn {
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.live-menu p {
+  margin: 0;
+  font-size: 16px;
+}
+
+/* characters' name tags */
+.char-tag {
+  position: relative;
+  font-size: 18px;
+  padding: 1px 10px;
+}
+
+.char-tag.away {
+  opacity: 0.6;
+}
+
+/* hugging, kissing or cuddling: just the hearts (and anything said), no name pills piled on each other */
+.char-tag[data-close="1"] {
+  color: transparent;
+  background: transparent;
+  border-color: transparent !important;
+  box-shadow: none;
+  transition:
+    color 0.3s,
+    background 0.3s,
+    border-color 0.3s,
+    box-shadow 0.3s;
+}
+
+.char-tag[data-close="1"] .pin-dot,
+.char-tag[data-close="1"] .zzz {
+  visibility: hidden;
+}
+
+.zzz {
+  font-family: var(--hand);
+  color: var(--teal);
+  margin-left: 2px;
+  transition: opacity 0.4s;
+}
+
+/* what someone just said, over their head */
+.speech {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 230px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: 19px;
+  line-height: 1.15;
+  color: var(--ink);
+  background: #fffdf7;
+  border: var(--border);
+  border-radius: 16px;
+  padding: 6px 12px;
+  box-shadow: 2px 2px 0 var(--ink);
+  animation: speech-in 0.25s ease-out;
+}
+
+.speech::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  background: #fffdf7;
+  border-right: var(--border);
+  border-bottom: var(--border);
+  transform: translate(-50%, -6px) rotate(45deg);
+}
+
+@keyframes speech-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.9);
+  }
+}
+
+/* hearts floating up while you hug, kiss or cuddle */
+.hearts {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  width: 0;
+  height: 0;
+}
+
+.hearts span {
+  position: absolute;
+  left: -8px;
+  bottom: 0;
+  font-size: 22px;
+  color: var(--coral);
+  -webkit-text-stroke: 1px var(--ink);
+  animation: heart-up 2.4s ease-out infinite;
+  opacity: 0;
+}
+
+.hearts span:nth-child(2) {
+  left: -26px;
+  font-size: 16px;
+  animation-delay: 0.8s;
+}
+
+.hearts span:nth-child(3) {
+  left: 10px;
+  font-size: 18px;
+  animation-delay: 1.6s;
+}
+
+@keyframes heart-up {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-70px) scale(1.1) rotate(-8deg);
+    opacity: 0;
+  }
+}
+
+/* the chat */
+.chat-pill {
+  position: relative;
+}
+
+.chat-pill.on {
+  background: var(--yellow);
+}
+
+.chat-pill .unread {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: var(--coral);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.chat-panel {
+  position: absolute;
+  right: 16px;
+  bottom: 120px;
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(420px, calc(100dvh - 220px));
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px 14px;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-head .close {
+  border: 0;
+  background: none;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.chat-list {
+  flex: 1;
+  min-height: 80px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 4px 2px 0;
+}
+
+.chat-empty {
+  margin: 6px 0;
+  font-size: 18px;
+  color: var(--ink-soft);
+}
+
+.chat-line {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.chat-line.mine {
+  align-items: flex-end;
+}
+
+.chat-bubble {
+  max-width: 85%;
+  font-family: var(--hand);
+  font-size: 19px;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #fffdf7;
+  border: 2px solid var(--ink);
+  border-radius: 14px 14px 14px 4px;
+  padding: 5px 10px;
+}
+
+.chat-line.mine .chat-bubble {
+  background: #fff3cc;
+  border-radius: 14px 14px 4px 14px;
+}
+
+.chat-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-soft);
+  padding: 0 4px;
+}
+
+.chat-form {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-form input {
+  flex: 1;
+  min-width: 0;
+  border: var(--border);
+  border-radius: 12px;
+  padding: 7px 10px;
+  font-family: var(--hand);
+  font-size: 19px;
+  background: #fffdf7;
+}
+
+@media (max-width: 760px) {
+  .chat-panel {
+    bottom: 96px;
+    max-height: min(320px, calc(100dvh - 190px));
+  }
+}
+
+/* The meal on the go */
+.cooking-card {
+  position: absolute;
+  left: 16px;
+  bottom: 120px;
+  width: min(300px, calc(100vw - 32px));
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cooking-card .kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cooking-card .kicker svg {
+  width: 18px;
+  height: 18px;
+}
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--hand);
+  font-size: 18px;
+}
+
+.steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0.55;
+}
+
+.steps li.now,
+.steps li.done {
+  opacity: 1;
+}
+
+.step-where,
+.step-who {
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+.steps .bar {
+  height: 9px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: #fffdf7;
+  overflow: hidden;
+}
+
+.steps .bar span {
+  display: block;
+  height: 100%;
+  background: var(--coral);
+  transition: width 0.2s linear;
+}
+
+.steps li.done .bar span {
+  background: var(--green);
+}
+
+@media (max-width: 760px) {
+  .cooking-card {
+    bottom: 96px;
+    width: min(230px, calc(100vw - 96px));
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  .cooking-card .sel-name {
+    font-size: 22px;
+  }
+  .cooking-card .steps {
+    font-size: 16px;
+  }
+  .cooking-card .btn {
+    font-size: 15px;
+    padding: 4px 10px;
+  }
+  .mode-switch button {
+    font-size: 0;
+    padding: 4px;
+  }
 }
 
 /* Catalog search stays inside the existing panel on narrow screens. */

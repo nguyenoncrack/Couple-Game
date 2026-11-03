@@ -1,11 +1,12 @@
 import type { AddressInfo } from "node:net";
-import { CLOSE, type ClientMsg, type Op, type ServerMsg } from "@cg/shared";
+import { CLOSE, type ClientMsg, type HouseSummary, type Op, type ServerMsg } from "@cg/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createApp } from "../app";
-import { SqliteStore } from "../persistence/sqlite-store";
+import { hashToken } from "../auth/crypto";
+import { openSqlite } from "../persistence/node-sqlite";
 
-/** A scripted player: a WebSocket plus an inbox we can wait on. */
+/** A scripted player: a signed-in WebSocket plus an inbox we can wait on. */
 class Player {
   inbox: ServerMsg[] = [];
   private waiters: (() => void)[] = [];
@@ -15,13 +16,14 @@ class Player {
   constructor(
     private url: string,
     readonly houseId: string,
-    readonly token: string,
+    /** The sign-in cookie ("cg_session=…"). */
+    readonly cookie: string,
   ) {}
 
   connect(knownVersion = 0) {
     this.inbox = [];
     this.closed = null;
-    this.ws = new WebSocket(this.url);
+    this.ws = new WebSocket(`${this.url}?house=${this.houseId}`, { headers: { cookie: this.cookie } });
     this.ws.on("message", (d) => {
       this.inbox.push(JSON.parse(String(d)));
       this.waiters.splice(0).forEach((w) => w());
@@ -30,7 +32,7 @@ class Player {
       this.closed = code;
       this.waiters.splice(0).forEach((w) => w());
     });
-    this.ws.on("open", () => this.send({ type: "hello", houseId: this.houseId, token: this.token, knownVersion }));
+    this.ws.on("open", () => this.send({ type: "hello", knownVersion }));
     return this.next("welcome");
   }
 
@@ -66,25 +68,39 @@ class Player {
   }
 }
 
-let store: SqliteStore;
+let db: ReturnType<typeof openSqlite>;
 let app: ReturnType<typeof createApp>;
 let base: string;
 
-async function post(path: string, body: unknown) {
-  const res = await fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  return { status: res.status, body: (await res.json()) as Record<string, string> };
+async function call(method: string, path: string, body?: unknown, cookie = "") {
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: { "content-type": "application/json", cookie },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const set = res.headers.get("set-cookie");
+  return { status: res.status, body: (await res.json()) as Record<string, unknown>, cookie: set ? set.split(";")[0]! : "" };
+}
+
+/** Sign up and return the sign-in cookie. */
+async function signUp(name: string, password = "correct horse") {
+  const r = await call("POST", "/api/account", { name, password });
+  expect(r.status).toBe(201);
+  return r.cookie;
 }
 
 async function couple() {
-  const made = await post("/api/houses", { houseName: "Our place", playerName: "Ana" });
-  const joined = await post("/api/join", { code: made.body.inviteCode!.toLowerCase().replace("-", " "), playerName: "Ben" });
+  const ana = await signUp("Ana");
+  const ben = await signUp("Ben");
+  const made = (await call("POST", "/api/houses", { houseName: "Our place" }, ana)).body as unknown as HouseSummary;
+  const joined = await call("POST", "/api/join", { code: made.inviteCode.toLowerCase().replace("-", " ") }, ben);
   expect(joined.status).toBe(200);
   const url = `${base.replace("http", "ws")}/ws`;
-  return { a: new Player(url, made.body.houseId!, made.body.token!), b: new Player(url, joined.body.houseId!, joined.body.token!), houseId: made.body.houseId! };
+  return { a: new Player(url, made.houseId, ana), b: new Player(url, made.houseId, ben), houseId: made.houseId };
 }
 
-function startApp(roomIdleMs = 60_000) {
-  app = createApp({ store, roomIdleMs });
+function startApp(roomIdleMs = 60_000, houseIdleMs?: number) {
+  app = createApp({ directory: db.directory, houses: db.houses, roomIdleMs, houseIdleMs });
   return new Promise<void>((r) =>
     app.http.listen(0, () => {
       base = `http://127.0.0.1:${(app.http.address() as AddressInfo).port}`;
@@ -94,26 +110,94 @@ function startApp(roomIdleMs = 60_000) {
 }
 
 beforeEach(async () => {
-  store = new SqliteStore(":memory:");
+  db = openSqlite(":memory:");
   await startApp();
 });
 
 afterEach(async () => {
   await app.close();
-  store.close();
+  db.close();
+});
+
+describe("accounts", () => {
+  it("signs up, in and out, with names unique however they're typed", async () => {
+    const cookie = await signUp("Ana Lee");
+    expect(cookie).toMatch(/^cg_session=/);
+    expect((await call("GET", "/api/me", undefined, cookie)).body).toMatchObject({ account: { name: "Ana Lee" }, houses: [] });
+    expect((await call("POST", "/api/account", { name: "  ana   LEE ", password: "something else" })).status).toBe(409);
+    expect((await call("POST", "/api/account", { name: "Bo", password: "short" })).status).toBe(400);
+
+    expect((await call("POST", "/api/session", { name: "ana lee", password: "wrong one!" })).status).toBe(401);
+    expect((await call("POST", "/api/session", { name: "nobody", password: "correct horse" })).status).toBe(401);
+    const again = await call("POST", "/api/session", { name: "ana lee", password: "correct horse" });
+    expect(again.status).toBe(200);
+
+    expect((await call("DELETE", "/api/session", undefined, cookie)).status).toBe(200);
+    expect((await call("GET", "/api/me", undefined, cookie)).status).toBe(401);
+    expect((await call("GET", "/api/me", undefined, again.cookie)).status).toBe(200);
+  });
+
+  it("signs out everywhere else when the password changes", async () => {
+    const first = await signUp("Ana");
+    const second = (await call("POST", "/api/session", { name: "Ana", password: "correct horse" })).cookie;
+    expect((await call("POST", "/api/account/password", { current: "nope nope", next: "new password" }, first)).status).toBe(401);
+    expect((await call("POST", "/api/account/password", { current: "correct horse", next: "new password" }, first)).status).toBe(200);
+    expect((await call("GET", "/api/me", undefined, first)).status).toBe(200);
+    expect((await call("GET", "/api/me", undefined, second)).status).toBe(401);
+    expect((await call("POST", "/api/session", { name: "Ana", password: "new password" })).status).toBe(200);
+  });
+
+  it("takes over a house joined before accounts, given its old device token", async () => {
+    const ana = await signUp("Ana");
+    const made = (await call("POST", "/api/houses", { houseName: "Old place" }, ana)).body as unknown as HouseSummary;
+    // a member from before accounts: no account, just a device token
+    db.sql.run(
+      "insert into members (id, house_id, account_id, name, color, role, token_hash, joined_at) values (?, ?, null, ?, ?, ?, ?, ?)",
+      "oldben00001",
+      made.houseId,
+      "Ben",
+      "#3d8fa3",
+      "partner",
+      await hashToken("an-old-device-token-from-m3"),
+      Date.now(),
+    );
+    const ben = await signUp("Ben");
+    expect((await call("POST", "/api/claims", { claims: [{ houseId: made.houseId, token: "wrong" }] }, ben)).body.houses).toEqual([]);
+    const me = await call("POST", "/api/claims", { claims: [{ houseId: made.houseId, token: "an-old-device-token-from-m3" }] }, ben);
+    expect(me.body.houses).toMatchObject([{ houseId: made.houseId, memberId: "oldben00001" }]);
+  });
 });
 
 describe("houses and membership", () => {
-  it("lets exactly two people in, and only with the right code and token", async () => {
-    const made = await post("/api/houses", { houseName: "Home", playerName: "Ana" });
+  it("lets exactly two people in, and only signed-in members connect", async () => {
+    const [ana, ben, cat] = [await signUp("Ana"), await signUp("Ben"), await signUp("Cat")];
+    expect((await call("POST", "/api/houses", { houseName: "Home" })).status).toBe(401);
+    const made = await call("POST", "/api/houses", { houseName: "Home" }, ana);
     expect(made.status).toBe(201);
-    expect(made.body.inviteCode).toMatch(/^[A-Z0-9]{3}-[A-Z0-9]{3}$/);
-    expect((await post("/api/join", { code: "AAA-AAA", playerName: "Eve" })).status).toBe(404);
-    expect((await post("/api/join", { code: made.body.inviteCode, playerName: "Ben" })).status).toBe(200);
-    expect((await post("/api/join", { code: made.body.inviteCode, playerName: "Cat" })).status).toBe(409);
+    const house = made.body as unknown as HouseSummary;
+    expect(house.inviteCode).toMatch(/^[A-Z0-9]{3}-[A-Z0-9]{3}$/);
+    expect((await call("POST", "/api/join", { code: "AAA-AAA" }, ben)).status).toBe(404);
+    expect((await call("POST", "/api/join", { code: house.inviteCode }, ben)).status).toBe(200);
+    // joining again is fine (a second device); a third person isn't
+    expect((await call("POST", "/api/join", { code: house.inviteCode }, ben)).status).toBe(200);
+    expect((await call("POST", "/api/join", { code: house.inviteCode }, cat)).status).toBe(409);
+    expect(((await call("GET", "/api/me", undefined, ben)).body.houses as HouseSummary[]).map((h) => h.houseName)).toEqual(["Home"]);
 
-    const stranger = new Player(`${base.replace("http", "ws")}/ws`, made.body.houseId!, "x".repeat(43));
-    await expect(stranger.connect()).rejects.toThrow(String(CLOSE.unauthorized));
+    const url = `${base.replace("http", "ws")}/ws`;
+    await expect(new Player(url, house.houseId, cat).connect()).rejects.toThrow(String(CLOSE.unauthorized));
+    await expect(new Player(url, house.houseId, "").connect()).rejects.toThrow(String(CLOSE.unauthorized));
+    const welcome = await new Player(url, house.houseId, ben).connect();
+    expect(welcome.members.map((m) => m.name)).toEqual(["Ana", "Ben"]);
+  });
+
+  it("forgets a house when the last person leaves it", async () => {
+    const { houseId } = await couple();
+    const [ana, ben] = [(await call("POST", "/api/session", { name: "Ana", password: "correct horse" })).cookie, (await call("POST", "/api/session", { name: "Ben", password: "correct horse" })).cookie];
+    expect((await call("DELETE", `/api/houses/${houseId}`, undefined, ana)).status).toBe(200);
+    expect(await db.houses.loadSnapshot(houseId)).not.toBeNull();
+    expect((await call("DELETE", `/api/houses/${houseId}`, undefined, ben)).status).toBe(200);
+    expect(await db.directory.getHouse(houseId)).toBeNull();
+    expect(await db.houses.loadSnapshot(houseId)).toBeNull();
   });
 });
 
@@ -231,7 +315,7 @@ describe("disconnects and saving", () => {
     // rebuild the house.
     const crashed = app;
     await startApp();
-    const again = new Player(`${base.replace("http", "ws")}/ws`, houseId, a.token);
+    const again = new Player(`${base.replace("http", "ws")}/ws`, houseId, a.cookie);
     const welcome = await again.connect();
     expect(welcome.sync.kind).toBe("snapshot");
     if (welcome.sync.kind !== "snapshot") return;
@@ -245,10 +329,131 @@ describe("disconnects and saving", () => {
   it("lets a second tab of the same player take over from the first", async () => {
     const { a, houseId } = await couple();
     await a.connect();
-    const tab2 = new Player(a["url"], houseId, a.token);
+    const tab2 = new Player(a["url"], houseId, a.cookie);
     await tab2.connect();
     await new Promise((r) => setTimeout(r, 50));
     expect(a.closed).toBe(CLOSE.replaced);
     await tab2.disconnect();
+  });
+
+  it("lets everyone go after a long quiet spell, but not while someone is busy", async () => {
+    await app.close();
+    await startApp(60_000, 400);
+    const { a, b } = await couple();
+    await a.connect();
+    await b.connect();
+    // moving about keeps the house open past the quiet limit
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 120));
+      a.send({ type: "presence", cursor: { x: i, z: 0 }, tool: "select", drag: null });
+    }
+    expect([a.closed, b.closed]).toEqual([null, null]);
+    // pings only say "still connected": they don't count as doing anything
+    const pinging = setInterval(() => b.send({ type: "ping" }), 100);
+    await new Promise((r) => setTimeout(r, 700));
+    clearInterval(pinging);
+    expect([a.closed, b.closed]).toEqual([CLOSE.idle, CLOSE.idle]);
+    // coming back in works as usual
+    await a.connect();
+    await a.disconnect();
+  });
+});
+
+describe("living together", () => {
+  it("gives each player a character who can walk and sit, one to a seat", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    expect(Object.keys(wa.life.avatars)).toEqual([wa.memberId]);
+    const wb = await b.connect();
+    expect(Object.keys(wb.life.avatars).sort()).toEqual([wa.memberId, wb.memberId].sort());
+
+    a.op("opA0000001", { t: "object.place", level: 0, id: "chair00001", catalogId: "dining_chair", x: 5, z: 5, rot: 0 });
+    await b.next("applied");
+    a.send({ type: "life", intent: { do: "use", objectId: "chair00001", action: "sit" } });
+    await b.next("life", (m) => m.life.avatars[wa.memberId]?.use?.objectId === "chair00001");
+    b.send({ type: "life", intent: { do: "use", objectId: "chair00001", action: "sit" } });
+    expect((await b.next("lifeRejected")).reason).toBe("taken");
+
+    b.send({ type: "life", intent: { do: "walk", x: 2, z: 2 } });
+    const seen = await a.next("life", (m) => m.life.avatars[wb.memberId]!.path.at(-1)![0] === 2.5);
+    expect(seen.life.avatars[wb.memberId]!.path.at(-1)).toEqual([2.5, 2.5]);
+
+    // the chair goes: whoever was on it is back on their feet
+    b.op("opB0000001", { t: "object.remove", level: 0, id: "chair00001" });
+    await a.next("life", (m) => m.life.avatars[wa.memberId]!.use === null);
+    await a.disconnect();
+    await b.disconnect();
+  });
+
+  it("talks, keeps the last things said, and hugs", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    const wb = await b.connect();
+    expect(wa.chat).toEqual([]);
+    a.send({ type: "chat", text: "  hi love \u0007 " });
+    const heard = await b.next("chat");
+    expect(heard.message).toMatchObject({ by: wa.memberId, text: "hi love" });
+    expect((await a.next("chat")).message.id).toBe(heard.message.id);
+    a.send({ type: "chat", text: "   " });
+    b.send({ type: "chat", text: "x".repeat(400) });
+    expect((await a.next("chat")).message.text).toHaveLength(240);
+    // flooding is slowed down
+    for (let i = 0; i < 10; i++) b.send({ type: "chat", text: `spam ${i}` });
+    expect((await b.next("error")).code).toBe("rate-limited");
+
+    b.send({ type: "life", intent: { do: "social", action: "hug" } });
+    const hug = await a.next("life", (m) => m.life.avatars[wa.memberId]?.use?.action === "hug");
+    expect(hug.life.avatars[wb.memberId]!.use).toMatchObject({ action: "hug", with: wa.memberId });
+    b.send({ type: "life", intent: { do: "social", action: "cuddle" } });
+    expect((await b.next("lifeRejected")).reason).toBe("not-in-bed");
+    await a.disconnect();
+    await b.next("members", (m) => !m.members.find((x) => x.id === wa.memberId)!.online);
+    b.send({ type: "life", intent: { do: "social", action: "kiss" } });
+    expect((await b.next("lifeRejected")).reason).toBe("partner-away");
+    await b.disconnect();
+
+    // coming back, the chat is still there, oldest first
+    const again = await a.connect();
+    expect(again.chat.map((m) => m.text).slice(0, 2)).toEqual(["hi love", "x".repeat(240)]);
+    await a.disconnect();
+  });
+
+  it("cooks only while the cook is here", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    await b.connect();
+    a.op("opA0000001", {
+      t: "batch",
+      ops: [
+        { t: "object.place", level: 0, id: "counter001", catalogId: "counter", x: 12, z: 17, rot: 0 },
+        { t: "object.place", level: 0, id: "stove00001", catalogId: "stove", x: 13, z: 17, rot: 0 },
+      ],
+    });
+    await a.next("applied");
+    a.send({ type: "life", intent: { do: "cook", recipeId: "pancakes", objectId: "counter001" } });
+    await b.next("life", (m) => (m.life.cooking?.rate ?? 0) > 0);
+    await a.disconnect();
+    const paused = await b.next("life", (m) => m.life.cooking?.rate === 0);
+    expect(paused.life.cooking).toMatchObject({ recipeId: "pancakes", step: 0, startedBy: wa.memberId });
+    await b.disconnect();
+  });
+
+  it("remembers where everyone was after a restart", async () => {
+    const { a, houseId } = await couple();
+    const wa = await a.connect();
+    a.op("opA0000001", { t: "object.place", level: 0, id: "chair00001", catalogId: "dining_chair", x: 5, z: 5, rot: 0 });
+    await a.next("applied");
+    a.send({ type: "life", intent: { do: "use", objectId: "chair00001", action: "sit" } });
+    await a.next("life", (m) => m.life.avatars[wa.memberId]?.use?.objectId === "chair00001");
+    await a.disconnect();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const old = app;
+    await startApp();
+    const again = new Player(`${base.replace("http", "ws")}/ws`, houseId, a.cookie);
+    const welcome = await again.connect();
+    expect(welcome.life.avatars[wa.memberId]).toMatchObject({ use: { objectId: "chair00001", action: "sit" } });
+    await again.disconnect();
+    await old.close();
   });
 });

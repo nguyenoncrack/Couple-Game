@@ -5,3 +5,6 @@ dist
 # local game data (SQLite)
 data/
 .env
+# wrangler dev state and cache
+.wrangler/
+.dev.vars
