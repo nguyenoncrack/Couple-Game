@@ -33,7 +33,7 @@ class FakeSocket {
 const latest = () => FakeSocket.all.at(-1)!;
 
 function connect() {
-  const h = { knownVersion: () => 0, onMessage: vi.fn(), onStatus: vi.fn(), onFatal: vi.fn(), onUnsettled: vi.fn() };
+  const h = { knownVersion: () => 0, onMessage: vi.fn(), onStatus: vi.fn(), onFatal: vi.fn(), onUnsettled: vi.fn(), onDrop: vi.fn() };
   return { conn: new Connection("house1", h), h };
 }
 
@@ -100,6 +100,8 @@ describe("connection", () => {
     expect(FakeSocket.all.length).toBe(before + 1);
     expect(h.onFatal).not.toHaveBeenCalled();
     expect(h.onStatus).toHaveBeenLastCalledWith("reconnecting");
+    // and says why, for the reconnecting banner
+    expect(h.onDrop).toHaveBeenCalledWith(CLOSE.busy, "too many attempts");
     conn.dispose();
   });
 

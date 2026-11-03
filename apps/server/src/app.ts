@@ -8,7 +8,7 @@ import { createApi } from "./http/api";
 import type { Directory, HouseStore } from "./persistence/store";
 import { RateLimiter } from "./rate-limit";
 import { Rooms } from "./rooms/rooms";
-import { MAX_MESSAGE, serveSocket } from "./rooms/socket";
+import { errorReason, MAX_MESSAGE, serveSocket } from "./rooms/socket";
 
 const MAX_BODY = 8 * 1024;
 const MIME: Record<string, string> = {
@@ -101,7 +101,11 @@ export function createApp({ directory, houses, staticDir, roomIdleMs, houseIdleM
     let handler: ReturnType<typeof serveSocket> | null = null;
     let houseId: string | null = null;
     ws.on("message", (data) => {
-      if (handler) void handler.message(String(data));
+      if (handler)
+        handler.message(String(data)).catch((e) => {
+          console.error("[ws]", e);
+          ws.close(1011, errorReason(e));
+        });
       else inbox.push(String(data));
     });
     ws.on("close", () => {
@@ -129,7 +133,7 @@ export function createApp({ directory, houses, staticDir, roomIdleMs, houseIdleM
       for (const m of inbox.splice(0)) await handler.message(m);
     })().catch((e) => {
       console.error("[ws]", e);
-      ws.close(1011, "server error");
+      ws.close(1011, errorReason(e));
     });
   });
 

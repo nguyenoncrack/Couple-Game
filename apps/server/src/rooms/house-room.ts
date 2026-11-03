@@ -17,6 +17,7 @@ import {
 } from "@cg/shared";
 import type { HouseRow, HouseStore, MemberRow } from "../persistence/store";
 import { RateLimiter } from "../rate-limit";
+import { errorReason } from "./socket";
 
 /** The object, door or window with this ID, if it exists. */
 function find(bp: Blueprint, id: string) {
@@ -388,8 +389,14 @@ export class HouseRoom {
     this.lifeTimer = setTimeout(
       () => {
         this.lifeTimer = null;
-        if (this.life.tick(this.blueprint, this.now())) this.lifeChanged();
-        else this.scheduleLife();
+        try {
+          if (this.life.tick(this.blueprint, this.now())) this.lifeChanged();
+          else this.scheduleLife();
+        } catch (e) {
+          // nobody's message to blame: say so to everyone, rather than take the whole house down with it
+          console.error(`[room ${this.house.id}] life tick failed`, e instanceof Error ? e.stack : e);
+          this.broadcast({ type: "error", code: "server", message: errorReason(e) });
+        }
       },
       at - this.now() + 5,
     );

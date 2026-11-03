@@ -19,12 +19,18 @@ import { TableGamePanel } from "./TableGamePanel";
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
   const status = useGame((s) => s.status);
+  const dropReason = useGame((s) => s.dropReason);
   const live = useGame((s) => s.mode === "live");
   const firstPerson = useGame((s) => s.mode === "live" && s.firstPerson);
   return (
     <div className="hud">
       <TopBar onLeave={onLeave} />
-      {status === "reconnecting" && <div className="banner">Reconnecting… your changes are kept and will sync.</div>}
+      {status === "reconnecting" && (
+        <div className="banner">
+          Reconnecting… your changes are kept and will sync.
+          {dropReason && <span className="banner-why">{dropReason}</span>}
+        </div>
+      )}
       {!live && <ToolPanel />}
       {!live && <SelectionCard />}
       {!live && <StarterOffer />}

@@ -58,6 +58,8 @@ export interface GameState {
   status: Status;
   /** Why we were sent away, when status is "gone". */
   goneReason: string;
+  /** Why the connection last dropped (close code and reason), shown while reconnecting. */
+  dropReason: string;
   confirmed: HouseState | null;
   pending: Pending[];
   view: Blueprint | null;
@@ -103,6 +105,7 @@ export const useGame = create<GameState>(() => ({
   members: [],
   status: "connecting",
   goneReason: "",
+  dropReason: "",
   confirmed: null,
   pending: [],
   view: null,
@@ -273,6 +276,7 @@ function handle(msg: ServerMsg) {
     case "error":
       if (msg.code === "rate-limited") toast(msg.message);
       else console.warn("[server]", msg.code, msg.message);
+      if (msg.code === "server") set({ dropReason: msg.message });
       break;
     case "chat": {
       if (s.chat.some((m) => m.id === msg.message.id)) break;
@@ -336,6 +340,7 @@ export function connect(house: HouseSummary) {
         status: "gone",
         goneReason: code === 4409 ? "You opened this house in another tab or device." : code === 4404 ? "This house doesn't exist anymore." : "You're not in that house, or you've been signed out.",
       }),
+    onDrop: (code, reason) => set({ dropReason: `${code}${reason ? ` ${reason}` : ""}` }),
     onUnsettled: (times) => {
       if (times % 3 !== 0) return;
       const c = get().confirmed;

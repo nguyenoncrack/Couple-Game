@@ -511,6 +511,15 @@ button.pill:active,
   box-shadow: var(--shadow);
 }
 
+.banner-why {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+  text-align: center;
+  opacity: 0.75;
+}
+
 /* hotbar */
 
 .toolbar {

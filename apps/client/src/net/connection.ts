@@ -12,6 +12,8 @@ export interface ConnectionHandlers {
    * resend) is probably out of step. Called with how many times in a row, so the game can let go of more each time.
    */
   onUnsettled(times: number): void;
+  /** The connection dropped and we'll try again: the close code and the server's reason, for showing why. */
+  onDrop(code: number, reason: string): void;
 }
 
 /** A tab hidden this long lets go of the house, so a forgotten tab doesn't keep it awake. */
@@ -102,6 +104,8 @@ export class Connection {
         this.h.onUnsettled(this.quickDrops);
       } else if (settled) this.quickDrops = 0;
       this.attempts++;
+      if (!quick) console.warn(`[house] connection closed: ${e.code} ${e.reason || "no reason given"}`);
+      this.h.onDrop(e.code, e.reason);
       this.h.onStatus("reconnecting");
       const backoff = Math.min(8000, 400 * 2 ** Math.min(this.attempts, 5)) * (0.75 + Math.random() * 0.5);
       const delay = e.code === CLOSE.busy ? BUSY_MS : backoff;

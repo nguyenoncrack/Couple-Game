@@ -6,7 +6,7 @@ import { SqlDirectory, SqlHouseStore } from "@cg/server/persistence/sql-stores";
 import type { HouseRow, MemberRow, Snapshot } from "@cg/server/persistence/store";
 import { RateLimiter } from "@cg/server/rate-limit";
 import { HouseRoom } from "@cg/server/rooms/house-room";
-import { MAX_MESSAGE, serveSocket } from "@cg/server/rooms/socket";
+import { errorReason, MAX_MESSAGE, serveSocket } from "@cg/server/rooms/socket";
 import { DurableObject } from "cloudflare:workers";
 
 /**
@@ -166,8 +166,8 @@ export class HouseDO extends DurableObject<Env> {
       const data = typeof e.data === "string" ? e.data : "";
       if (data.length > MAX_MESSAGE) return server.close(1009, "message too large");
       handler.message(data).catch((err) => {
-        console.error("[ws]", err);
-        server.close(1011, "server error");
+        console.error("[ws]", data.slice(0, 200), err instanceof Error ? err.stack : err);
+        server.close(1011, errorReason(err));
         gone();
       });
     });

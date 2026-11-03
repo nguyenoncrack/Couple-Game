@@ -5,6 +5,15 @@ import type { HouseRoom, Peer } from "./house-room";
 /** Largest message a client may send; a whole-house edit fits easily. */
 export const MAX_MESSAGE = 64 * 1024;
 
+/**
+ * A close reason that says what went wrong, so a player stuck reconnecting can see why (a WebSocket close reason
+ * is at most 123 bytes).
+ */
+export function errorReason(e: unknown) {
+  const text = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  return `server error: ${text}`.replace(/[^\x20-\x7e]/g, "?").slice(0, 120);
+}
+
 /** What a socket handler needs from the WebSocket it serves, whichever server it runs on. */
 export interface SocketIO {
   send(data: string): void;
