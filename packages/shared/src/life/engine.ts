@@ -3,7 +3,7 @@ import { catalog as defaultCatalog, type Action, type Catalog, type Station } fr
 import type { Rot } from "../grid";
 import { newId } from "../ids";
 import { footprintOf } from "../rules";
-import { slotsOf, stationSlots, type PlacedSlot } from "./interactions";
+import { canSee, screenOf, seatsFacing, slotsFor, slotsOf, stationSlots, tvFacing, type PlacedSlot } from "./interactions";
 import { buildNav, canStep, findPath, nearestWalkable, walkable, type Cell, type Nav } from "./nav";
 import {
   activityAt,
@@ -40,7 +40,8 @@ export type LifeReject =
   | "unknown-recipe"
   | "partner-away"
   | "partner-busy"
-  | "not-in-bed";
+  | "not-in-bed"
+  | "no-tv";
 
 export const LIFE_TEXT: Record<LifeReject, string> = {
   unreachable: "Can't get there from here.",
@@ -54,11 +55,15 @@ export const LIFE_TEXT: Record<LifeReject, string> = {
   "partner-away": "Your partner isn't here right now.",
   "partner-busy": "Your partner's busy. Try again in a moment.",
   "not-in-bed": "Get into the same bed first.",
+  "no-tv": "There's no TV in view from here.",
 };
 
-/** The furniture action a use is based on (eating at a seat is sitting, cuddling is sleeping). */
-const slotAction = (u: Use): Action => (u.action === "eat" ? "sit" : u.action === "cuddle" ? "sleep" : (u.action as Action));
+/** The furniture action a use is based on (eating or watching TV from a seat is sitting, cuddling is sleeping). */
+const slotAction = (u: Use): Action =>
+  u.action === "eat" || (u.action === "watch" && u.tv !== u.objectId) ? "sit" : u.action === "cuddle" ? "sleep" : (u.action as Action);
 const together = (u: Use | null | undefined) => u?.action === "hug" || u?.action === "kiss";
+/** Quick things that are over by themselves after a while. */
+const brief = (u: Use | null | undefined) => u?.action === "toilet" || u?.action === "wash";
 
 const center = ([x, z]: Cell): [number, number] => [x + 0.5, z + 0.5];
 
@@ -153,13 +158,15 @@ export class Life {
     }
     if (!best) return "unreachable";
     const { s } = best;
-    return this.walkTo(
+    const r = this.walkTo(
       a,
       nav,
       [best.cells[best.cells.length - 1]!],
       { objectId: s.objectId, action: s.action, slot: s.slot, station: s.station, pose: s.pose, ...extra },
       now,
     );
+    if (!r && s.seconds) a.use!.until = arrivalTime(a) + s.seconds * 1000;
+    return r;
   }
 
   walk(memberId: string, bp: Blueprint, cell: Cell, now: number): LifeReject | null {
@@ -175,7 +182,31 @@ export class Life {
     const a = this.state.avatars[memberId];
     const o = this.level(bp).objects[objectId];
     if (!a || !o) return "nothing-to-do";
+    if (action === "watch") return this.watch(a, bp, o.id, now);
     return this.goUse(a, buildNav(bp, 0, this.cat), slotsOf(o, action, this.cat), now);
+  }
+
+  /**
+   * Watch TV: picked from the TV, you go to the closest free seat with a view of it, or sit on the floor in front
+   * if there's none; picked from a seat, you sit there and watch the TV it faces.
+   */
+  private watch(a: Avatar, bp: Blueprint, objectId: string, now: number): LifeReject | null {
+    const level = this.level(bp);
+    const nav = buildNav(bp, 0, this.cat);
+    const o = level.objects[objectId]!;
+    const isTv = Boolean(screenOf(o, this.cat));
+    const seats = isTv ? seatsFacing(level, o, this.cat) : slotsOf(o, "sit", this.cat).filter((s) => tvFacing(level, s, this.cat));
+    const r: LifeReject | null = seats.length ? this.goUse(a, nav, seats, now, { action: "watch" }) : "no-tv";
+    if (!r) {
+      const seat = seats.find((s) => s.objectId === a.use!.objectId && s.slot === a.use!.slot)!;
+      a.use!.tv = isTv ? o.id : tvFacing(level, seat, this.cat)!.id;
+      return null;
+    }
+    if (isTv) {
+      const floor = this.goUse(a, nav, slotsOf(o, "watch", this.cat), now, { tv: o.id });
+      if (!floor || !seats.length) return floor;
+    }
+    return r;
   }
 
   /** Stand still (getting up if sitting), stopping at the next cell if walking. */
@@ -217,7 +248,7 @@ export class Life {
     }
 
     // a sitter gets up for a hug; someone cooking, eating or asleep is busy
-    if (p.use && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge") return "partner-busy";
+    if (p.use && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge" && p.use.action !== "watch") return "partner-busy";
     const nav = buildNav(bp, 0, this.cat);
     // they stop where they are (the cell they're stepping into); you go beside them, with no wall in between
     const [px, pz] = this.origin(p, now).cell;
@@ -371,10 +402,12 @@ export class Life {
     let changed = false;
     for (const a of Object.values(this.state.avatars)) {
       const u = a.use;
-      if (together(u) && u!.until !== undefined && now >= u!.until) {
+      if ((together(u) || brief(u)) && u!.until !== undefined && now >= u!.until) {
         if (u!.pose) a.face = u!.pose.face;
         a.use = null;
         changed = true;
+        // after the toilet, wash your hands if there's a sink you can get to
+        if (u!.action === "toilet") this.goUse(a, buildNav(bp, 0, this.cat), slotsFor(this.level(bp), "wash", this.cat), now);
         continue;
       }
       if (u?.action !== "eat" || u.until === undefined || now < u.until) continue;
@@ -440,7 +473,7 @@ export class Life {
     for (const a of Object.values(this.state.avatars)) {
       const arrive = arrivalTime(a);
       if (a.use?.station && arrive > now) next = Math.min(next, arrive);
-      if ((a.use?.action === "eat" || together(a.use)) && a.use!.until !== undefined) next = Math.min(next, a.use!.until);
+      if ((a.use?.action === "eat" || together(a.use) || brief(a.use)) && a.use!.until !== undefined) next = Math.min(next, a.use!.until);
     }
     const c = this.state.cooking;
     const step = c && this.cat.recipes.get(c.recipeId)?.steps[c.step];
@@ -467,6 +500,12 @@ export class Life {
           if (u.pose) a.face = u.pose.face;
           a.use = null;
           changed = true;
+        } else if (u.action === "watch" && u.tv !== u.objectId) {
+          const tv = u.tv ? level.objects[u.tv] : undefined;
+          if (!tv || !canSee(s, tv, this.cat)) {
+            a.use = { ...u, action: "sit", tv: undefined };
+            changed = true;
+          }
         }
       }
       const p = positionAt(a, now);
@@ -518,7 +557,7 @@ export class Life {
           ? a.use.objectId
             ? { ...a.use, action: "sit" as const, dishId: undefined, until: undefined }
             : null
-          : together(a.use)
+          : together(a.use) || brief(a.use)
             ? null
             : a.use;
       state.avatars[a.memberId] = { ...a, path: [end], startedAt: now, use };
@@ -533,7 +572,7 @@ export class Life {
     for (const a of Object.values(this.state.avatars)) {
       const end = a.path[a.path.length - 1]!;
       const settled = activityAt(a, now) !== "walk";
-      avatars[a.memberId] = { ...a, path: [end], startedAt: 0, use: together(a.use) ? null : settled || a.use?.action !== "eat" ? a.use : null };
+      avatars[a.memberId] = { ...a, path: [end], startedAt: 0, use: together(a.use) || brief(a.use) ? null : settled || a.use?.action !== "eat" ? a.use : null };
     }
     const c = this.state.cooking;
     const recipe = c && this.cat.recipes.get(c.recipeId);

@@ -35,13 +35,15 @@ export interface Use {
   station?: Station;
   /** Where they settle when they arrive: lot metres, height, facing. Null to stay standing where the path ends. */
   pose: { x: number; z: number; y: number; face: Rot } | null;
-  /** Eating: the plate, and when the last bite is. A hug or kiss: when it's over. */
+  /** Eating: the plate, and when the last bite is. A hug, kiss or quick thing (washing your hands): when it's over. */
   dishId?: string;
   until?: number;
   /** Hugging, kissing or cuddling: who with. */
   with?: string;
   /** A hug or kiss starts once you've both got there; until then you wait, facing each other. */
   startsAt?: number;
+  /** Watching: the TV. When it isn't the object being used, you're watching from a seat. */
+  tv?: string;
 }
 
 export interface Avatar {
