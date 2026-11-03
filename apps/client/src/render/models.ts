@@ -45,8 +45,42 @@ function legs(k: Kit, mat: THREE.Material, w: number, d: number, h: number, r = 
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add(shape, mat, [sx * (w / 2 - inset), h / 2, sz * (d / 2 - inset)], [r * 2, h, r * 2]);
 }
 
+/** A connected stem or strut between two points. */
+function rod(k: Kit, mat: THREE.Material, from: THREE.Vector3, to: THREE.Vector3, diameter: number) {
+  const delta = to.clone().sub(from);
+  const geometry = new THREE.CylinderGeometry(diameter / 2, diameter / 2, delta.length(), 8);
+  geometry.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.normalize()));
+  k.add(geometry, mat, from.clone().add(to).multiplyScalar(0.5).toArray(), 1, { outline: 0.003, normals: true });
+}
+
 function knob(k: Kit, m: Mat, x: number, y: number, z: number) {
   k.add("sphere", m(METAL), [x, y, z], 0.035, { outline: 0.006 });
+}
+
+/** A closed ceramic shell with an open top; profile runs up the outside and down the inside. */
+function basin(profile: readonly (readonly [number, number])[]) {
+  return new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 48);
+}
+
+/** A horizontal slab with a real opening, used for sink cutouts and door glass. */
+function rim(w: number, d: number, holeW: number, holeD: number, thickness: number) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-w / 2, -d / 2);
+  shape.lineTo(w / 2, -d / 2);
+  shape.lineTo(w / 2, d / 2);
+  shape.lineTo(-w / 2, d / 2);
+  shape.closePath();
+  const hole = new THREE.Path();
+  hole.moveTo(-holeW / 2, -holeD / 2);
+  hole.lineTo(-holeW / 2, holeD / 2);
+  hole.lineTo(holeW / 2, holeD / 2);
+  hole.lineTo(holeW / 2, -holeD / 2);
+  hole.closePath();
+  shape.holes.push(hole);
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
+  geometry.rotateX(-Math.PI / 2);
+  geometry.translate(0, -thickness / 2, 0);
+  return geometry;
 }
 
 const sofaLike = (seatsOverride?: number): Builder => (k, w, d, p, m) => {
@@ -60,7 +94,7 @@ const sofaLike = (seatsOverride?: number): Builder => (k, w, d, p, m) => {
   const inner = W - armW * 2;
   const seats = seatsOverride ?? Math.max(2, Math.round(inner / 0.62));
   const cw = inner / seats;
-  legs(k, leg, W - 0.04, D - 0.04, 0.12, 0.028);
+  legs(k, leg, W - 0.04, D - 0.04, 0.15, 0.028);
   k.add("soft", fabD, [0, 0.25, 0], [W, 0.2, D]);
   for (let i = 0; i < seats; i++) {
     const x = -inner / 2 + cw * (i + 0.5);
@@ -134,12 +168,12 @@ const BUILDERS: Record<string, Builder> = {
       knob(k, m, x, 0.46, z + D / 2 + 0.02);
     }
     // the TV
-    k.box(m(INK_DARK), [0, 0.6, z - 0.02], [0.32, 0.04, 0.16]);
-    k.box(m(INK_DARK), [0, 0.7, z - 0.02], [0.05, 0.18, 0.04]);
+    k.box(m(INK_DARK), [0, 0.58, z - 0.02], [0.32, 0.04, 0.16]);
+    k.box(m(INK_DARK), [0, 0.68, z - 0.02], [0.05, 0.18, 0.04]);
     k.box(m("#3d4246"), [0, 1.08, z], [W * 0.75, 0.62, 0.05]);
     k.box(m("#56646b"), [0, 1.08, z + 0.026], [W * 0.75 - 0.05, 0.57, 0.004], { outline: false });
     // a little plant on the end
-    k.add("cyl", m("#c87f5a"), [W / 2 - 0.15, 0.64, z], [0.14, 0.14, 0.14]);
+    k.add("cyl", m("#c87f5a"), [W / 2 - 0.15, 0.63, z], [0.14, 0.14, 0.14]);
     k.add("blob", m("#7fa36a"), [W / 2 - 0.15, 0.78, z], [0.22, 0.18, 0.22]);
   },
 
@@ -189,14 +223,16 @@ const BUILDERS: Record<string, Builder> = {
     k.add("torus", m(shade(pot, 0.9)), [0, 0.4, 0], [0.42, 0.42, 0.42], { rot: [Math.PI / 2, 0, 0], outline: false });
     k.add("cyl", m("#6b5141"), [0, 0.39, 0], [0.38, 0.02, 0.38], { outline: false });
     const trunk = m("#7a5c43");
-    k.add("cyl8", trunk, [0, 0.85, 0], [0.04, 0.9, 0.04]);
+    k.add("cyl8", trunk, [0, 0.96, 0], [0.04, 1.14, 0.04]);
     const r = rng(seed);
     const leaves = str(p, "leaves", "#7fa36a");
     for (let i = 0; i < 14; i++) {
       const a = r() * Math.PI * 2;
       const y = 0.7 + r() * 0.85;
       const rad = 0.08 + (1 - (y - 0.7) / 0.85) * 0.18 + r() * 0.06;
-      k.add("blob", m(shade(leaves, 0.85 + r() * 0.3)), [Math.cos(a) * rad, y, Math.sin(a) * rad], [0.2, 0.06, 0.13], { rot: [r() * 0.6 - 0.3, a, 0.4 + r() * 0.4], outline: 0.008 });
+      const leaf = new THREE.Vector3(Math.cos(a) * rad, y, Math.sin(a) * rad);
+      rod(k, trunk, new THREE.Vector3(0, Math.min(y - 0.08, 1.5), 0), leaf, 0.012);
+      k.add("blob", m(shade(leaves, 0.85 + r() * 0.3)), leaf.toArray(), [0.2, 0.06, 0.13], { rot: [r() * 0.6 - 0.3, a, 0.4 + r() * 0.4], outline: 0.008 });
     }
   },
 
@@ -243,8 +279,8 @@ const BUILDERS: Record<string, Builder> = {
       knob(k, m, 0, 0.22 + i * 0.22, z + 0.23);
     }
     // a small lamp and a book
-    k.add("cyl", m("#8fa7c4"), [0.1, 0.66, z - 0.04], [0.1, 0.14, 0.1]);
-    k.add("cone", m("#f2dca8", "fabric"), [0.1, 0.82, z - 0.04], [0.22, 0.16, 0.22]);
+    k.add("cyl", m("#8fa7c4"), [0.1, 0.65, z - 0.04], [0.1, 0.14, 0.1]);
+    k.add("cone", m("#f2dca8", "fabric"), [0.1, 0.8, z - 0.04], [0.22, 0.16, 0.22]);
     k.box(m("#a6564a"), [-0.1, 0.6, z + 0.05], [0.16, 0.03, 0.22], { rot: [0, 0.3, 0], outline: 0.005 });
   },
 
@@ -254,15 +290,23 @@ const BUILDERS: Record<string, Builder> = {
     const z = -d / 2 + D / 2;
     const W = w;
     k.box(m(INK_DARK), [0, 0.05, z - 0.03], [W - 0.04, 0.1, D - 0.06]);
-    k.box(m(cab, "wood"), [0, 0.48, z - 0.01], [W, 0.76, D - 0.02]);
+    if (p.sink) {
+      k.box(m(cab, "wood"), [0, 0.395, z - 0.01], [W, 0.59, D - 0.02]);
+      k.add(rim(W, D - 0.02, 0.5, 0.36, 0.17), m(cab, "wood"), [0, 0.775, z + 0.03], 1);
+    } else k.box(m(cab, "wood"), [0, 0.48, z - 0.01], [W, 0.76, D - 0.02]);
     for (const s of [-1, 1]) {
       k.box(m(shade(cab, 1.07), "wood"), [s * (W / 4), 0.48, z + D / 2 - 0.01], [W / 2 - 0.04, 0.68, 0.015], { outline: 0.006 });
       k.box(m(METAL), [s * 0.06, 0.7, z + D / 2 + 0.01], [0.015, 0.14, 0.02], { outline: 0.005 });
     }
-    k.box(m(str(p, "top", "#e9e3d6"), "stone"), [0, 0.885, z + 0.01], [W, 0.05, D + 0.02]);
+    const top = m(str(p, "top", "#e9e3d6"), "stone");
+    if (p.sink) k.add(rim(W, D + 0.02, 0.5, 0.36, 0.05), top, [0, 0.885, z + 0.03], 1);
+    else k.box(top, [0, 0.885, z + 0.01], [W, 0.05, D + 0.02]);
     if (p.sink) {
-      k.box(m("#c9ccc8"), [0, 0.9, z + 0.03], [0.5, 0.012, 0.36], { outline: 0.006 });
-      k.box(m("#9aa3a3"), [0, 0.905, z + 0.03], [0.44, 0.01, 0.3], { outline: false });
+      k.add(rim(0.54, 0.4, 0.46, 0.32, 0.018), m("#c9ccc8"), [0, 0.915, z + 0.03], 1, { outline: 0.004 });
+      const steelBowl = m("#9aa3a3");
+      k.box(steelBowl, [0, 0.755, z + 0.03], [0.46, 0.02, 0.32], { outline: false });
+      k.add(rim(0.5, 0.36, 0.46, 0.32, 0.15), steelBowl, [0, 0.83, z + 0.03], 1, { outline: 0.004 });
+      k.add("cyl", m(INK_DARK), [0, 0.767, z + 0.03], [0.045, 0.003, 0.045], { outline: false });
       const steel = m(METAL);
       k.add("cyl", steel, [0, 0.98, z - D / 2 + 0.08], [0.04, 0.18, 0.04], { outline: 0.006 });
       k.box(steel, [0, 1.07, z - D / 2 + 0.16], [0.03, 0.03, 0.18], { outline: 0.006 });
@@ -278,6 +322,7 @@ const BUILDERS: Record<string, Builder> = {
     const D = 0.64;
     const z = -d / 2 + D / 2;
     const W = Math.min(w, 0.78);
+    k.at([0, 0, z], 0, () => legs(k, m(INK_DARK), W, D, 0.06, 0.025, 0.06));
     k.box(body, [0, 0.46, z], [W, 0.86, D]);
     k.box(m(INK_DARK), [0, 0.42, z + D / 2 + 0.005], [W - 0.16, 0.42, 0.01], { outline: 0.006 });
     k.box(m("#56646b"), [0, 0.44, z + D / 2 + 0.012], [W - 0.3, 0.2, 0.006], { outline: false });
@@ -301,7 +346,7 @@ const BUILDERS: Record<string, Builder> = {
     const D = 0.68;
     const z = -d / 2 + D / 2;
     const W = Math.min(w, 0.8);
-    k.add("soft", body, [0, 0.93, z], [W, 1.86, D]);
+    k.add("roundbox", body, [0, 0.93, z], [W, 1.86, D]);
     k.box(m(shade(str(p, "body", "#dfe7e4"), 0.82)), [0, 1.3, z + D / 2], [W - 0.02, 0.012, 0.012], { outline: false });
     const steel = m(METAL);
     k.box(steel, [-W / 2 + 0.1, 1.55, z + D / 2 + 0.03], [0.025, 0.3, 0.03], { outline: 0.005 });
@@ -316,9 +361,11 @@ const BUILDERS: Record<string, Builder> = {
     const china = m(PORCELAIN);
     const z = -d / 2 + 0.36;
     k.add("cone", china, [0, 0.2, z + 0.1], [0.3, 0.4, 0.36], { rot: [Math.PI, 0, 0] });
-    k.add("soft", china, [0, 0.4, z + 0.13], [0.38, 0.08, 0.48]);
-    k.add("torus", m("#e9e4d8"), [0, 0.45, z + 0.15], [0.32, 0.42, 0.32], { rot: [Math.PI / 2, 0, 0], outline: 0.005 });
-    k.add("soft", china, [0, 0.62, z - 0.22], [0.42, 0.42, 0.18]);
+    k.add(basin([[0, 0.3], [0.25, 0.3], [0.45, 0.36], [0.5, 0.43], [0.48, 0.45], [0.4, 0.44], [0.32, 0.35], [0, 0.34]]), china, [0, 0, z + 0.13], [0.4, 1, 0.5], { outline: 0.005, normals: true });
+    k.add(new THREE.TorusGeometry(0.43, 0.055, 10, 40), m("#e9e4d8"), [0, 0.455, z + 0.13], [0.4, 0.5, 0.4], { rot: [Math.PI / 2, 0, 0], outline: 0.004, normals: true });
+    k.add("cyl", m("#bcd3dc"), [0, 0.36, z + 0.13], [0.25, 0.008, 0.31], { outline: false });
+    k.box(china, [0, 0.36, z - 0.13], [0.22, 0.28, 0.18]);
+    k.add("roundbox", china, [0, 0.62, z - 0.22], [0.42, 0.42, 0.18]);
     k.box(china, [0, 0.85, z - 0.22], [0.44, 0.04, 0.2]);
     k.box(m(METAL), [-0.14, 0.78, z - 0.12], [0.06, 0.02, 0.03], { outline: 0.004 });
   },
@@ -327,24 +374,26 @@ const BUILDERS: Record<string, Builder> = {
     const body = m(str(p, "body", "#f1ece2"));
     const W = w - 0.2;
     const D = d - 0.2;
-    k.add("soft", body, [0, 0.42, 0], [W, 0.5, D]);
-    k.add("soft", m("#e6e0d3"), [0, 0.67, 0], [W + 0.04, 0.06, D + 0.04]);
-    k.box(m("#bcd3dc"), [0, 0.62, 0], [W - 0.14, 0.03, D - 0.14], { outline: false });
+    k.add(basin([[0, 0.16], [0.28, 0.16], [0.4, 0.25], [0.49, 0.58], [0.5, 0.64], [0.47, 0.68], [0.43, 0.64], [0.39, 0.52], [0.3, 0.3], [0, 0.28]]), body, [0, 0, 0], [W, 1, D], { outline: 0.008, normals: true });
+    k.add("cyl", m("#bcd3dc", "water"), [0, 0.49, 0], [W * 0.74, 0.012, D * 0.74], { outline: false });
     const feet = m(str(p, "feet", "#b8955c"));
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add("sphere", feet, [sx * (W / 2 - 0.12), 0.08, sz * (D / 2 - 0.1)], [0.1, 0.16, 0.1]);
-    k.add("cyl", m(METAL), [-W / 2 + 0.05, 0.8, 0], [0.04, 0.24, 0.04], { outline: 0.005 });
-    k.box(m(METAL), [-W / 2 + 0.13, 0.9, 0], [0.18, 0.03, 0.03], { outline: 0.005 });
-    // a rubber duck
-    k.add("sphere", m("#f2cf4a"), [0.25, 0.68, 0.1], [0.09, 0.08, 0.11], { outline: 0.005 });
-    k.add("sphere", m("#f2cf4a"), [0.25, 0.75, 0.15], 0.06, { outline: 0.005 });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add("sphere", feet, [sx * W * 0.22, 0.095, sz * D * 0.2], [0.12, 0.19, 0.12]);
+    k.add("cyl", m(METAL), [-W * 0.46, 0.75, 0], [0.04, 0.3, 0.04], { outline: 0.005 });
+    k.box(m(METAL), [-W * 0.46 + 0.08, 0.9, 0], [0.18, 0.03, 0.03], { outline: 0.005 });
+    // The duck floats inside the open basin, below the rim.
+    k.add("sphere", m("#f2cf4a"), [0.25, 0.53, 0.06], [0.1, 0.08, 0.13], { outline: 0.004 });
+    k.add("sphere", m("#f2cf4a"), [0.25, 0.59, 0.1], 0.065, { outline: 0.004 });
+    k.add("cone", m("#e89436"), [0.25, 0.585, 0.14], [0.035, 0.045, 0.025], { rot: [Math.PI / 2, 0, 0], outline: false });
+    for (const sx of [-1, 1]) k.add("sphere", m(INK_DARK), [0.25 + sx * 0.022, 0.6, 0.12], 0.008, { outline: false });
   },
 
   pedsink: (k, _w, d, _p, m) => {
     const china = m(PORCELAIN);
     const z = -d / 2 + 0.3;
     k.add("cone", china, [0, 0.38, z], [0.16, 0.76, 0.16], { rot: [Math.PI, 0, 0] });
-    k.add("soft", china, [0, 0.82, z], [0.56, 0.16, 0.44]);
-    k.box(m("#c9d6da"), [0, 0.905, z + 0.02], [0.4, 0.008, 0.28], { outline: false });
+    k.add(basin([[0, 0.74], [0.2, 0.74], [0.43, 0.8], [0.5, 0.88], [0.48, 0.91], [0.41, 0.89], [0.3, 0.81], [0, 0.8]]), china, [0, 0, z], [0.56, 1, 0.44], { outline: 0.005, normals: true });
+    k.add("cyl", m("#c9d6da"), [0, 0.825, z], [0.32, 0.008, 0.24], { outline: false });
+    k.add("cyl", m(METAL), [0, 0.831, z], [0.035, 0.004, 0.035], { outline: false });
     k.add("cyl", m(METAL), [0, 0.98, z - 0.17], [0.035, 0.16, 0.035], { outline: 0.005 });
     k.box(m(METAL), [0, 1.05, z - 0.11], [0.025, 0.025, 0.12], { outline: 0.005 });
   },
@@ -361,7 +410,7 @@ const BUILDERS: Record<string, Builder> = {
         k.add("cyl", dark, [sx * 0.7, 0.3, sz * 1.15], [0.6, 0.22, 0.6], { rot: [0, 0, Math.PI / 2] });
         k.add("cyl", chrome, [sx * 0.82, 0.3, sz * 1.15], [0.3, 0.02, 0.3], { rot: [0, 0, Math.PI / 2], outline: 0.005 });
       }
-    k.add("soft", body, [0, 0.62, 0], [1.62, 0.56, 3.5]);
+    k.add("roundbox", body, [0, 0.62, 0], [1.62, 0.56, 3.5]);
     // wheel arches
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add("half", m(shade(paint, 0.85)), [sx * 0.76, 0.6, sz * 1.15], [0.12, 0.34, 0.78], { rot: [0, 0, sx * -Math.PI / 2], outline: 0.006 });
     // cabin: glass band under a painted roof, a little behind centre
@@ -372,6 +421,7 @@ const BUILDERS: Record<string, Builder> = {
     for (const sx of [-1, 1]) {
       k.add("sphere", m("#fff3c4"), [sx * 0.55, 0.72, 1.74], [0.26, 0.16, 0.06], { outline: 0.006 });
       k.box(m("#d0533f"), [sx * 0.6, 0.76, -1.75], [0.26, 0.12, 0.04], { outline: 0.006 });
+      k.box(chrome, [sx * 0.735, 1.02, 0.55], [0.08, 0.025, 0.025], { outline: 0.004 });
       k.box(body, [sx * 0.8, 1.02, 0.55], [0.12, 0.08, 0.1], { outline: 0.006 });
       k.box(m(shade(paint, 0.8)), [sx * 0.815, 0.68, -0.25], [0.01, 0.42, 0.012], { outline: false });
       k.box(chrome, [sx * 0.82, 0.8, -0.05], [0.02, 0.03, 0.14], { outline: 0.004 });
@@ -388,12 +438,12 @@ const BUILDERS: Record<string, Builder> = {
     const frame = m(shade(wood, 0.82), "wood");
     const W = w - 0.2;
     const z = -d / 2 + 0.38;
-    legs(k, frame, W, 0.62, 0.88, 0.04, 0.06, "box");
+    k.at([0, 0, z], 0, () => legs(k, frame, W, 0.62, 0.88, 0.04, 0.06, "box"));
     k.box(top, [0, 0.9, z], [W, 0.07, 0.66]);
     k.box(frame, [0, 0.22, z], [W - 0.12, 0.04, 0.56]);
     // a pegboard with tools hanging on it
     const peg = m("#d8c39d");
-    k.box(peg, [0, 1.45, -d / 2 + 0.04], [W, 0.9, 0.03]);
+    k.box(peg, [0, 1.415, -d / 2 + 0.04], [W, 0.97, 0.03]);
     for (let x = -W / 2 + 0.1; x < W / 2; x += 0.12) for (let y = 1.08; y < 1.88; y += 0.12) k.box(m("#9b8662"), [x, y, -d / 2 + 0.056], [0.015, 0.015, 0.005], { outline: false });
     const metal = m(METAL);
     const handle = m("#c4534a");
@@ -425,11 +475,19 @@ const BUILDERS: Record<string, Builder> = {
     // a ladder at the other end
     const metal = m(METAL);
     for (const s of [-1, 1]) {
-      k.add("cyl8", metal, [w / 2 - c - 0.05, 0.4, s * 0.22], [0.04, 0.7, 0.04], { outline: 0.005 });
-      k.add("torus", metal, [w / 2 - c - 0.2, 0.75, s * 0.22], [0.3, 0.3, 0.3], { rot: [0, 0, 0], outline: 0.004 });
+      const x = w / 2 - c - 0.12;
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(x, 0.055, s * 0.22),
+        new THREE.Vector3(x, 0.57, s * 0.22),
+        new THREE.Vector3(x + 0.12, 0.72, s * 0.22),
+        new THREE.Vector3(x + 0.27, 0.57, s * 0.22),
+        new THREE.Vector3(x + 0.27, 0.12, s * 0.22),
+      ]);
+      k.add(new THREE.TubeGeometry(curve, 24, 0.02, 8, false), metal, [0, 0, 0], 1, { outline: 0.004, normals: true });
     }
-    // a float ring bobbing about
-    k.add("torus", m("#e07a5f"), [0.6, 0.09, 0.3], [0.9, 0.9, 2.6], { rot: [Math.PI / 2, 0, 0], outline: 0.008 });
+    for (const y of [0.16, 0.32, 0.48]) k.add("cyl8", metal, [w / 2 - c - 0.12, y, 0], [0.035, 0.44, 0.035], { rot: [Math.PI / 2, 0, 0], outline: 0.004 });
+    // A round float with a circular tube, rather than a vertically stretched ring.
+    k.add(new THREE.TorusGeometry(0.34, 0.08, 12, 36), m("#e07a5f"), [0.6, 0.11, 0.3], 1, { rot: [Math.PI / 2, 0, 0], outline: 0.006, normals: true });
   },
 
   lounger: (k, w, d, p, m) => {
@@ -437,6 +495,7 @@ const BUILDERS: Record<string, Builder> = {
     const cushion = str(p, "cushion", "#3d8fa3");
     const W = w - 0.36;
     legs(k, frame, W, d - 0.3, 0.26, 0.025, 0.04, "box");
+    for (const sx of [-1, 1]) k.box(frame, [sx * (W / 2 - 0.025), 0.255, 0], [0.05, 0.05, d - 0.28]);
     k.box(frame, [0, 0.27, 0.2], [W, 0.05, d - 0.7]);
     k.add("soft", m(cushion, "fabric"), [0, 0.33, 0.22], [W - 0.04, 0.07, d - 0.78]);
     // backrest tilted up at the head end
@@ -463,6 +522,7 @@ const BUILDERS: Record<string, Builder> = {
 
   shrub: (k, _w, _d, p, m, seed) => {
     const leaves = str(p, "leaves", "#88a873");
+    k.add("cyl8", m("#7a5c43", "wood"), [0, 0.18, 0], [0.09, 0.36, 0.09]);
     const r = rng(seed);
     for (let i = 0; i < 7; i++) {
       const a = r() * Math.PI * 2;
@@ -472,7 +532,9 @@ const BUILDERS: Record<string, Builder> = {
     }
     for (let i = 0; i < 6; i++) {
       const a = r() * Math.PI * 2;
-      k.add("sphere", m(i % 2 ? "#f4efe4" : "#ecc9bd"), [Math.cos(a) * 0.32, 0.42 + r() * 0.3, Math.sin(a) * 0.32], 0.06, { outline: 0.004 });
+      const flower = new THREE.Vector3(Math.cos(a) * 0.32, 0.42 + r() * 0.3, Math.sin(a) * 0.32);
+      rod(k, m(shade(leaves, 0.75)), new THREE.Vector3(flower.x * 0.6, 0.32, flower.z * 0.6), flower, 0.012);
+      k.add("sphere", m(i % 2 ? "#f4efe4" : "#ecc9bd"), flower.toArray(), 0.06, { outline: 0.004 });
     }
   },
 };
@@ -529,11 +591,19 @@ function leaf(k: Kit, m: Mat, hingeX: number, width: number, height: number, ope
     const cx = sign * (width / 2);
     const wood = m(color, "wood");
     const panel = m(shade(color, 1.07), "wood");
-    k.box(wood, [cx, height / 2 + 0.01, 0], [width, height, 0.045], { outline: 0.01 });
+    if (glass) {
+      const glassH = height * 0.5;
+      const glassY = height * 0.68;
+      for (const side of [-1, 1]) k.box(wood, [cx + side * (width / 2 - 0.04), height / 2 + 0.01, 0], [0.08, height, 0.045], { outline: 0.008 });
+      const lowerTop = glassY - glassH / 2;
+      k.box(wood, [cx, (0.01 + lowerTop) / 2, 0], [width - 0.16, lowerTop - 0.01, 0.045], { outline: 0.008 });
+      const upperBottom = glassY + glassH / 2;
+      k.box(wood, [cx, (upperBottom + height + 0.01) / 2, 0], [width - 0.16, height + 0.01 - upperBottom, 0.045], { outline: 0.008 });
+      k.box(m("#cfe2ea", undefined, 0.5), [cx, glassY, 0], [width - 0.16, glassH, 0.012], { outline: false });
+    } else k.box(wood, [cx, height / 2 + 0.01, 0], [width, height, 0.045], { outline: 0.01 });
     for (const s of [-1, 1]) {
       const z = s * 0.026;
       if (glass) {
-        k.box(m("#cfe2ea", undefined, 0.5), [cx, height * 0.68, 0], [width - 0.16, height * 0.5, 0.05], { outline: false });
         k.box(wood, [cx, height * 0.68, z], [0.03, height * 0.5, 0.008], { outline: 0.004 });
         k.box(wood, [cx, height * 0.68, z], [width - 0.16, 0.03, 0.008], { outline: 0.004 });
         k.box(panel, [cx, height * 0.22, z], [width - 0.2, height * 0.26, 0.01], { outline: 0.005 });
