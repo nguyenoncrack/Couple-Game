@@ -15,5 +15,13 @@
     { "id": "carpet_sand", "name": "Sand carpet", "color": "#d9c7a7", "finish": "carpet" },
     { "id": "stone", "name": "Stone pavers", "color": "#bdb5a8", "finish": "setts" },
     { "id": "concrete", "name": "Concrete", "color": "#c8c3b9", "finish": "concrete" }
+  ],
+  "roofStyles": [
+    { "id": "roof_terracotta", "name": "Terracotta", "color": "#c9694a", "finish": "shingle", "ceiling": "#f4ecdf" },
+    { "id": "roof_slate", "name": "Slate", "color": "#6d7684", "finish": "shingle", "ceiling": "#f1ede6" },
+    { "id": "roof_cedar", "name": "Cedar shakes", "color": "#a9774a", "finish": "shingle", "ceiling": "#e6c9a2" },
+    { "id": "roof_moss", "name": "Moss green", "color": "#68905c", "finish": "shingle", "ceiling": "#f2eee2" },
+    { "id": "roof_sky", "name": "Sky blue", "color": "#77a3c2", "finish": "shingle", "ceiling": "#f3efe8" },
+    { "id": "roof_plum", "name": "Plum", "color": "#8a5a72", "finish": "shingle", "ceiling": "#f4ece6" }
   ]
 }

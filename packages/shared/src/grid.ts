@@ -82,3 +82,38 @@ export function openingEdges(dir: "h" | "v", x: number, z: number, width: number
   for (let i = 0; i < width; i++) out.push(dir === "h" ? edgeKey("h", x + i, z) : edgeKey("v", x, z + i));
   return out;
 }
+
+/**
+ * Cells shut in by walls: the ones you can't walk to from outside the lot without going through a wall. Doors
+ * don't count as gaps, so a room with a door is still inside. Handy for putting a roof over a whole house.
+ */
+export function enclosedCells(walls: Record<EdgeKey, unknown>, w: number, d: number): CellKey[] {
+  const outside = new Set<number>();
+  const queue: number[] = [];
+  const reach = (x: number, z: number, edge: EdgeKey) => {
+    const i = z * w + x;
+    if (walls[edge] || outside.has(i)) return;
+    outside.add(i);
+    queue.push(i);
+  };
+  for (let x = 0; x < w; x++) {
+    reach(x, 0, edgeKey("h", x, 0));
+    reach(x, d - 1, edgeKey("h", x, d));
+  }
+  for (let z = 0; z < d; z++) {
+    reach(0, z, edgeKey("v", 0, z));
+    reach(w - 1, z, edgeKey("v", w, z));
+  }
+  while (queue.length) {
+    const i = queue.pop()!;
+    const x = i % w;
+    const z = (i - x) / w;
+    if (x > 0) reach(x - 1, z, edgeKey("v", x, z));
+    if (x < w - 1) reach(x + 1, z, edgeKey("v", x + 1, z));
+    if (z > 0) reach(x, z - 1, edgeKey("h", x, z));
+    if (z < d - 1) reach(x, z + 1, edgeKey("h", x, z + 1));
+  }
+  const out: CellKey[] = [];
+  for (let z = 0; z < d; z++) for (let x = 0; x < w; x++) if (!outside.has(z * w + x)) out.push(cellKey(x, z));
+  return out;
+}

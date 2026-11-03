@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { Scene } from "../render/Scene";
 import { act, connect, disconnect, openChat, redo, setFirstPerson, setMode, setTool, undo, useGame, type Tool } from "../state/game";
 import { wantMusic } from "../state/music";
-import { cycleWallMode, Hud, TOOL_KEYS } from "../ui/Hud";
+import { cycleWallMode, Hud, TOOL_KEYS, toggleRoof } from "../ui/Hud";
 
 export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => void }) {
   const ready = useGame((s) => s.view !== null);
@@ -19,7 +19,7 @@ export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => v
     const key = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLElement && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
       const k = e.key.toLowerCase();
-      if (e.repeat && (k === "v" || k === "l" || k === "t")) return;
+      if (e.repeat && (k === "v" || k === "l" || k === "t" || k === "o")) return;
       if (e.metaKey || e.ctrlKey) {
         if (k === "z") {
           e.preventDefault();
@@ -39,6 +39,7 @@ export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => v
       const s = useGame.getState();
       if (k === "l") return setMode(s.mode === "live" ? "build" : "live");
       if (k === "t") return cycleWallMode();
+      if (k === "o") return toggleRoof();
       if (s.mode === "live") {
         if (k === "v") setFirstPerson(!s.firstPerson);
         else if (k === "f" && !s.firstPerson) useGame.setState({ follow: !s.follow });

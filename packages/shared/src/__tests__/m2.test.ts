@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyBlueprint, upgradeBlueprint, type Blueprint } from "../blueprint";
+import { BLUEPRINT_SCHEMA, emptyBlueprint, upgradeBlueprint, type Blueprint } from "../blueprint";
 import { edgesBetween } from "../grid";
 import { Op } from "../ops";
 import { applyOp } from "../rules";
@@ -41,7 +41,7 @@ describe("doors and windows", () => {
   it("upgrades houses saved before doors existed", () => {
     const old = { schema: 1, lot: { w: 4, d: 4 }, levels: [{ walls: {}, tiles: {}, objects: {} }] };
     const bp = upgradeBlueprint(old as never);
-    expect(bp.schema).toBe(2);
+    expect(bp.schema).toBe(BLUEPRINT_SCHEMA);
     expect(bp.levels[0]!.openings).toEqual({});
   });
 });

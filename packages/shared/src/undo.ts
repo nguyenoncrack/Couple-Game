@@ -57,6 +57,12 @@ function inverseSingle(bp: Blueprint, op: SingleOp, cat: Catalog): SingleOp[] {
       for (const [material, cells] of groupBy(changed, (c) => level.tiles[c]?.material ?? null)) out.push({ t: "floor.paint", level: L, cells, material });
       return out;
     }
+    case "roof.paint": {
+      const out: SingleOp[] = [];
+      const changed = op.cells.filter((c) => (level.roofs[c]?.style ?? null) !== op.style);
+      for (const [style, cells] of groupBy(changed, (c) => level.roofs[c]?.style ?? null)) out.push({ t: "roof.paint", level: L, cells, style });
+      return out;
+    }
     case "object.place":
       return [{ t: "object.remove", level: L, id: op.id }];
     case "object.move": {
@@ -114,6 +120,9 @@ export function undoCheck(bp: Blueprint, op: Op, cat: Catalog = defaultCatalog):
       }
       case "floor.paint":
         parts.push(s.cells.map((c) => level.tiles[c]?.material ?? null));
+        break;
+      case "roof.paint":
+        parts.push(s.cells.map((c) => level.roofs[c]?.style ?? null));
         break;
       case "object.place":
       case "object.move":

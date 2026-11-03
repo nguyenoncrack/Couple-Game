@@ -604,6 +604,40 @@ button.pill:active,
   gap: 10px;
 }
 
+/* Two-way switch inside a tool panel (roof: add or remove) */
+.seg {
+  display: flex;
+  gap: 4px;
+}
+
+.seg button {
+  flex: 1;
+  padding: 4px 10px;
+  font-family: var(--hand);
+  font-size: 17px;
+  background: #fffdf7;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  color: var(--ink);
+}
+
+.seg button.on {
+  background: var(--yellow);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.row-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.row-buttons .btn {
+  flex: 1;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
 .tool-panel.slim {
   padding: 8px 16px;
 }

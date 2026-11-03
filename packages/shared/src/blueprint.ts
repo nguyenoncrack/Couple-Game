@@ -5,7 +5,7 @@ import type { CellKey, EdgeKey, Rot } from "./grid";
  * Everything in it is keyed by a stable ID, so an edit names exactly what it touches.
  */
 
-export const BLUEPRINT_SCHEMA = 2;
+export const BLUEPRINT_SCHEMA = 3;
 
 export interface WallEdge {
   /** A wall style ID from the catalog. */
@@ -15,6 +15,12 @@ export interface WallEdge {
 export interface Tile {
   /** A floor material ID from the catalog. */
   material: string;
+}
+
+/** A roof over one cell. Neighbouring roofed cells join into one roof that slopes up from its edges. */
+export interface RoofCell {
+  /** A roof style ID from the catalog. */
+  style: string;
 }
 
 export interface PlacedObject {
@@ -42,6 +48,7 @@ export interface Level {
   tiles: Record<CellKey, Tile>;
   objects: Record<string, PlacedObject>;
   openings: Record<string, PlacedOpening>;
+  roofs: Record<CellKey, RoofCell>;
 }
 
 export interface Blueprint {
@@ -52,7 +59,7 @@ export interface Blueprint {
   levels: Level[];
 }
 
-export const emptyLevel = (): Level => ({ walls: {}, tiles: {}, objects: {}, openings: {} });
+export const emptyLevel = (): Level => ({ walls: {}, tiles: {}, objects: {}, openings: {}, roofs: {} });
 
 export function emptyBlueprint(w = 24, d = 20): Blueprint {
   return { schema: BLUEPRINT_SCHEMA, lot: { w, d }, levels: [emptyLevel()] };
@@ -65,8 +72,8 @@ export function emptyBlueprint(w = 24, d = 20): Blueprint {
 export function upgradeBlueprint(raw: Blueprint | (Omit<Blueprint, "schema"> & { schema: number })): Blueprint {
   const bp = raw as Blueprint;
   if (bp.schema === BLUEPRINT_SCHEMA) return bp;
-  // 1 → 2: doors and windows
-  return { ...bp, schema: BLUEPRINT_SCHEMA, levels: bp.levels.map((l) => ({ ...l, openings: l.openings ?? {} })) };
+  // 1 → 2: doors and windows; 2 → 3: roofs
+  return { ...bp, schema: BLUEPRINT_SCHEMA, levels: bp.levels.map((l) => ({ ...l, openings: l.openings ?? {}, roofs: l.roofs ?? {} })) };
 }
 
 /** A blueprint and the number of edits that produced it. */
