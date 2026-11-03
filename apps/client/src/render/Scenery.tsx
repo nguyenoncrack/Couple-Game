@@ -160,7 +160,7 @@ function woods(k: Kit, w: number, d: number, lake: ReturnType<typeof lakeShape>)
   const trunk = pencilMaterial("#7a5c43", { finish: "wood" });
   const farFir = [pencilMaterial("#3a7050", { rim: false, fog: 0.8 }), pencilMaterial("#2f6247", { rim: false, fog: 0.8 })];
   const clear = (x: number, z: number, margin: number) => {
-    if (x > -9 - margin && x < w + 9 + margin && z > -8 - margin && z < d + 13 + margin) return false; // the lot and its trees
+    if (x > -16 - margin && x < w + 9 + margin && z > -8 - margin && z < d + 13 + margin) return false; // the lot, the campsite and the playground
     if (z > d + 1.5 && z < d + 13 && x > -32 && x < w + 32) return false; // the street
     return !lake.inside(x, z, 3 + margin);
   };
