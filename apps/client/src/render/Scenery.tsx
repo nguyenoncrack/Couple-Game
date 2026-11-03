@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
 import { FOG, pencilMaterial, SUN_DIR } from "./pencil";
+import { Yard } from "./Yard";
 
 /**
  * The countryside around the lot: a lake behind the house with a little jetty, woods of firs and leafy trees
@@ -99,8 +100,9 @@ export function Scenery({ w, d }: { w: number; d: number }) {
     <group name="scenery">
       <Sky />
       <Lake lake={lake} />
-      <KitMesh deps={[w, d, lake]} make={(k) => woods(k, w, d, lake)} />
-      <KitMesh deps={[w, d]} make={(k) => mountains(k, w, d)} />
+      <Yard w={w} d={d} />
+      <KitMesh key="woods" deps={[w, d, lake]} make={(k) => woods(k, w, d, lake)} />
+      <KitMesh key="mountains" deps={[w, d]} make={(k) => mountains(k, w, d)} />
     </group>
   );
 }
