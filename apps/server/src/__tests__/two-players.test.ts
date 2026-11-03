@@ -1,5 +1,5 @@
 import type { AddressInfo } from "node:net";
-import { CLOSE, type ClientMsg, type HouseSummary, type Op, type ServerMsg } from "@cg/shared";
+import { DEFAULT_APPEARANCE, CLOSE, type ClientMsg, type HouseSummary, type Op, type ServerMsg } from "@cg/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createApp } from "../app";
@@ -455,5 +455,56 @@ describe("living together", () => {
     expect(welcome.life.avatars[wa.memberId]).toMatchObject({ use: { objectId: "chair00001", action: "sit" } });
     await again.disconnect();
     await old.close();
+  });
+});
+
+
+describe("character appearance", () => {
+  it("saves to the signed-in account, broadcasts to the partner, and survives reconnect without editing the house", async () => {
+    const { a, b, houseId } = await couple();
+    const first = await a.connect();
+    await b.connect();
+    await a.next("members");
+    await a.next("life"); // the partner arrived; not an appearance change
+    a.send({ type: "life", intent: { do: "walk", x: 5, z: 5 } });
+    const walking = await a.next("life");
+    await b.next("life");
+    a.inbox = []; b.inbox = [];
+    const look = { ...DEFAULT_APPEARANCE, gender: "girl", hairstyle: "braid", skinTone: "umber", outfit: "skirt" };
+    const saved = await call("PUT", "/api/account/appearance", look, a.cookie);
+    expect(saved.status).toBe(200);
+    expect((await call("GET", "/api/account/appearance", undefined, a.cookie)).body).toEqual({ appearance: look });
+    const update = await b.next("members", (m) => m.members.some((x) => x.id === first.memberId && x.appearance?.hairstyle === "braid"));
+    expect(update.members.find((x) => x.id === first.memberId)?.appearance).toEqual(look);
+    expect((await call("GET", "/api/me", undefined, a.cookie)).body).toMatchObject({ account: { appearance: look } });
+    expect((await call("GET", "/api/me", undefined, b.cookie)).body).toMatchObject({ account: { appearance: null } });
+    expect(a.inbox.some((m) => m.type === "applied" || m.type === "life")).toBe(false);
+    expect(b.inbox.some((m) => m.type === "applied" || m.type === "life")).toBe(false);
+    await a.disconnect();
+    const rejoined = await a.connect();
+    expect(rejoined.members.find((x) => x.id === first.memberId)?.appearance).toEqual(look);
+    expect(rejoined.sync).toEqual(first.sync);
+    expect(rejoined.life.avatars[first.memberId]?.path).toEqual(walking.life.avatars[first.memberId]?.path);
+    expect(rejoined.life.avatars[first.memberId]?.startedAt).toBe(walking.life.avatars[first.memberId]?.startedAt);
+    expect((await db.directory.listMembers(houseId)).find((x) => x.id === first.memberId)?.appearance).toEqual(look);
+    await a.disconnect(); await b.disconnect();
+  });
+
+  it("requires sign-in and rejects invalid or gameplay-bearing payloads", async () => {
+    expect((await call("PUT", "/api/account/appearance", DEFAULT_APPEARANCE)).status).toBe(401);
+    const cookie = await signUp("Wardrobe test");
+    for (const invalid of [{ ...DEFAULT_APPEARANCE, outfit: "flight" }, { ...DEFAULT_APPEARANCE, speed: 100 }, { ...DEFAULT_APPEARANCE, accountId: "another-account" }]) {
+      expect((await call("PUT", "/api/account/appearance", invalid, cookie)).status).toBe(400);
+    }
+    expect((await call("GET", "/api/me", undefined, cookie)).body).toMatchObject({ account: { appearance: null } });
+  });
+
+  it("keeps independent looks for two accounts, including concurrent saves", async () => {
+    const { a, b } = await couple();
+    const girl = { ...DEFAULT_APPEARANCE, gender: "girl", hairstyle: "waves", outfit: "shorts" };
+    const [one, two] = await Promise.all([call("PUT", "/api/account/appearance", DEFAULT_APPEARANCE, a.cookie), call("PUT", "/api/account/appearance", girl, b.cookie)]);
+    expect(one.status).toBe(200); expect(two.status).toBe(200);
+    expect((await call("GET", "/api/me", undefined, a.cookie)).body).toMatchObject({ account: { appearance: DEFAULT_APPEARANCE } });
+    expect((await call("GET", "/api/me", undefined, b.cookie)).body).toMatchObject({ account: { appearance: girl } });
   });
 });

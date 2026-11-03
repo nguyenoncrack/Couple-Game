@@ -133,7 +133,18 @@ export class HouseRoom {
 
   private memberInfo(): MemberInfo[] {
     const online = new Set([...this.peers].map((p) => p.memberId));
-    return this.members.map((m) => ({ id: m.id, name: m.name, color: m.color, role: m.role, online: online.has(m.id) }));
+    return this.members.map((m) => ({ id: m.id, name: m.name, color: m.color, role: m.role, online: online.has(m.id), appearance: m.appearance ?? null }));
+  }
+
+  /** Refresh cosmetics through the same queue, without advancing life or blueprint history. */
+  refreshAppearance(accountId: string) {
+    return this.enqueue(async () => {
+      if (!this.members.some((m) => m.accountId === accountId)) return;
+      const latest = await this.listMembers();
+      // Change only appearance; membership and gameplay are handled by their existing paths.
+      this.members = this.members.map((m) => ({ ...m, appearance: latest.find((n) => n.id === m.id)?.appearance ?? null }));
+      this.broadcast({ type: "members", members: this.memberInfo() });
+    });
   }
 
   private broadcast(msg: ServerMsg, except?: Peer) {

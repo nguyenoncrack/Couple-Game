@@ -1,3 +1,4 @@
+import { CharacterButton } from "../features/character/CharacterButton";
 import type { HouseSummary, Me } from "@cg/shared";
 import { useState, type FormEvent } from "react";
 import { ApiError, changePassword, createHouse, joinHouse, leaveHouse, signOut } from "../net/api";
@@ -55,6 +56,7 @@ export function Home({ me, setMe, initialCode, notice, onOpen, onAdded, onSigned
       </header>
 
       <div className="account-bar">
+        <CharacterButton onSaved={(appearance) => setMe({ ...me, account: { ...me.account, appearance } })} />
         <span className="hand">
           Hi, <b>{me.account.name}</b>
         </span>

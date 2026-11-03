@@ -1,4 +1,4 @@
-import { activityAt, positionAt, type Avatar, type MemberInfo } from "@cg/shared";
+import { normalizeAppearance, activityAt, positionAt, type Avatar, type MemberInfo } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -6,10 +6,8 @@ import type * as THREE from "three";
 import { serverNow, useGame } from "../state/game";
 import { cameraFollow, cameraGestureActive } from "./CameraRig";
 import { FLOOR_Y } from "./House";
-import type { Kit } from "./kit";
+import { HIP, THIGH, TORSO, SHOULDER, torso, arm, thigh, shin, looksFor, customizedLooks } from "../features/character/characterParts";
 import { KitMesh } from "./KitMesh";
-import { shade } from "./models";
-import { pencilMaterial } from "./pencil";
 
 /**
  * The two of you, drawn in pencil like the furniture. Each character is a few jointed parts (body, arms, thighs,
@@ -17,86 +15,6 @@ import { pencilMaterial } from "./pencil";
  * the time they set off, so both screens work out the same position every frame without more messages. Things
  * you say float over your head for a few seconds; hearts float up while you hug, kiss or cuddle.
  */
-
-const SKIN = ["#f1d2b6", "#e2b48f", "#c68d63", "#9a6644", "#6e4630"];
-const HAIR = ["#3b2b22", "#6b4630", "#b9874f", "#2a2522", "#8a3f2a", "#d8c28e"];
-type HairStyle = "short" | "bun" | "long" | "curly";
-const STYLES: HairStyle[] = ["short", "bun", "long", "curly"];
-
-function hash(s: string) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return h >>> 0;
-}
-
-/** Looks picked from the member ID, so each person always looks the same on both screens. */
-function looksFor(id: string, color: string) {
-  const h = hash(id);
-  return {
-    skin: SKIN[h % SKIN.length]!,
-    hair: HAIR[(h >>> 4) % HAIR.length]!,
-    style: STYLES[(h >>> 8) % STYLES.length]!,
-    sweater: color,
-    trousers: ["#4d5866", "#5e5246", "#3f4a3c"][(h >>> 12) % 3]!,
-  };
-}
-
-/** Body measurements in metres. */
-const HIP = 0.8;
-const THIGH = 0.4;
-const SHIN = 0.38;
-const TORSO = 0.56;
-const ARM = 0.52;
-const SHOULDER = 0.19;
-
-type Looks = ReturnType<typeof looksFor>;
-
-function torso(k: Kit, l: Looks) {
-  const sweater = pencilMaterial(l.sweater, { finish: "fabric" });
-  const cuff = pencilMaterial(shade(l.sweater, 0.82), { finish: "fabric" });
-  const skin = pencilMaterial(l.skin);
-  const hair = pencilMaterial(l.hair, { finish: "fabric" });
-  const ink = pencilMaterial("#3a3631");
-  // hips and sweater
-  k.add("soft", pencilMaterial(l.trousers, { finish: "fabric" }), [0, 0.02, 0], [0.34, 0.16, 0.22]);
-  k.add("soft", sweater, [0, TORSO / 2 + 0.02, 0], [0.38, TORSO, 0.24]);
-  k.add("cyl", cuff, [0, 0.09, 0], [0.37, 0.07, 0.23], { outline: 0.006 });
-  // neck and head
-  k.add("cyl", skin, [0, TORSO + 0.06, 0], [0.09, 0.1, 0.09], {
-    outline: false,
-  });
-  const hy = TORSO + 0.22;
-  k.add("sphere", skin, [0, hy, 0], [0.26, 0.28, 0.25]);
-  for (const sx of [-1, 1])
-    k.add("sphere", ink, [sx * 0.055, hy + 0.01, 0.118], 0.026, {
-      outline: false,
-    });
-  k.add("sphere", pencilMaterial(shade(l.skin, 0.85)), [0, hy - 0.035, 0.125], [0.04, 0.03, 0.03], { outline: false });
-  // hair
-  k.add("half", hair, [0, hy + 0.02, -0.01], [0.285, 0.26, 0.275]);
-  if (l.style === "bun") k.add("sphere", hair, [0, hy + 0.13, -0.09], 0.12);
-  if (l.style === "long") k.add("soft", hair, [0, hy - 0.1, -0.08], [0.27, 0.3, 0.1]);
-  if (l.style === "curly")
-    for (let i = 0; i < 7; i++) k.add("sphere", hair, [Math.cos(i * 0.9) * 0.12, hy + 0.08 + (i % 2) * 0.04, Math.sin(i * 0.9) * 0.1 - 0.02], 0.1);
-  if (l.style === "short")
-    k.add("soft", hair, [0, hy + 0.08, 0.06], [0.24, 0.07, 0.12], {
-      rot: [0.3, 0, 0],
-    });
-}
-
-function arm(k: Kit, l: Looks) {
-  k.add("soft", pencilMaterial(l.sweater, { finish: "fabric" }), [0, -ARM / 2 + 0.04, 0], [0.11, ARM - 0.06, 0.11]);
-  k.add("sphere", pencilMaterial(l.skin), [0, -ARM + 0.02, 0], 0.085);
-}
-
-function thigh(k: Kit, l: Looks) {
-  k.add("soft", pencilMaterial(l.trousers, { finish: "fabric" }), [0, -THIGH / 2, 0], [0.14, THIGH + 0.04, 0.15]);
-}
-
-function shin(k: Kit, l: Looks) {
-  k.add("soft", pencilMaterial(l.trousers, { finish: "fabric" }), [0, -SHIN / 2 + 0.02, 0], [0.12, SHIN, 0.13]);
-  k.add("soft", pencilMaterial("#3d3833", { finish: "stone" }), [0, -SHIN + 0.03, 0.05], [0.13, 0.08, 0.24]);
-}
 
 /** Joint angles (radians, about x; negative swings forward) and how the whole body sits. */
 interface Pose {
@@ -266,7 +184,7 @@ function SpeechBubble({ memberId }: { memberId: string }) {
 }
 
 function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner: Avatar | null; member: MemberInfo; mine: boolean }) {
-  const looks = useMemo(() => looksFor(member.id, member.color), [member.id, member.color]);
+  const looks = useMemo(() => member.appearance ? customizedLooks(normalizeAppearance(member.appearance)) : looksFor(member.id, member.color), [member.id, member.color, member.appearance]);
   const live = useGame((s) => s.mode === "live");
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
@@ -366,7 +284,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
         </group>
         {([-1, 1] as const).map((sx) => (
           <group key={sx} ref={sx < 0 ? thighL : thighR} position={[sx * 0.09, 0, 0]}>
-            <KitMesh make={(k) => thigh(k, looks)} deps={[looks]} />
+            <KitMesh make={(k) => thigh(k, looks, sx)} deps={[looks]} />
             <group ref={sx < 0 ? kneeL : kneeR} position={[0, -THIGH, 0]}>
               <KitMesh make={(k) => shin(k, looks)} deps={[looks]} />
             </group>

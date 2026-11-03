@@ -1,3 +1,4 @@
+import type { Appearance } from "./appearance";
 import { z } from "zod";
 import type { HouseState } from "./blueprint";
 import { ACTIONS } from "./catalog";
@@ -74,6 +75,8 @@ export interface ChatMessage {
 }
 
 export interface MemberInfo {
+  /** Account cosmetics, separate from life and blueprint state. Null preserves the original look. */
+  appearance?: Appearance | null;
   id: string;
   name: string;
   color: string;
@@ -126,6 +129,7 @@ export type ServerMsg =
 
 /** The signed-in player, as the API reports them. */
 export interface AccountInfo {
+  appearance?: Appearance | null;
   id: string;
   name: string;
 }

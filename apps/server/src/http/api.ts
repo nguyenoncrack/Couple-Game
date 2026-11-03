@@ -1,4 +1,4 @@
-import { applyOp, emptyBlueprint, newId, starterHouseOp, type Blueprint, type HouseSummary, type Me } from "@cg/shared";
+import { AppearanceSchema, applyOp, emptyBlueprint, newId, starterHouseOp, type Blueprint, type HouseSummary, type Me } from "@cg/shared";
 import { z } from "zod";
 import { DUMMY_HASH, hashPassword, hashToken, newInviteCode, newToken, normalizeInviteCode, verifyPassword } from "../auth/crypto";
 import { clearedSessionCookie, sessionCookie, signedIn } from "../auth/session";
@@ -14,6 +14,7 @@ const MAX_BODY = 4 * 1024;
 /** What the API needs from wherever it runs. */
 export interface ApiDeps {
   directory: Directory;
+  appearanceChanged?: (accountId: string) => Promise<void>;
   /** Give a brand-new house its first snapshot (on Cloudflare, in the house's own Durable Object). */
   initHouse(houseId: string, snapshot: Snapshot): Promise<void>;
   /** Forget a house's contents once its last member has left. */
@@ -88,7 +89,8 @@ function summary(house: HouseRow, members: MemberRow[], accountId: string): Hous
 }
 
 /** JSON API: accounts and sign-in, your houses, making and joining houses. */
-export function createApi({ directory, initHouse, dropHouse, passwordRounds }: ApiDeps) {
+export function createApi({ directory, initHouse, dropHouse, passwordRounds, appearanceChanged }: ApiDeps) {
+  const appearanceLimit = new RateLimiter(12, 0.5);
   const signUpLimit = new RateLimiter(5, 5 / 60);
   const signInLimit = new RateLimiter(10, 10 / 60);
   const createLimit = new RateLimiter(5, 5 / 60);
@@ -96,7 +98,7 @@ export function createApi({ directory, initHouse, dropHouse, passwordRounds }: A
 
   async function me(account: AccountRow): Promise<Me> {
     const houses = await directory.housesFor(account.id);
-    return { account, houses: houses.map((h) => summary(h.house, h.members, account.id)) };
+    return { account: { ...account, appearance: await directory.getAppearance(account.id) }, houses: houses.map((h) => summary(h.house, h.members, account.id)) };
   }
 
   /** Houses this browser joined before accounts: each old token that checks out becomes this account's. */
@@ -202,6 +204,15 @@ export function createApi({ directory, initHouse, dropHouse, passwordRounds }: A
       }
       if (!who) throw new HttpError(401, "signed-out", "Please sign in.");
       if (route === "GET /api/me") return json(200, await me(who.account));
+      if (route === "GET /api/account/appearance") return json(200, { appearance: await directory.getAppearance(who.account.id) });
+      if (route === "PUT /api/account/appearance") {
+        if (!appearanceLimit.take(who.account.id)) throw new HttpError(429, "rate-limited", "Give your last look a moment to save, then try again.");
+        const appearance = await body(req, AppearanceSchema, "Choose one of the available character options.");
+        await directory.setAppearance(who.account.id, appearance);
+        // A disconnected house can pick up the saved look on its next join.
+        try { await appearanceChanged?.(who.account.id); } catch (e) { console.warn("[appearance notification]", e); }
+        return json(200, { appearance: await directory.getAppearance(who.account.id) });
+      }
       if (route === "POST /api/account/password") return await changePassword(req, who);
       if (route === "POST /api/claims") {
         await claim(who.account, (await body(req, ClaimBody)).claims);

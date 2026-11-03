@@ -1,4 +1,4 @@
-import type { DeviceClaim, HouseSummary, Me } from "@cg/shared";
+import type { Appearance, DeviceClaim, HouseSummary, Me } from "@cg/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -36,3 +36,7 @@ export const claimHouses = (claims: DeviceClaim[]) => call<Me>("POST", "/api/cla
 export const createHouse = (houseName: string, starter = false) => call<HouseSummary>("POST", "/api/houses", { houseName, starter });
 export const joinHouse = (code: string) => call<HouseSummary>("POST", "/api/join", { code });
 export const leaveHouse = (houseId: string) => call<{ ok: true }>("DELETE", `/api/houses/${houseId}`);
+
+export const saveAppearance = (appearance: Appearance) => call<{ appearance: Appearance }>("PUT", "/api/account/appearance", appearance);
+
+export const getAppearance = () => call<{ appearance: Appearance | null }>("GET", "/api/account/appearance");
