@@ -5,6 +5,8 @@ import { redo, setTool, submit, undo, useGame, type Tool } from "../state/game";
 import { cameraApi } from "../render/CameraRig";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
 import { Icon } from "./icons";
+import { CatalogSearch } from "./CatalogSearch";
+import { searchCatalog } from "./filterCatalog";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -268,6 +270,7 @@ function ToolPanel() {
   const floorMaterial = useGame((s) => s.floorMaterial);
   const placing = useGame((s) => s.placing);
   const [category, setCategory] = useState<Category>("living");
+  const [query, setQuery] = useState("");
 
   if (tool === "wall")
     return (
@@ -300,18 +303,23 @@ function ToolPanel() {
       </div>
     );
   if (tool === "buy") {
-    const items: (FurnitureItem | OpeningItem)[] = category === "openings" ? [...catalog.openings.values()] : [...catalog.furniture.values()].filter((i) => i.category === category);
+    const searching = Boolean(query.trim());
+    const items: (FurnitureItem | OpeningItem)[] = searching
+      ? searchCatalog([...catalog.furniture.values(), ...catalog.openings.values()], query)
+      : category === "openings" ? [...catalog.openings.values()] : [...catalog.furniture.values()].filter((i) => i.category === category);
     const placingOpening = placing ? catalog.openings.has(placing.catalogId) : false;
     return (
       <div className="card tool-panel catalog">
         <div className="tabs">
           {CATEGORIES.map((c) => (
-            <button key={c.id} className={`tab ${category === c.id ? "active" : ""}`} onClick={() => setCategory(c.id)}>
+            <button key={c.id} className={`tab ${!searching && category === c.id ? "active" : ""}`} aria-pressed={!searching && category === c.id} onClick={() => { setCategory(c.id); setQuery(""); }}>
               {c.label}
             </button>
           ))}
         </div>
-        <div className="items">
+        <CatalogSearch query={query} onChange={setQuery} count={items.length} />
+        {searching && items.length === 0 && <p className="catalog-empty hand">Nothing found. Try “sofa”, “sink” or “window”, or clear your search.</p>}
+        <div className="items" key={searching ? query : category}>
           {items.map((i) => (
             <button
               key={i.id}
