@@ -64,17 +64,30 @@ function openingSpan(o: PlacedOpening, item: OpeningItem) {
   return { at: o.dir === "h" ? o.z : o.x, from: a, to: a + item.width };
 }
 
-/** The doors and windows whose middle lies in this run (each belongs to exactly one run). */
+/** Every opening touching this run must cut a gap, even across a change in wall finish. */
 export function openingsInRun(run: Run, openings: Level["openings"]) {
   const out: { o: PlacedOpening; item: OpeningItem }[] = [];
   for (const o of Object.values(openings)) {
     const item = catalog.openings.get(o.catalogId);
     if (!item || o.dir !== run.dir) continue;
     const s = openingSpan(o, item);
-    const mid = (s.from + s.to) / 2;
-    if (s.at === run.at && mid > run.from && mid < run.to) out.push({ o, item });
+    if (s.at === run.at && s.from < run.to && s.to > run.from) out.push({ o, item });
   }
   return out;
+}
+
+/** Cut all overlapping wall sections, but draw each opening model in exactly one section. */
+export function wallGroups(level: Pick<Level, "walls" | "openings">) {
+  return wallRuns(level.walls).map((run) => {
+    const openings = openingsInRun(run, level.openings);
+    const models = openings.filter(({ o, item }) => {
+      const span = openingSpan(o, item);
+      const mid = (span.from + span.to) / 2;
+      // Half-open bounds assign a centre on a finish seam to just one run.
+      return mid >= run.from && mid < run.to;
+    });
+    return { run, openings, models };
+  });
 }
 
 /**
@@ -145,8 +158,7 @@ export function Walls({
   onOpeningDown: (id: string, e: ThreeEvent<PointerEvent>) => void;
 }) {
   const mode = useGame((s) => s.wallMode);
-  const runs = useMemo(() => wallRuns(level.walls), [level.walls]);
-  const groups = useMemo(() => runs.map((run) => ({ run, openings: openingsInRun(run, level.openings) })), [runs, level.openings]);
+  const groups = useMemo(() => wallGroups(level), [level.walls, level.openings]);
   const full = useRef<(THREE.Group | null)[]>([]);
   const low = useRef<(THREE.Group | null)[]>([]);
 
@@ -165,20 +177,20 @@ export function Walls({
 
   return (
     <>
-      {groups.map(({ run, openings }, i) => {
+      {groups.map(({ run, openings, models }, i) => {
         const key = `${run.dir}|${run.at}|${run.from}|${run.style}`;
         return (
           <group key={key}>
             {mode !== "down" && (
               <group ref={(g) => void (full.current[i] = g)}>
                 <WallRun run={run} openings={openings} height={WALL_H} />
-                {openings.map(({ o, item }) => o.id !== hiddenOpening && <OpeningModel key={o.id} o={o} item={item} low={null} onDown={onOpeningDown} />)}
+                {models.map(({ o, item }) => o.id !== hiddenOpening && <OpeningModel key={o.id} o={o} item={item} low={null} onDown={onOpeningDown} />)}
               </group>
             )}
             {mode !== "up" && (
               <group ref={(g) => void (low.current[i] = g)} visible={mode === "down"}>
                 <WallRun run={run} openings={openings} height={WALL_DOWN_H} />
-                {openings.map(({ o, item }) => o.id !== hiddenOpening && <OpeningModel key={o.id} o={o} item={item} low={WALL_DOWN_H} onDown={onOpeningDown} />)}
+                {models.map(({ o, item }) => o.id !== hiddenOpening && <OpeningModel key={o.id} o={o} item={item} low={WALL_DOWN_H} onDown={onOpeningDown} />)}
               </group>
             )}
           </group>
