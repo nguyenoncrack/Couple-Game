@@ -464,7 +464,7 @@ function ToolPanel() {
               : category === "openings"
                 ? "Pick a door or window, then click on a wall."
                 : category === "entertainment"
-                  ? "Games-room pieces · decorative for now. Pick one to place."
+                  ? "Play PS5 near a TV in Live mode. Tables are decorative for now."
                   : "Pick something, then click on the lot."}
         </p>
       </div>

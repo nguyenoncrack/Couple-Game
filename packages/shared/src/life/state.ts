@@ -42,8 +42,10 @@ export interface Use {
   with?: string;
   /** A hug or kiss starts once you've both got there; until then you wait, facing each other. */
   startsAt?: number;
-  /** Watching: the TV. When it isn't the object being used, you're watching from a seat. */
+  /** Watching or gaming: the TV. When it isn't the object being used, you're on a seat. */
   tv?: string;
+  /** Gaming: the console providing a controller; objectId still reserves the seat or TV floor spot. */
+  consoleId?: string;
 }
 
 export interface Avatar {

@@ -16,7 +16,7 @@ const hex = z.string().regex(/^#[0-9a-f]{6}$/i);
  * Things a character can do with a piece of furniture. Station actions are where recipe steps happen. Watching
  * is done from a seat facing a TV (or the floor in front of it, if there's none).
  */
-export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep", "watch", "swim", "bathe", "toilet", "wash"] as const;
+export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep", "watch", "play", "swim", "bathe", "toilet", "wash"] as const;
 export const STATIONS = ["stove", "counter"] as const;
 
 /**
