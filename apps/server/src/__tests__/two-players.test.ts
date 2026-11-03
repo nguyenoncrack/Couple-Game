@@ -428,6 +428,32 @@ describe("living together", () => {
     await a.disconnect();
   });
 
+  it("shares blackjack hands and results, rejects stale deals, and restores the table on reconnect", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect(); const wb = await b.connect();
+    a.op("cards00001", { t: "object.place", level: 0, id: "table00001", catalogId: "blackjack_table", x: 12, z: 18, rot: 0 });
+    await a.next("applied");
+    a.send({ type: "life", intent: { do: "use", objectId: "table00001", action: "blackjack" } });
+    b.send({ type: "life", intent: { do: "use", objectId: "table00001", action: "blackjack" } });
+    await a.next("life", (m) => m.life.avatars[wa.memberId]?.use?.action === "blackjack" && m.life.avatars[wb.memberId]?.use?.action === "blackjack");
+    a.send({ type: "life", intent: { do: "cards", objectId: "table00001", roundId: null, action: "deal" } });
+    const dealt = await a.next("life", (m) => Boolean(m.life.blackjack?.table00001));
+    const mirrored = await b.next("life", (m) => Boolean(m.life.blackjack?.table00001));
+    expect(mirrored.life.blackjack).toEqual(dealt.life.blackjack);
+    const round = dealt.life.blackjack!.table00001!;
+    expect(Object.keys(round.hands).sort()).toEqual([wa.memberId, wb.memberId].sort());
+    a.send({ type: "life", intent: { do: "cards", objectId: "table00001", roundId: null, action: "deal" } });
+    expect((await a.next("lifeRejected")).reason).toBe("round-changed");
+    for (const [player, id] of [[a, wa.memberId], [b, wb.memberId]] as const) if (round.hands[id]!.status === "playing")
+      player.send({ type: "life", intent: { do: "cards", objectId: "table00001", roundId: round.id, action: "stand" } });
+    const finished = await a.next("life", (m) => m.life.blackjack?.table00001?.phase === "finished");
+    expect(Object.values(finished.life.blackjack!.table00001!.hands).every((h) => h.result)).toBe(true);
+    await a.disconnect();
+    const welcome = await a.connect();
+    expect(welcome.life.blackjack).toEqual(finished.life.blackjack);
+    await a.disconnect(); await b.disconnect();
+  });
+
   it("syncs two PS5 players on separate seats and keeps gaming across a reconnect", async () => {
     const { a, b } = await couple();
     const wa = await a.connect();

@@ -18,8 +18,9 @@ it.each(["ping_pong_table", "ps5_setup", "blackjack_table"])("%s places in every
     if (!placed.ok) throw new Error(placed.reason);
     const restored = JSON.parse(JSON.stringify(placed.blueprint));
     expect(restored.levels[0].objects[object.id]).toMatchObject(object);
-    if (catalogId !== "ps5_setup") expect(slotsOf(object)).toEqual([]);
-    else expect(slotsOf(object).every((s) => s.action === "play")).toBe(true);
+    const expected = catalogId === "ps5_setup" ? "play" : catalogId === "ping_pong_table" ? "pingpong" : "blackjack";
+    expect(slotsOf(object)).toHaveLength(2);
+    expect(slotsOf(object).every((s) => s.action === expected)).toBe(true);
     const nav = buildNav(placed.blueprint);
     const f = footprintOf(item, object);
     expect(walkable(nav, f.x, f.z)).toBe(false);

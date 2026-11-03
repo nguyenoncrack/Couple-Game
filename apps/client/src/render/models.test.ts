@@ -72,6 +72,14 @@ describe("catalog model geometry", () => {
     }
   });
 
+  it.each(["ping_pong_table", "blackjack_table"])("%s has a usable active model without the idle play props", (id) => {
+    const item = catalog.furniture.get(id)!;
+    const active = modelFor(item, null, true);
+    valid(active);
+    expect(bodies(active).reduce((n, mesh) => n + mesh.geometry.getAttribute("position").count, 0))
+      .toBeLessThan(bodies(modelFor(item)).reduce((n, mesh) => n + mesh.geometry.getAttribute("position").count, 0));
+  });
+
   it.each([
     ["bathtub", 0, 0, 0.49, 0.84],
     ["bath_sink", 0, -0.2, 0.83, 0.25],

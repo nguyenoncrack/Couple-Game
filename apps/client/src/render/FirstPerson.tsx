@@ -5,7 +5,7 @@ import type * as THREE from "three";
 import { act, serverNow, setFirstPerson, useGame } from "../state/game";
 import { openObjectMenu } from "../tools/LiveTools";
 import { cameraFollow } from "./CameraRig";
-import { captureFirstPersonMouse, releaseFirstPersonMouse, useFirstPersonMouse } from "../input/firstPersonMouse";
+import { captureFirstPersonMouse, releaseFirstPersonMouse, retainFirstPersonMouse, useFirstPersonMouse } from "../input/firstPersonMouse";
 import { firstPersonDirection, firstPersonEye, smoothFirstPersonEye, type Eye } from "../input/firstPersonMotion";
 import { objectTransform } from "./House";
 
@@ -90,6 +90,7 @@ export function FirstPersonRig() {
   const sent = useRef({ at: 0, dir: [0, 0] as [number, number], moving: false });
 
   useEffect(() => {
+    const releaseRig = retainFirstPersonMouse();
     const s = useGame.getState();
     const a = s.me ? s.life?.avatars[s.me] : undefined;
     if (a) {
@@ -133,7 +134,7 @@ export function FirstPersonRig() {
     };
     const lockError = () => {
       stop();
-      useFirstPersonMouse.setState({ locked: false, error: "Click to capture the mouse, or press V to step out." });
+      useFirstPersonMouse.setState({ locked: false, error: "Mouse capture was blocked by the browser. Press V to return." });
     };
     const down = (e: KeyboardEvent) => {
       if (typing(e) || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -203,7 +204,7 @@ export function FirstPersonRig() {
       window.removeEventListener("pointerdown", pointerDown, { capture: true });
       window.removeEventListener("wheel", wheel, { capture: true });
       stop();
-      releaseFirstPersonMouse();
+      releaseRig();
       camera.fov = fov;
       camera.near = near;
       camera.updateProjectionMatrix();

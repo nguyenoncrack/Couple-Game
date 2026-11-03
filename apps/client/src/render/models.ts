@@ -551,15 +551,15 @@ function hashString(s: string) {
 
 const built = new Map<string, BuiltMesh[]>();
 
-/** The merged meshes for a catalog item (shared by every copy of it), optionally as a see-through ghost. */
-export function modelFor(item: FurnitureItem, ghost: "ok" | "bad" | null = null): BuiltMesh[] {
-  const key = `${item.id}|${ghost ?? ""}`;
+/** Shared meshes; active table variants omit loose props now held by players or replaced by dealt cards. */
+export function modelFor(item: FurnitureItem, ghost: "ok" | "bad" | null = null, active = false): BuiltMesh[] {
+  const key = `${item.id}|${ghost ?? ""}|${active}`;
   let out = built.get(key);
   if (!out) {
     const k = new Kit();
     const m: Mat = (tone, finish, alpha) => pencilMaterial(tone, { finish, alpha, ghost: ghost ?? undefined });
     const build = BUILDERS[item.model.kind] ?? fallback;
-    build(k, item.footprint[0], item.footprint[1], item.model as Params, m, hashString(item.id));
+    build(k, item.footprint[0], item.footprint[1], active ? { ...item.model, inUse: true } : item.model as Params, m, hashString(item.id));
     out = k.build(Boolean(ghost));
     built.set(key, out);
   }

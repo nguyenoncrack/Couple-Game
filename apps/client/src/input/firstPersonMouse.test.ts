@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { captureFirstPersonMouse, releaseFirstPersonMouse, useFirstPersonMouse } from "./firstPersonMouse";
+import { captureFirstPersonMouse, releaseFirstPersonMouse, retainFirstPersonMouse, useFirstPersonMouse } from "./firstPersonMouse";
 
 let doc: { pointerLockElement: unknown; exitPointerLock: ReturnType<typeof vi.fn>; querySelector: ReturnType<typeof vi.fn> };
 beforeEach(() => {
@@ -10,6 +10,20 @@ beforeEach(() => {
 afterEach(() => { releaseFirstPersonMouse(); vi.unstubAllGlobals(); });
 
 describe("first-person mouse capture", () => {
+  it("preserves automatic capture through StrictMode's cleanup/remount, but releases on a real exit", async () => {
+    const canvas = { requestPointerLock: vi.fn().mockResolvedValue(undefined) } as unknown as HTMLCanvasElement;
+    const first = retainFirstPersonMouse();
+    captureFirstPersonMouse(canvas);
+    first();
+    const second = retainFirstPersonMouse();
+    doc.pointerLockElement = canvas;
+    await Promise.resolve();
+    expect(doc.exitPointerLock).not.toHaveBeenCalled();
+    second(); second();
+    await Promise.resolve();
+    expect(doc.exitPointerLock).toHaveBeenCalledOnce();
+    expect(doc.pointerLockElement).toBeNull();
+  });
   it("requests capture directly from the entry gesture and releases it for the cursor", async () => {
     const request = vi.fn().mockResolvedValue(undefined);
     const canvas = { requestPointerLock: request } as unknown as HTMLCanvasElement;
@@ -32,7 +46,7 @@ describe("first-person mouse capture", () => {
     canvas.requestPointerLock = vi.fn().mockRejectedValue(new Error("denied"));
     captureFirstPersonMouse(canvas);
     await Promise.resolve(); await Promise.resolve();
-    expect(useFirstPersonMouse.getState().error).toContain("Click");
+    expect(useFirstPersonMouse.getState().error).toContain("blocked");
     expect(useFirstPersonMouse.getState().locked).toBe(false);
   });
 

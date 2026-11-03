@@ -323,6 +323,9 @@ export class HouseRoom {
       case "stop":
         r = this.life.stop(id, now);
         break;
+      case "cards":
+        r = this.life.cards(id, bp, intent.objectId, intent.roundId, intent.action, now);
+        break;
       case "move":
         // walking into a wall isn't worth a message; you just don't go anywhere
         if (this.life.move(id, bp, [intent.x, intent.z], now)) return;
@@ -345,7 +348,10 @@ export class HouseRoom {
         break;
     }
     if (r) peer.send({ type: "lifeRejected", reason: r });
-    else this.lifeChanged();
+    else {
+      this.life.syncTableGames(bp);
+      this.lifeChanged();
+    }
   }
 
   /** Say something to the house: kept with it, and sent to everyone (the speaker too, so both show the same). */

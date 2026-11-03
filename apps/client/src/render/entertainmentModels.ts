@@ -42,9 +42,11 @@ export const ENTERTAINMENT_BUILDERS: Record<string, Builder> = {
     for (let i = 0; i <= 28; i++) k.box(thread, [0, H + 0.085, -D / 2 + i * D / 28], [0.003, 0.15, 0.003], { outline: false });
     for (let i = 0; i <= 4; i++) k.box(thread, [0, H + 0.01 + i * 0.0375, 0], [0.003, 0.003, D + 0.04], { outline: false });
     k.box(white, [0, H + 0.17, 0], [0.014, 0.012, D + 0.07], { outline: false });
-    paddle(k, m, [-W * 0.29, H + 0.016, 0.17], -0.55, "#b85248");
-    paddle(k, m, [W * 0.30, H + 0.016, -0.18], 2.45, "#363b3b");
-    k.add("sphere", m("#f7e8bc"), [0.68, H + 0.02, 0.23], 0.04, { outline: 0.003 });
+    if (!p.inUse) {
+      paddle(k, m, [-W * 0.29, H + 0.016, 0.17], -0.55, "#b85248");
+      paddle(k, m, [W * 0.30, H + 0.016, -0.18], 2.45, "#363b3b");
+      k.add("sphere", m("#f7e8bc"), [0.68, H + 0.02, 0.23], 0.04, { outline: 0.003 });
+    }
   },
 
   gameconsole(k, _w, _d, p, m) {
@@ -105,8 +107,10 @@ export const ENTERTAINMENT_BUILDERS: Record<string, Builder> = {
     stroke(k, gold, [[0.025, 0.796, -0.195], [0.045, 0.796, -0.21], [0.045, 0.796, -0.13]], 0.003);
     stroke(k, gold, [[0.025, 0.796, -0.13], [0.065, 0.796, -0.13]], 0.003);
     cardDeck(k, m, [-0.5, 0.794, -0.075], -0.1);
-    playingCard(k, m, [-0.13, 0.794, 0.005], -0.17, "A", "spade");
-    playingCard(k, m, [0.04, 0.795, 0.03], 0.15, "K", "heart");
+    if (!p.inUse) {
+      playingCard(k, m, [-0.13, 0.794, 0.005], -0.17, "A", "spade");
+      playingCard(k, m, [0.04, 0.795, 0.03], 0.15, "K", "heart");
+    }
     // Card shoe and a second stack toward the dealer's side.
     k.at([0.53, 0.794, -0.16], -0.2, () => {
       const tray = m(INK);
@@ -116,13 +120,15 @@ export const ENTERTAINMENT_BUILDERS: Record<string, Builder> = {
       k.add("roundbox", m(IVORY), [0, 0.045, -0.01], [0.15, 0.045, 0.17], { rot: [-0.22, 0, 0], outline: 0.002 });
       k.box(m("#aa5f58"), [0, 0.07, -0.015], [0.14, 0.003, 0.15], { rot: [-0.22, 0, 0], outline: false });
     });
-    chipStack(k, m, [-0.56, 0.794, 0.16], "#bb6254", 7);
-    chipStack(k, m, [-0.43, 0.794, 0.16], "#5b8195", 5);
-    chipStack(k, m, [0.50, 0.794, 0.15], "#e9e0c8", 8);
+    if (!p.inUse) {
+      chipStack(k, m, [-0.56, 0.794, 0.16], "#bb6254", 7);
+      chipStack(k, m, [-0.43, 0.794, 0.16], "#5b8195", 5);
+      chipStack(k, m, [0.50, 0.794, 0.15], "#e9e0c8", 8);
+    }
   },
 };
 
-function paddle(k: Kit, m: Mat, pos: [number, number, number], turn: number, tone: string) {
+export function paddle(k: Kit, m: Mat, pos: [number, number, number], turn: number, tone: string) {
   k.at(pos, turn, () => {
     const wood = m("#d3b081", "wood");
     k.add("cyl", wood, [0, 0, 0], [0.19, 0.025, 0.21], { outline: 0.003 });

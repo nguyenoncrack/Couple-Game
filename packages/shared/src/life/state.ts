@@ -1,5 +1,6 @@
 import type { Action, Recipe, Station } from "../catalog";
 import type { Rot } from "../grid";
+import type { BlackjackRound } from "./blackjack";
 
 /**
  * Life in the house: where each character is, what they're doing, the meal on the go and the food waiting on the
@@ -83,6 +84,8 @@ export interface LifeState {
   avatars: Record<string, Avatar>;
   cooking: Cooking | null;
   dishes: Dish[];
+  /** Optional for old saves. Each card table owns an independent round. */
+  blackjack?: Record<string, BlackjackRound>;
 }
 
 export const emptyLife = (): LifeState => ({ avatars: {}, cooking: null, dishes: [] });

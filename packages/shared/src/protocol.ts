@@ -29,6 +29,7 @@ export const LifeIntent = z.discriminatedUnion("do", [
   /** Sit, sleep or lounge on something. */
   z.object({ do: z.literal("use"), objectId: Id, action: z.enum(ACTIONS) }),
   z.object({ do: z.literal("stop") }),
+  z.object({ do: z.literal("cards"), objectId: Id, roundId: Id.nullable(), action: z.enum(["deal", "hit", "stand"]) }),
   /** Walk freely towards a spot close by (lot metres), as first person does while a key is held. */
   z.object({ do: z.literal("move"), x: z.number().min(0).max(200), z: z.number().min(0).max(200) }),
   /** Start a recipe, preferably at the station clicked. */
