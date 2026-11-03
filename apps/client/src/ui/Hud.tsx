@@ -3,10 +3,11 @@ import { catalog, cookingDone, starterHouseOp, type FurnitureItem, type OpeningI
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { WallMode } from "../render/House";
-import { act, redo, serverNow, setMode, setTool, submit, undo, useGame, wake, type Tool } from "../state/game";
+import { act, redo, serverNow, setFirstPerson, setMode, setTool, submit, undo, useGame, wake, type Tool } from "../state/game";
 import { cameraApi } from "../render/CameraRig";
 import { useThumbnail } from "../render/thumbnails";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
+import { setMusic, useMusicOn } from "../state/music";
 import { together } from "../state/together";
 import { ChatButton, ChatPanel } from "./Chat";
 import { Icon } from "./icons";
@@ -17,6 +18,7 @@ import { searchCatalog } from "./filterCatalog";
 export function Hud({ onLeave }: { onLeave: () => void }) {
   const status = useGame((s) => s.status);
   const live = useGame((s) => s.mode === "live");
+  const firstPerson = useGame((s) => s.mode === "live" && s.firstPerson);
   return (
     <div className="hud">
       <TopBar onLeave={onLeave} />
@@ -25,7 +27,7 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       {!live && <SelectionCard />}
       {!live && <StarterOffer />}
       <CookingCard />
-      <CameraButtons />
+      {firstPerson ? <FirstPersonHint /> : <CameraButtons />}
       {live ? <LiveBar /> : <Toolbar />}
       <ChatPanel />
       <Toasts />
@@ -42,6 +44,7 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
   const status = useGame((s) => s.status);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const music = useMusicOn();
   const partner = members.find((m) => m.id !== me);
 
   return (
@@ -78,6 +81,9 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
         )}
         <CharacterButton compact disabled={status !== "online"} onSaved={(appearance) => useGame.setState((s) => ({ members: s.members.map((m) => m.id === s.me ? { ...m, appearance } : m) }))} />
         <ChatButton />
+        <button className="pill icon-pill" onClick={() => setMusic(!music)} title={music ? "Turn the music off" : "Turn the music on"} aria-pressed={music}>
+          {music ? <Icon.music /> : <Icon.musicOff />}
+        </button>
         <button className="pill icon-pill" onClick={() => setHelpOpen((v) => !v)} title="Controls">
           <Icon.help />
         </button>
@@ -168,6 +174,10 @@ function HelpCard({ onClose }: { onClose: () => void }) {
         <li>
           Living: <b>F</b> keeps the camera on you, <b>X</b> stands still
         </li>
+        <li>
+          Living: <b>V</b> sees through your own eyes. <b>W A S D</b> walk, <b>right-drag</b> or <b>two fingers</b> look
+          around, <b>E</b> uses what you're looking at
+        </li>
       </ul>
       <button className="close" onClick={onClose} aria-label="Close">
         ×
@@ -224,8 +234,21 @@ function WallModeButton() {
   );
 }
 
+/** In first person: a dot in the middle of the view, and how to get about. */
+function FirstPersonHint() {
+  return (
+    <>
+      <div className="crosshair" aria-hidden />
+      <div className="fp-hint hand">
+        <b>W A S D</b> walk · <b>right-drag</b> or <b>two fingers</b> look · <b>E</b> use what's ahead · <b>V</b> or <b>Esc</b> to step out
+      </div>
+    </>
+  );
+}
+
 function LiveBar() {
   const follow = useGame((s) => s.follow);
+  const firstPerson = useGame((s) => s.firstPerson);
   const busy = useGame((s) => Boolean(s.me && s.life?.avatars[s.me]?.use));
   const { here, inBed, cuddling } = useGame(useShallow(together));
   return (
@@ -251,11 +274,17 @@ function LiveBar() {
         </>
       )}
       {here && <span className="toolbar-gap" />}
-      <WallModeButton />
-      <button className={`slot round ${follow ? "active" : ""}`} onClick={() => useGame.setState({ follow: !follow })} title="Keep the camera on you (F)">
-        <Icon.follow />
-        <span className="slot-label">Follow</span>
+      <button className={`slot round ${firstPerson ? "active" : ""}`} onClick={() => setFirstPerson(!firstPerson)} title="See through your own eyes (V)">
+        <Icon.eye />
+        <span className="slot-label">{firstPerson ? "Step out" : "Eyes"}</span>
       </button>
+      {!firstPerson && <WallModeButton />}
+      {!firstPerson && (
+        <button className={`slot round ${follow ? "active" : ""}`} onClick={() => useGame.setState({ follow: !follow })} title="Keep the camera on you (F)">
+          <Icon.follow />
+          <span className="slot-label">Follow</span>
+        </button>
+      )}
       <button className="slot round" onClick={() => act({ do: "stop" })} disabled={!busy} title="Stand up, stop what you're doing (X)">
         <Icon.stand />
         <span className="slot-label">Stand</span>

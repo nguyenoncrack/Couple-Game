@@ -1,11 +1,11 @@
-import { catalog, cellKey, footprintOf, parseCell, parseEdge, type Level, type OpeningItem, type PlacedObject, type PlacedOpening } from "@cg/shared";
+import { catalog, cellKey, footprintOf, parseCell, parseEdge, positionAt, type Level, type OpeningItem, type PlacedObject, type PlacedOpening } from "@cg/shared";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { useGame } from "../state/game";
+import { serverNow, useGame } from "../state/game";
 import type { Kit } from "./kit";
 import { KitMesh, Meshes } from "./KitMesh";
-import { modelFor, openingModelFor, shade } from "./models";
+import { doorParts, modelFor, openingModelFor, shade, type DoorLeaf } from "./models";
 import { pencilMaterial, shadowMaterial } from "./pencil";
 
 export const WALL_H = 2.7;
@@ -144,14 +144,19 @@ export function Walls({
   hiddenOpening: string | null;
   onOpeningDown: (id: string, e: ThreeEvent<PointerEvent>) => void;
 }) {
-  const mode = useGame((s) => s.wallMode);
+  // walls stand at full height when you're inside looking around
+  const mode = useGame((s) => (s.mode === "live" && s.firstPerson ? "up" : s.wallMode));
   const runs = useMemo(() => wallRuns(level.walls), [level.walls]);
   const groups = useMemo(() => runs.map((run) => ({ run, openings: openingsInRun(run, level.openings) })), [runs, level.openings]);
   const full = useRef<(THREE.Group | null)[]>([]);
   const low = useRef<(THREE.Group | null)[]>([]);
 
   useFrame(({ camera }) => {
-    if (mode !== "cut") return;
+    if (mode !== "cut") {
+      // out of the cutaway (walls up, or first person): put back any walls it had lowered
+      for (const g of full.current) if (g && !g.visible) g.visible = true;
+      return;
+    }
     // The middle of the view: where the camera's line of sight meets the floor.
     camera.getWorldDirection(ray);
     const t = ray.y < -0.05 ? -camera.position.y / ray.y : 12;
@@ -216,8 +221,61 @@ function OpeningModel({ o, item, low, onDown }: { o: PlacedOpening; item: Openin
         onDown(o.id, e);
       }}
     >
-      <Meshes meshes={openingModelFor(item, null, low)} />
+      {low === null && doorParts(item) ? <Door item={item} transform={{ position, rotationY }} /> : <Meshes meshes={openingModelFor(item, null, low)} />}
     </group>
+  );
+}
+
+/** How far a door swings open, how near someone has to be for it to, and how quickly it moves. */
+const DOOR_OPEN = 1.45;
+const DOOR_NEAR = 1.15;
+const DOOR_SPEED = 7;
+
+/**
+ * A door that's shut until someone comes up to it, then swings open away from them and shuts again behind them.
+ * Both screens work this out from where the characters are, so they see the same thing.
+ */
+function Door({ item, transform }: { item: OpeningItem; transform: { position: [number, number, number]; rotationY: number } }) {
+  const parts = doorParts(item)!;
+  const hinges = useRef<(THREE.Group | null)[]>([]);
+  const swing = useRef({ angle: 0, side: 1 });
+  useFrame((_, dt) => {
+    const life = useGame.getState().life;
+    const [ox, , oz] = transform.position;
+    const c = Math.cos(transform.rotationY);
+    const s = Math.sin(transform.rotationY);
+    // the nearest person, in the door's own frame (x along the wall, z out through it)
+    let near: number | null = null;
+    if (life) {
+      const t = serverNow();
+      for (const a of Object.values(life.avatars)) {
+        const p = positionAt(a, t);
+        const dx = p.x - ox;
+        const dz = p.z - oz;
+        const lx = dx * c - dz * s;
+        const lz = dx * s + dz * c;
+        if (Math.abs(lx) <= item.width / 2 + 0.35 && Math.abs(lz) <= DOOR_NEAR && (near === null || Math.abs(lz) < Math.abs(near))) near = lz;
+      }
+    }
+    const w = swing.current;
+    // pick the way to swing as it starts to open, then keep it until it's shut again
+    if (near !== null && Math.abs(w.angle) < 0.05) w.side = near >= 0 ? 1 : -1;
+    const target = near === null ? 0 : DOOR_OPEN * w.side;
+    w.angle += (target - w.angle) * (1 - Math.exp(-dt * DOOR_SPEED));
+    parts.leaves.forEach((l, i) => {
+      const g = hinges.current[i];
+      if (g) g.rotation.y = (l.mirror ? -1 : 1) * w.angle;
+    });
+  });
+  return (
+    <>
+      <Meshes meshes={parts.frame} />
+      {parts.leaves.map((l: DoorLeaf, i) => (
+        <group key={i} ref={(g) => void (hinges.current[i] = g)} position={[l.hingeX, 0, -0.03]}>
+          <Meshes meshes={l.meshes} />
+        </group>
+      ))}
+    </>
   );
 }
 

@@ -323,6 +323,11 @@ export class HouseRoom {
       case "stop":
         r = this.life.stop(id, now);
         break;
+      case "move":
+        // walking into a wall isn't worth a message; you just don't go anywhere
+        if (this.life.move(id, bp, [intent.x, intent.z], now)) return;
+        r = null;
+        break;
       case "cook":
         r = this.life.cook(id, bp, intent.recipeId, intent.objectId, now);
         break;

@@ -74,6 +74,63 @@ export function canStep(nav: Nav, x0: number, z0: number, x1: number, z1: number
   );
 }
 
+/**
+ * Is there room to stand at a point (lot metres) with a body this wide: on an open cell, and no closer than
+ * `r` to a wall or anything blocked beside it?
+ */
+export function roomAt(nav: Nav, x: number, z: number, r: number): boolean {
+  const cx = Math.floor(x);
+  const cz = Math.floor(z);
+  if (!walkable(nav, cx, cz)) return false;
+  for (const sx of [-1, 0, 1])
+    for (const sz of [-1, 0, 1]) {
+      if (!sx && !sz) continue;
+      // how far to that side (or corner) of the cell
+      const gx = sx < 0 ? x - cx : sx > 0 ? cx + 1 - x : 0;
+      const gz = sz < 0 ? z - cz : sz > 0 ? cz + 1 - z : 0;
+      if (Math.hypot(gx, gz) >= r) continue;
+      if (!canStep(nav, cx, cz, cx + sx, cz + sz)) return false;
+    }
+  return true;
+}
+
+/**
+ * How far a body can get going straight from one point towards another: the last spot along the way with room
+ * to stand, never through a wall. Running into something slides along it instead, as walking into a wall does.
+ */
+export function slide(nav: Nav, from: [number, number], to: [number, number], r: number): [number, number] {
+  const along = (target: [number, number]): [number, number] => {
+    const at = (k: number): [number, number] => [from[0] + (target[0] - from[0]) * k, from[1] + (target[1] - from[1]) * k];
+    const ok = (a: [number, number], b: [number, number]) => {
+      const [x0, z0] = [Math.floor(a[0]), Math.floor(a[1])];
+      const [x1, z1] = [Math.floor(b[0]), Math.floor(b[1])];
+      return roomAt(nav, b[0], b[1], r) && ((x0 === x1 && z0 === z1) || canStep(nav, x0, z0, x1, z1));
+    };
+    const n = Math.max(1, Math.ceil(Math.hypot(target[0] - from[0], target[1] - from[1]) / 0.05));
+    let good = 0;
+    for (let i = 1; i <= n; i++) {
+      if (!ok(at(good), at(i / n))) {
+        // close in on exactly where it stops being open, so you can walk right up to a wall
+        let bad = i / n;
+        for (let j = 0; j < 10; j++) {
+          const mid = (good + bad) / 2;
+          if (ok(at(good), at(mid))) good = mid;
+          else bad = mid;
+        }
+        break;
+      }
+      good = i / n;
+    }
+    return at(good);
+  };
+  const gone = (p: [number, number]) => Math.hypot(p[0] - from[0], p[1] - from[1]);
+  const straight = along(to);
+  if (gone(straight) >= Math.hypot(to[0] - from[0], to[1] - from[1]) - 1e-6) return straight;
+  // blocked: try just the part of the way along each axis, and go with whichever gets further
+  const best = [straight, along([to[0], from[1]]), along([from[0], to[1]])].reduce((a, b) => (gone(b) > gone(a) + 1e-6 ? b : a));
+  return best;
+}
+
 const STEPS: [number, number, number][] = [
   [1, 0, 1],
   [-1, 0, 1],

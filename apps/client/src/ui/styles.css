@@ -1362,3 +1362,37 @@ button.pill:active,
 .catalog-empty { margin: 4px 0; font-size: 16px; }
 .catalog.tool-panel { max-height: calc(100dvh - 230px); overflow-y: auto; }
 .catalog .items { flex-shrink: 0; }
+
+/* First person: a dot to aim with, and how to get about. */
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--paper, #fbf7ec);
+  box-shadow: 0 0 0 2px var(--ink, #3a3631);
+  pointer-events: none;
+}
+.fp-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--paper, #fbf7ec) 88%, transparent);
+  border: 2px solid var(--ink, #3a3631);
+  font-size: 14px;
+  text-align: center;
+  pointer-events: none;
+  animation: fp-hint-fade 1s ease 8s forwards;
+}
+@keyframes fp-hint-fade {
+  to {
+    opacity: 0;
+  }
+}
