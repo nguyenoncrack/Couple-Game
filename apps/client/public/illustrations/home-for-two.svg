@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 490" fill="none">
+  <defs>
+    <pattern id="roof" width="22" height="18" patternUnits="userSpaceOnUse"><path d="M0 17h22M11 0v17" stroke="#724c3c" stroke-opacity=".22" stroke-width="1.3"/></pattern>
+    <pattern id="pencil" width="9" height="9" patternUnits="userSpaceOnUse"><path d="m-2 9 11-11m-2 13 4-4" stroke="#4b5142" stroke-opacity=".1" stroke-width="1"/></pattern>
+    <pattern id="boards" width="60" height="22" patternUnits="userSpaceOnUse"><path d="M0 21h60" stroke="#8b8370" stroke-opacity=".18"/></pattern>
+  </defs>
+  <!-- Soft patches of coloured pencil on the page. -->
+  <ellipse cx="363" cy="361" rx="287" ry="91" fill="#d7ddbd"/>
+  <ellipse cx="363" cy="361" rx="287" ry="91" fill="url(#pencil)"/>
+  <path d="M111 359c76-25 160-24 236-5 81 20 145 21 248-1" stroke="#9ea982" stroke-width="2" stroke-linecap="round"/>
+  <g stroke="#514b40" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <!-- A little sun and unhurried clouds. -->
+    <g class="sun"><circle cx="586" cy="81" r="29" fill="#f2cf65"/><path d="m586 38 1-10m30 24 8-7m4 36 11 1m-26 30 8 7m-36 5-1 11m-31-25-8 8m-5-37-11-1m25-29-7-8" stroke="#be9b44" stroke-width="2"/></g>
+    <path d="M110 118c-13-24 8-44 27-31 9-27 42-19 43 4 17-4 29 9 23 24-31 8-63 7-93 3Z" fill="#fcf8ec" stroke="#c3beac" stroke-width="1.5"/>
+    <path d="M446 57c-10-15 5-30 17-22 8-18 27-10 28 5 14-3 23 6 19 17-22 5-43 4-64 0Z" fill="#fcf8ec" stroke="#c3beac" stroke-width="1.5"/>
+    <!-- Garden fence behind the house. -->
+    <g stroke="#b5ad91" fill="#f9f4e7"><path d="m507 297 131 20m-132-3 131 20" stroke-width="5"/>
+      <path d="m516 286 5 1v45l-6-1Zm25 3 5 1v46l-6-1Zm25 4 5 1v46l-6-1Zm25 4 5 1v46l-6-1Zm25 4 5 1v46l-6-1Z"/>
+    </g>
+    <!-- Chimney, roof, two warm windows and an open blue front door. -->
+    <path d="m430 98 1-46 29 9-1 54" fill="#b58f72"/>
+    <path d="m425 49 38 8-1 10-37-8Z" fill="#d7b394"/>
+    <path d="m244 206 222-4 0 142-222 2Z" fill="#f6edda"/>
+    <path d="m466 202 89-43-1 141-88 44Z" fill="#c7d0b5"/>
+    <path d="m466 202 89-43-1 141-88 44Z" fill="url(#pencil)" stroke="none"/>
+    <path d="m244 206 222-4 0 142-222 2Z" fill="url(#boards)" stroke="none"/>
+    <path d="m224 211 124-124 140 120Z" fill="#de8268"/>
+    <path d="m348 87 80-36 143 111-83 45Z" fill="#e8a080"/>
+    <path d="m348 87 80-36 143 111-83 45Z" fill="url(#roof)" stroke="none"/>
+    <path d="m225 212 123-125 141 121m-136-112 76-35 133 104" stroke="#f6c6a8" stroke-width="4"/>
+    <path d="m234 219 114-114 129 111" stroke="#805e4b" stroke-opacity=".25" stroke-width="1.2"/>
+    <circle cx="353" cy="166" r="20" fill="#f7dc83"/>
+    <path d="M353 148v36m-18-18h36" stroke="#faf1d7" stroke-width="5"/>
+    <path d="m344 156 12-8m1 22 12-8" stroke="#fff7db" stroke-width="2"/>
+    <path d="m268 238 59-1 0 59-59 1Z" fill="#f9d880"/>
+    <path d="m263 233 69-1 0 70-69 1Z" stroke="#a79878" stroke-width="4"/>
+    <path d="m297 235 1 64m-32-32 64-1" stroke="#faf2dd" stroke-width="5"/>
+    <path d="m269 242 16 4-1 42-15 8m56-55-13 6 1 40 13 8" fill="#e4b7a2" stroke="#c99483" stroke-width="1.2"/>
+    <path d="m372 248 57-1 1 97-58 1Z" fill="#557f85"/>
+    <path d="m373 249 42 12 0 90-42-7Z" fill="#8cafb0"/>
+    <path d="m382 263 23 7v29l-23-5Zm0 44 23 7v25l-23-5Z" stroke="#5c898c" stroke-width="1.5"/>
+    <circle cx="405" cy="305" r="3.5" fill="#f2cf65" stroke-width="1.3"/>
+    <path d="m364 346 76-1 10 9-87 3-11-5Z" fill="#d8cbb0"/>
+    <path d="m496 217 32-15v48l-32 15Z" fill="#f5d880"/>
+    <path d="m511 210 1 48m-16-17 31-15" stroke="#f7f2df" stroke-width="4"/>
+    <!-- Window box. -->
+    <path d="m263 297 71-1-6 19-60 1Z" fill="#bb8f66"/>
+    <path d="m275 300 3-16m16 15 0-20m20 20-3-14m14 14-3-18" stroke="#7e986b"/>
+    <g fill="#d88a77" stroke="#ac7365" stroke-width="1"><circle cx="278" cy="283" r="6"/><circle cx="294" cy="278" r="6"/><circle cx="311" cy="284" r="5"/><circle cx="321" cy="280" r="5"/></g>
+    <!-- A winding path, a welcome mat and garden pots. -->
+    <path d="M375 360c0 18 57 18 54 35-2 16-66 19-77 48l70 3c15-22 63-29 57-52-5-20-57-23-56-36" fill="#e8dbbc" stroke="none"/>
+    <path d="m365 360 69-1 9 13-69 2Z" fill="#bc9374" stroke-width="1.5"/>
+    <path d="m386 366 30-1" stroke="#7a6451" stroke-width="1.3"/>
+    <path d="m448 332 28-2-4 28-20 1Z" fill="#d28a69"/>
+    <path d="M461 332v-36m0 24c-19 1-20-17-20-17 20 0 20 17 20 17Zm1-12c15-3 17-18 17-18-19 1-17 18-17 18Z" fill="#8da279" stroke="#708761"/>
+    <!-- One person brings a moving box. -->
+    <path d="m189 355-3 46m24-44 9 42" stroke="#5b665e" stroke-width="13"/>
+    <path d="m177 403 14-2m24 0 15 2" stroke="#48473e" stroke-width="8"/>
+    <path d="M178 309c-4 13-7 33-4 51 15 6 31 5 43-2l-8-49Z" fill="#d67e63"/>
+    <path d="m180 315-16 21 20 13m24-33 20 19-14 12" stroke="#b27e5d" stroke-width="10"/>
+    <path d="m181 331 37 1-1 29-37-1Z" fill="#d9b883"/>
+    <path d="m181 331 12-7 36 1-11 7m0 0 11-7-1 28-11 8" fill="#e5c697"/>
+    <path d="m198 332-1 10 9 0 1-10" stroke="#ad8a59" stroke-width="2"/>
+    <path d="M184 289c0-15 25-22 34-8 9 15-4 31-17 30-9-1-17-10-17-22Z" fill="#bd8b66"/>
+    <path d="M184 293c-10-17 1-31 18-29 17 0 23 13 18 25-5-2-10-7-11-13-5 9-14 13-25 17Z" fill="#534637"/>
+    <path d="m205 296 3 1m-8 6c3 2 6 2 8 0" stroke-width="1.6"/>
+    <!-- Their partner, with flowers for the new place. -->
+    <path d="m277 360-5 42m24-42 7 40" stroke="#8f9b7c" stroke-width="13"/>
+    <path d="m263 404 13-2m22 1 16 1" stroke="#48473e" stroke-width="8"/>
+    <path d="M266 311c-5 18-7 35-5 50 15 8 30 8 45 0-2-22-4-38-13-52Z" fill="#e8cc67"/>
+    <path d="m267 319-17 18-20-2m65-16 16 16-11 14" stroke="#e0b28b" stroke-width="9"/>
+    <path d="M268 288c-1-16 21-24 32-10 12 16-1 33-14 34-11 0-18-11-18-24Z" fill="#e5b38b"/>
+    <path d="M266 297c-7-8-6-24 2-30 18-13 35 1 37 16 1 10-1 19 8 22l-13 6c-8-9-6-27-12-33-5 9-14 12-22 19Z" fill="#765743"/>
+    <path d="m278 297-3 1m4 7c3 2 6 2 9-1" stroke-width="1.6"/>
+    <path d="m303 346 18-29m-15 28 21-17m-24 19 4-29" stroke="#789067" stroke-width="2"/>
+    <g stroke-width="1.2"><path d="m300 336 18 10-13 16-13-12Z" fill="#efe3ca"/><circle cx="321" cy="316" r="6" fill="#d68576"/><circle cx="327" cy="327" r="6" fill="#f1cd65"/><circle cx="307" cy="317" r="6" fill="#d68576"/></g>
+    <!-- A small cat has already made itself at home. -->
+    <path d="M513 378c15-1 18-13 10-22-6-8-18-7-23 2-5 9-4 21 13 20Z" fill="#d0a87a"/>
+    <path d="m500 359-1-15 10 8 10-7 2 16" fill="#d0a87a"/>
+    <path d="M522 372c23 7 26-14 17-16" stroke="#b18a62" stroke-width="7"/>
+    <path d="m504 361 1 1m10-1 1 1m-8 5 4 0" stroke-width="1.5"/>
+    <!-- Pencil garden details. -->
+    <path d="m118 386 2-14m-1 8-7-5m7 2 6-7m435 25 0-17m0 9-7-5m7 1 6-8m-400 48 1-11m-1 6-5-4m5 1 5-5" stroke="#86956c" stroke-width="2"/>
+    <g fill="#ecd184" stroke="#bb9f65" stroke-width="1"><circle cx="120" cy="369" r="4"/><circle cx="560" cy="374" r="4"/><circle cx="165" cy="410" r="3"/></g>
+    <!-- A little heart, sketched between two people. -->
+    <path class="heart" d="M233 281c-17-13-12-25-3-22 5 1 6 7 6 7s5-9 11-5c9 6 0 15-14 20Z" fill="#df8b76" stroke-width="1.8"/>
+    <path d="m223 246-3-6m28 10 5-5" stroke="#b68d78" stroke-width="1.5"/>
+  </g>
+</svg>
