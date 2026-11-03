@@ -13,7 +13,8 @@ import { ChatButton, ChatPanel } from "./Chat";
 import { Icon } from "./icons";
 import { CatalogSearch } from "./CatalogSearch";
 import { searchCatalog } from "./filterCatalog";
-import { captureFirstPersonMouse, useFirstPersonMouse } from "../input/firstPersonMouse";
+import { useFirstPersonMouse } from "../input/firstPersonMouse";
+import { TableGamePanel } from "./TableGamePanel";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -28,6 +29,7 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       {!live && <SelectionCard />}
       {!live && <StarterOffer />}
       <CookingCard />
+      {live && <TableGamePanel />}
       {firstPerson ? <FirstPersonHint /> : <CameraButtons />}
       {live ? <LiveBar /> : <Toolbar />}
       <ChatPanel />
@@ -263,17 +265,11 @@ function RoofButton() {
 function FirstPersonHint() {
   const locked = useFirstPersonMouse((s) => s.locked);
   const error = useFirstPersonMouse((s) => s.error);
-  const menu = useGame((s) => Boolean(s.menu) || s.chatOpen);
   return (
     <>
       {locked && <div className="crosshair" aria-hidden />}
-      {!locked && !menu && <div className="card fp-resume">
-        <button className="btn primary" onClick={() => captureFirstPersonMouse()}>Click to look around</button>
-        <p className="hand">{error ?? "Mouse released · WASD movement is paused."}</p>
-        <p className="hand">Press V to return to the usual view.</p>
-      </div>}
       <div className="fp-hint hand">
-        <b>W A S D</b> walk · <b>Mouse</b> look · <b>E</b> use · <b>Esc</b> free cursor · <b>V</b> step out
+        {error ?? <><b>W A S D</b> walk · <b>Mouse</b> look · <b>E</b> use · <b>Esc</b> free cursor · <b>V</b> step out</>}
       </div>
     </>
   );
@@ -551,7 +547,7 @@ function ToolPanel() {
               : category === "openings"
                 ? "Pick a door or window, then click on a wall."
                 : category === "entertainment"
-                  ? "Play PS5 near a TV in Live mode. Tables are decorative for now."
+                  ? "Switch to Live mode to play. Leave space around tables for both players."
                   : "Pick something, then click on the lot."}
         </p>
       </div>

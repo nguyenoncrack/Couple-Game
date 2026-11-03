@@ -1,4 +1,4 @@
-import { normalizeAppearance, activityAt, arrivalTime, faceDir, positionAt, type Avatar, type MemberInfo } from "@cg/shared";
+import { normalizeAppearance, activityAt, arrivalTime, faceDir, pingPongMoment, positionAt, type Avatar, type MemberInfo } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -6,9 +6,9 @@ import * as THREE from "three";
 import { serverNow, useGame } from "../state/game";
 import { cameraFollow, cameraGestureActive } from "./CameraRig";
 import { FLOOR_Y } from "./House";
-import { HIP, THIGH, TORSO, SHOULDER, torso, arm, thigh, shin, looksFor, customizedLooks } from "../features/character/characterParts";
+import { HIP, THIGH, TORSO, SHOULDER, ARM, torso, arm, thigh, shin, looksFor, customizedLooks } from "../features/character/characterParts";
 import { KitMesh } from "./KitMesh";
-import { controller } from "./entertainmentModels";
+import { controller, paddle } from "./entertainmentModels";
 import { pencilMaterial } from "./pencil";
 
 /**
@@ -144,6 +144,10 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         roll: 0,
       };
     }
+    case "pingpong":
+      return { hip: HIP - 0.025, lean: -0.08, thighs: [-0.1, -0.1], knees: [0.16, 0.16], arms: [-0.3, -0.8], spread: 0.12, roll: 0 };
+    case "blackjack":
+      return { hip: HIP, lean: -0.12, thighs: [0, 0], knees: [0.03, 0.03], arms: [-0.75 + Math.sin(s * 2) * 0.08, -0.8 - Math.sin(s * 2) * 0.08], spread: -0.12, roll: 0 };
     case "play": {
       const floor = (seatY ?? 0) < 0.2;
       const press = Math.sin(s * 8) * 0.015;
@@ -268,6 +272,8 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
   const hearts = useRef<HTMLDivElement>(null);
   const tag = useRef<HTMLDivElement>(null);
   const gamepad = useRef<THREE.Group>(null);
+  const heldPaddle = useRef<THREE.Group>(null);
+  const heldCard = useRef<THREE.Group>(null);
   const first = useRef(true);
   // Html made in the scene's very first commit can lose its React root in development; add the tag a tick later.
   const [tagged, setTagged] = useState(false);
@@ -312,6 +318,11 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     g.rotation.y = turnToward(g.rotation.y, yaw, snap ? 1 : 1 - Math.exp(-dt * 10));
 
     const pose = poseFor(activity, posed ? avatar.use!.pose!.y : null, t, !posed);
+    if (activity === "pingpong" && avatar.use?.objectId) {
+      const state = useGame.getState();
+      const moment = state.life && pingPongMoment(state.life, avatar.use.objectId, t, new Set(state.members.filter((m) => m.online).map((m) => m.id)));
+      if (moment?.visible) pose.arms[1] = -0.65 - (moment.swing[avatar.use.slot] ?? 0) * 0.6;
+    }
     const j = 1 - Math.exp(-dt * 12);
     const b = body.current;
     b.position.y = ease(b.position.y, pose.hip, j);
@@ -332,6 +343,8 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
       gamepad.current.visible = activity === "play";
       gamepad.current.rotation.z = Math.sin(t * 0.004) * 0.025;
     }
+    if (heldPaddle.current) heldPaddle.current.visible = activity === "pingpong";
+    if (heldCard.current) heldCard.current.visible = activity === "blackjack";
     if (zzz.current) zzz.current.style.opacity = activity === "sleep" ? "1" : "0";
     if (ripple.current) {
       ripple.current.visible = activity === "swim";
@@ -376,9 +389,18 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
         <KitMesh make={(k) => torso(k, looks)} deps={[looks]} />
         <group ref={armL} position={[-SHOULDER, TORSO - 0.06, 0]}>
           <KitMesh make={(k) => arm(k, looks)} deps={[looks]} />
+          <group ref={heldCard} visible={false} position={[0, -ARM + 0.02, 0.015]} rotation-x={0.5}>
+            <KitMesh make={(k) => {
+              k.box(pencilMaterial("#fff7e7"), [0, -0.055, 0], [0.105, 0.15, 0.006], { outline: 0.002 });
+              k.box(pencilMaterial("#b7655a"), [0, -0.055, 0.004], [0.088, 0.13, 0.002], { outline: false });
+            }} deps={[]} />
+          </group>
         </group>
         <group ref={armR} position={[SHOULDER, TORSO - 0.06, 0]}>
           <KitMesh make={(k) => arm(k, looks)} deps={[looks]} />
+          <group ref={heldPaddle} visible={false} position={[0, -ARM + 0.02, 0]} rotation-x={-Math.PI / 2}>
+            <KitMesh make={(k) => paddle(k, (tone, finish, alpha) => pencilMaterial(tone, { finish, alpha }), [0, 0, -0.14], 0, "#b85248")} deps={[]} />
+          </group>
         </group>
         <group ref={gamepad} visible={false} position={[0, 0.23, 0.405]} scale={1.45}>
           <KitMesh make={(k) => controller(k, (tone, finish, alpha) => pencilMaterial(tone, { finish, alpha }), [0, -0.05, 0], 0)} deps={[]} />

@@ -348,7 +348,8 @@ export function Furniture({
 
 function Placed({ o, onDown }: { o: PlacedObject; onDown: (id: string, e: ThreeEvent<PointerEvent>) => void }) {
   const { item, f, position, rotationY } = objectTransform(o);
-  const meshes = modelFor(item);
+  const active = useGame((s) => Object.values(s.life?.avatars ?? {}).some((a) => a.use?.objectId === o.id && (a.use.action === "pingpong" || a.use.action === "blackjack")));
+  const meshes = modelFor(item, null, active);
   const shadow = useMemo(() => shadowMaterial(f.w + 0.1, f.d + 0.1, 0.32), [f.w, f.d]);
   return (
     <group>

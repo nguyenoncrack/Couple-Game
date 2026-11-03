@@ -1,0 +1,14 @@
+.table-game-panel { position: absolute; right: 78px; top: 100px; width: min(350px, calc(100% - 100px)); padding: 18px; max-height: calc(100dvh - 225px); overflow-y: auto; }
+.table-game-panel h3 { font: 30px var(--serif); margin: 4px 0 10px; }
+.table-game-panel .hand { margin: 10px 0; }
+.table-player { padding-top: 8px; margin-top: 8px; border-top: 1px dashed var(--ink-soft); }
+.table-player-title { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font: 20px var(--hand); margin-bottom: 8px; }
+.table-player-title span { font-size: 16px; color: var(--ink-soft); text-align: right; }
+.table-hand { display: flex; flex-wrap: wrap; gap: 6px; }
+.playing-card { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; background: #fffdf5; border: 2px solid var(--ink); border-radius: 6px; width: 34px; height: 46px; color: #343b3c; font: 20px Georgia, serif; box-shadow: 1px 2px 0 #d5cbb8; }
+.playing-card b { line-height: 1; font-size: 17px; }
+.red-suit { color: #b4544a; }
+.card-back { background: repeating-linear-gradient(45deg,#b7655a,#b7655a 4px,#d5907f 4px,#d5907f 6px); color: #fff2dc; }
+.table-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.table-buttons .btn { flex: 1; white-space: nowrap; }
+@media (max-width: 640px) { .table-game-panel { top: 162px; max-height: calc(100dvh - 280px); width: min(310px, calc(100% - 100px)); padding: 16px; } }

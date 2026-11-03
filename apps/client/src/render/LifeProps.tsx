@@ -8,6 +8,7 @@ import { KitMesh } from "./KitMesh";
 import { FLOOR_Y, objectTransform } from "./House";
 import { pencilMaterial } from "./pencil";
 import { ConsoleScreen } from "./ConsoleScreen";
+import { TableGameProps } from "./TableGameProps";
 
 /**
  * Food and kitchenware: plates on the table, and the bowl, board, pan or pot in use while a meal is made. Also
@@ -293,6 +294,7 @@ export function LifeProps() {
       <CookingProps level={level} />
       <Servings level={level} />
       <InUse level={level} />
+      <TableGameProps level={level} />
     </>
   );
 }

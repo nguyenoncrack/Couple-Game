@@ -5,7 +5,8 @@ import { newId } from "../ids";
 import { footprintOf } from "../rules";
 import { canSee, screenOf, seatsFacing, slotsFor, slotsOf, stationSlots, tvFacing, type PlacedSlot } from "./interactions";
 import { gamingSpots } from "./gaming";
-import { buildNav, canStep, findPath, nearestWalkable, slide, walkable, type Cell, type Nav } from "./nav";
+import { dealBlackjack, finishBlackjack, playBlackjack, type BlackjackCommand } from "./blackjack";
+import { buildNav, canStep, findPath, nearestWalkable, roomAt, slide, walkable, type Cell, type Nav } from "./nav";
 import {
   activityAt,
   arrivalTime,
@@ -42,7 +43,11 @@ export type LifeReject =
   | "partner-away"
   | "partner-busy"
   | "not-in-bed"
-  | "no-tv";
+  | "no-tv"
+  | "not-at-table"
+  | "round-changed"
+  | "round-active"
+  | "round-over";
 
 export const LIFE_TEXT: Record<LifeReject, string> = {
   unreachable: "Can't get there from here.",
@@ -57,6 +62,10 @@ export const LIFE_TEXT: Record<LifeReject, string> = {
   "partner-busy": "Your partner's busy. Try again in a moment.",
   "not-in-bed": "Get into the same bed first.",
   "no-tv": "There's no TV in view from here.",
+  "not-at-table": "Join the card table and finish walking there first.",
+  "round-changed": "The round changed. Choose again from the current hand.",
+  "round-active": "Finish this round before dealing another.",
+  "round-over": "Your hand is finished. Wait for the next deal.",
 };
 
 /** The furniture action a use is based on (eating or watching TV from a seat is sitting, cuddling is sleeping). */
@@ -86,6 +95,7 @@ export class Life {
     public state: LifeState,
     private cat: Catalog = defaultCatalog,
     private makeId: () => string = newId,
+    private random: () => number = Math.random,
   ) {}
 
   private level(bp: Blueprint): Level {
@@ -189,7 +199,59 @@ export class Life {
     if (!a || !o) return "nothing-to-do";
     if (action === "watch") return this.watch(a, bp, o.id, now);
     if (action === "play") return this.play(a, bp, o.id, now);
+    if (action === "pingpong" || action === "blackjack") {
+      const nav = buildNav(bp, 0, this.cat);
+      const slots = slotsOf(o, action, this.cat);
+      if (!slots.length) return "nothing-to-do";
+      const reachable = slots.filter((s) => roomAt(nav, s.pose.x, s.pose.z, BODY_R)).map((s) => ({ ...s, around: [] }));
+      return reachable.length ? this.goUse(a, nav, reachable, now) : "unreachable";
+    }
     return this.goUse(a, buildNav(bp, 0, this.cat), slotsOf(o, action, this.cat), now);
+  }
+
+  /** Card choices belong to an arrived table participant and the round currently visible to them. */
+  cards(memberId: string, bp: Blueprint, objectId: string, roundId: string | null, command: BlackjackCommand, now: number): LifeReject | null {
+    const a = this.state.avatars[memberId];
+    const table = this.level(bp).objects[objectId];
+    if (!a || !table || !slotsOf(table, "blackjack", this.cat).length || a.use?.action !== "blackjack" || a.use.objectId !== objectId || activityAt(a, now) !== "blackjack") return "not-at-table";
+    const round = this.state.blackjack?.[objectId];
+    if ((round?.id ?? null) !== roundId) return "round-changed";
+    if (command === "deal") {
+      if (round?.phase === "playing") return "round-active";
+      const players = Object.values(this.state.avatars)
+        .filter((p) => p.use?.action === "blackjack" && p.use.objectId === objectId && this.isHere(p.memberId))
+        .sort((a, b) => a.use!.slot - b.use!.slot);
+      if (players.some((p) => activityAt(p, now) !== "blackjack")) return "not-at-table";
+      this.state.blackjack ??= {};
+      const dealt = dealBlackjack(this.makeId(), players.map((p) => p.memberId), this.random);
+      for (const player of players) dealt.hands[player.memberId]!.seat = player.use!.slot;
+      this.state.blackjack[objectId] = dealt;
+      return null;
+    }
+    if (!round || !playBlackjack(round, memberId, command, this.random)) return "round-over";
+    return null;
+  }
+
+  /** Leaving a table or losing a partner never leaves an unfinishable round behind. Empty houses pause. */
+  syncTableGames(bp: Blueprint): boolean {
+    let changed = false;
+    for (const [tableId, round] of Object.entries(this.state.blackjack ?? {})) {
+      const table = this.level(bp).objects[tableId];
+      if (!table || !slotsOf(table, "blackjack", this.cat).length) {
+        delete this.state.blackjack![tableId];
+        changed = true;
+        continue;
+      }
+      if (round.phase !== "playing") continue;
+      for (const [id, hand] of Object.entries(round.hands)) {
+        if (hand.status !== "playing") continue;
+        const use = this.state.avatars[id]?.use;
+        if (use?.action !== "blackjack" || use.objectId !== tableId) { hand.status = "left"; changed = true; }
+        else if (this.online?.size && !this.online.has(id)) { hand.status = "stood"; changed = true; }
+      }
+      if (finishBlackjack(round, this.random)) changed = true;
+    }
+    return changed;
   }
 
   /** Reserve a controller and a seat facing the console's nearest TV, falling back to an open floor spot. */
@@ -451,7 +513,7 @@ export class Life {
 
   /** Move time forward: finish meals and plates, and keep the cooking speed right. True if anything changed. */
   tick(bp: Blueprint, now: number): boolean {
-    let changed = false;
+    let changed = this.syncTableGames(bp);
     for (const a of Object.values(this.state.avatars)) {
       const u = a.use;
       if ((together(u) || brief(u)) && u!.until !== undefined && now >= u!.until) {
@@ -604,12 +666,13 @@ export class Life {
       } else kept.push(d);
     }
     this.state.dishes = kept;
-    return changed;
+    return this.syncTableGames(bp) || changed;
   }
 
   /** Pick up from a saved state on a new clock: everyone where they were, meals paused, eating finished. */
   static restore(saved: LifeState, now: number, cat: Catalog = defaultCatalog): Life {
     const state: LifeState = { avatars: {}, cooking: null, dishes: saved.dishes ?? [] };
+    if (saved.blackjack) state.blackjack = structuredClone(saved.blackjack);
     for (const a of Object.values(saved.avatars ?? {})) {
       const end = a.path[a.path.length - 1]!;
       const use =
@@ -640,6 +703,7 @@ export class Life {
       avatars,
       cooking: c && recipe ? { ...c, done: cookingDone(c, recipe, now), rate: 0, updatedAt: 0 } : null,
       dishes: this.state.dishes.map((d) => ({ ...d })),
+      ...(this.state.blackjack ? { blackjack: structuredClone(this.state.blackjack) } : {}),
     };
   }
 }

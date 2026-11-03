@@ -22,6 +22,8 @@ const VERB: Record<Action, string> = {
   prep: "Cook",
   watch: "Watch TV",
   play: "Play PS5",
+  pingpong: "Play ping-pong",
+  blackjack: "Play blackjack",
   swim: "Swim",
   bathe: "Take a bath",
   toilet: "Use the toilet",
@@ -141,7 +143,7 @@ function Menu() {
     const out = mine?.use?.action === "bathe" || mine?.use?.action === "swim";
     const playing = mine?.use?.action === "play" && (mine.use.consoleId === o.id || mine.use.tv === o.id || using);
     if (playing) options.push({ label: "Stop playing", run: () => act({ do: "stop" }) });
-    else if (using) options.push({ label: out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });
+    else if (using) options.push({ label: mine?.use?.action === "pingpong" || mine?.use?.action === "blackjack" ? "Leave table" : out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });
     // watching this TV from a seat across the room
     else if (mine?.use?.tv === o.id) options.push({ label: "Stop watching", run: () => act({ do: "stop" }) });
     if (us.inBed && us.here && mine?.use?.objectId === o.id)
