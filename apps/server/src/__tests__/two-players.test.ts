@@ -172,6 +172,31 @@ describe("shared building", () => {
     b.op("opB0000002", { t: "object.remove", level: 0, id: "chair00001" });
     expect((await b.next("applied")).version).toBe(2);
   });
+
+  it("guards a held door however an edit reaches it: in a batch, or by knocking down its wall", async () => {
+    const { a, b } = await couple();
+    await a.connect();
+    await b.connect();
+    a.op("opA0000001", {
+      t: "batch",
+      ops: [
+        { t: "walls.add", level: 0, edges: ["h:2:3", "h:3:3"], style: "plaster_cream" },
+        { t: "opening.place", level: 0, id: "door000001", catalogId: "door_wood", dir: "h", x: 2, z: 3, flip: false },
+      ],
+    });
+    await b.next("applied");
+    a.send({ type: "hold", objectId: "door000001" });
+    expect((await b.next("holds")).holds).toEqual({ door000001: expect.any(String) });
+    b.op("opB0000001", { t: "batch", ops: [{ t: "floor.paint", level: 0, cells: ["0:0"], material: "oak" }, { t: "opening.remove", level: 0, id: "door000001" }] });
+    expect((await b.next("rejected")).reason).toBe("held");
+    b.op("opB0000002", { t: "walls.remove", level: 0, edges: ["h:2:3"] });
+    expect((await b.next("rejected")).reason).toBe("held");
+    // once let go, the wall can come down and take the door with it
+    a.send({ type: "hold", objectId: null });
+    await b.next("holds", (m) => Object.keys(m.holds).length === 0);
+    b.op("opB0000003", { t: "walls.remove", level: 0, edges: ["h:2:3"] });
+    expect((await b.next("applied")).version).toBe(2);
+  });
 });
 
 describe("disconnects and saving", () => {

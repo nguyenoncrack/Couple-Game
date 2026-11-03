@@ -4,18 +4,22 @@ import {
   edgesBetween,
   footprintOf,
   newId,
+  openingProblem,
   placementProblem,
   rotatedSize,
+  type OpeningItem,
+  type PlacedOpening,
   type Rot,
 } from "@cg/shared";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { create } from "zustand";
-import { addWall, FootprintMarker, Furniture, objectTransform, WALL_DOWN_H, WALL_H, wallRuns } from "../render/House";
+import { autoPan, cameraGestureActive } from "../render/CameraRig";
+import { addWall, FootprintMarker, Furniture, objectTransform, openingTransform, WALL_DOWN_H, WALL_H, wallRuns, Walls } from "../render/House";
 import type { Kit } from "../render/kit";
 import { KitMesh, Meshes } from "../render/KitMesh";
-import { modelFor } from "../render/models";
+import { modelFor, openingModelFor } from "../render/models";
 import { heldByPartner, hold, sharePresence, submit, toast, useGame } from "../state/game";
 
 /**
@@ -30,12 +34,16 @@ interface Drag {
 }
 
 interface MoveDrag {
+  kind: "object" | "opening";
   id: string;
   /** Offset from the pointer's cell to the object's anchor, kept while dragging. */
   offset: [number, number];
   x: number;
   z: number;
   rot: Rot;
+  /** Doors and windows: which wall line, and which way they face. */
+  dir: "h" | "v";
+  flip: boolean;
   moved: boolean;
 }
 
@@ -48,6 +56,8 @@ interface BuildState {
 export const useBuild = create<BuildState>(() => ({ pointer: null, drag: null, move: null }));
 const setB = useBuild.setState;
 const getB = useBuild.getState;
+// While something is being dragged, the camera follows the pointer to the screen edge.
+useBuild.subscribe((b) => (autoPan.active = Boolean(b.drag || b.move)));
 
 function lot() {
   return useGame.getState().view?.lot ?? { w: 0, d: 0 };
@@ -76,12 +86,37 @@ function problemAt(catalogId: string, x: number, z: number, rot: Rot, ignore: st
   return placementProblem(view, view.levels[0]!, item, { x, z, rot }, ignore);
 }
 
+/** Doors and windows snap to the nearest wall line, preferring a spot where they'd fit. */
+function openingSpotAt(p: [number, number], item: OpeningItem, ignore: string | null): { dir: "h" | "v"; x: number; z: number } {
+  const half = item.width / 2;
+  const h = { dir: "h" as const, x: Math.round(p[0] - half), z: Math.round(p[1]) };
+  const v = { dir: "v" as const, x: Math.round(p[0]), z: Math.round(p[1] - half) };
+  const level = useGame.getState().view?.levels[0];
+  if (level) {
+    const okH = openingProblem(level, item, h, ignore) === null;
+    const okV = openingProblem(level, item, v, ignore) === null;
+    if (okH !== okV) return okH ? h : v;
+  }
+  return Math.abs(p[1] - Math.round(p[1])) <= Math.abs(p[0] - Math.round(p[0])) ? h : v;
+}
+
+/** Presence only has room for a rotation, so a door's wall direction and facing ride in it. */
+export const openingToRot = (dir: "h" | "v", flip: boolean) => ((dir === "v" ? 1 : 0) + (flip ? 2 : 0)) as Rot;
+export const rotToOpening = (rot: Rot) => ({ dir: rot % 2 ? ("v" as const) : ("h" as const), flip: rot >= 2 });
+
 function finishMove() {
   const m = getB().move;
   if (!m) return;
   setB({ move: null });
-  const o = useGame.getState().view?.levels[0]?.objects[m.id];
-  if (m.moved && o && (o.x !== m.x || o.z !== m.z || o.rot !== m.rot)) submit({ t: "object.move", level: 0, id: m.id, x: m.x, z: m.z, rot: m.rot });
+  const level = useGame.getState().view?.levels[0];
+  if (!m.moved || !level) return;
+  if (m.kind === "opening") {
+    const o = level.openings[m.id];
+    if (o && (o.x !== m.x || o.z !== m.z || o.dir !== m.dir || o.flip !== m.flip)) submit({ t: "opening.move", level: 0, id: m.id, dir: m.dir, x: m.x, z: m.z, flip: m.flip });
+    return;
+  }
+  const o = level.objects[m.id];
+  if (o && (o.x !== m.x || o.z !== m.z || o.rot !== m.rot)) submit({ t: "object.move", level: 0, id: m.id, x: m.x, z: m.z, rot: m.rot });
 }
 
 function finishDrag() {
@@ -113,10 +148,16 @@ export function select(id: string | null) {
   hold(id);
 }
 
-/** Turn the selected object a quarter, keeping it centred where it was. */
+/** Turn the selected object a quarter, keeping it centred where it was; turn a door or window to face the other way. */
 export function rotateSelected() {
   const s = useGame.getState();
-  const o = s.selection ? s.view?.levels[0]?.objects[s.selection] : null;
+  const level = s.view?.levels[0];
+  const opening = s.selection ? level?.openings[s.selection] : null;
+  if (opening) {
+    submit({ t: "opening.move", level: 0, id: opening.id, dir: opening.dir, x: opening.x, z: opening.z, flip: !opening.flip });
+    return;
+  }
+  const o = s.selection ? level?.objects[s.selection] : null;
   if (!o) return;
   const item = catalog.furniture.get(o.catalogId)!;
   const f = footprintOf(item, o);
@@ -130,7 +171,8 @@ export function deleteSelected() {
   if (!s.selection) return;
   const id = s.selection;
   select(null);
-  submit({ t: "object.remove", level: 0, id });
+  if (s.view?.levels[0]?.openings[id]) submit({ t: "opening.remove", level: 0, id });
+  else submit({ t: "object.remove", level: 0, id });
 }
 
 export function BuildTools() {
@@ -159,8 +201,8 @@ export function BuildTools() {
       if (k === "r") {
         const m = getB().move;
         if (m) {
-          const o = s.view?.levels[0]?.objects[m.id];
-          if (o) setB({ move: { ...m, rot: ((m.rot + 1) % 4) as Rot, moved: true } });
+          if (m.kind === "opening") setB({ move: { ...m, flip: !m.flip, moved: true } });
+          else setB({ move: { ...m, rot: ((m.rot + 1) % 4) as Rot, moved: true } });
         } else if (s.placing) useGame.setState({ placing: { ...s.placing, rot: ((s.placing.rot + 1) % 4) as Rot } });
         else rotateSelected();
       } else if (k === "delete" || k === "backspace") {
@@ -180,12 +222,22 @@ export function BuildTools() {
   const placing = useGame((s) => s.placing);
   useEffect(() => {
     let drag = null;
-    if (move) {
-      const o = view?.levels[0]?.objects[move.id];
-      if (o && move.moved) drag = { catalogId: o.catalogId, objectId: move.id, x: move.x, z: move.z, rot: move.rot };
+    const level = view?.levels[0];
+    if (move?.moved && move.kind === "opening") {
+      const o = level?.openings[move.id];
+      if (o) drag = { catalogId: o.catalogId, objectId: move.id, x: move.x, z: move.z, rot: openingToRot(move.dir, move.flip) };
+    } else if (move?.moved) {
+      const o = level?.objects[move.id];
+      if (o) drag = { catalogId: o.catalogId, objectId: move.id, x: move.x, z: move.z, rot: move.rot };
     } else if (tool === "buy" && placing && pointer) {
-      const [x, z] = anchorUnder(pointer, placing.catalogId, placing.rot);
-      drag = { catalogId: placing.catalogId, objectId: null, x, z, rot: placing.rot };
+      const opening = catalog.openings.get(placing.catalogId);
+      if (opening) {
+        const spot = openingSpotAt(pointer, opening, null);
+        drag = { catalogId: placing.catalogId, objectId: null, x: spot.x, z: spot.z, rot: openingToRot(spot.dir, placing.rot % 2 === 1) };
+      } else {
+        const [x, z] = anchorUnder(pointer, placing.catalogId, placing.rot);
+        drag = { catalogId: placing.catalogId, objectId: null, x, z, rot: placing.rot };
+      }
     }
     sharePresence({ cursor: pointer ? { x: pointer[0], z: pointer[1] } : null, tool, drag });
   }, [pointer, move, tool, placing, view]);
@@ -202,7 +254,13 @@ export function BuildTools() {
       if (s.tool === "wall" || s.tool === "wallErase") setB({ drag: { ...drag, end: straighten(drag.start, cornerAt(p)) } });
       else setB({ drag: { ...drag, end: cellAt(p) } });
     }
-    if (move) {
+    if (move?.kind === "opening") {
+      const item = catalog.openings.get(s.view?.levels[0]?.openings[move.id]?.catalogId ?? "");
+      if (item) {
+        const spot = openingSpotAt(p, item, move.id);
+        if (spot.x !== move.x || spot.z !== move.z || spot.dir !== move.dir) setB({ move: { ...move, ...spot, moved: true } });
+      }
+    } else if (move) {
       const c = cellAt(p);
       const x = c[0] + move.offset[0];
       const z = c[1] + move.offset[1];
@@ -211,7 +269,7 @@ export function BuildTools() {
   };
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || cameraGestureActive()) return;
     const p: [number, number] = [e.point.x, e.point.z];
     const s = useGame.getState();
     downAt.current = p;
@@ -231,6 +289,12 @@ export function BuildTools() {
       case "buy": {
         if (!s.placing) return;
         const { catalogId, rot } = s.placing;
+        const opening = catalog.openings.get(catalogId);
+        if (opening) {
+          const spot = openingSpotAt(p, opening, null);
+          submit({ t: "opening.place", level: 0, id: newId(), catalogId, ...spot, flip: rot % 2 === 1 });
+          break;
+        }
         const [x, z] = anchorUnder(p, catalogId, rot);
         submit({ t: "object.place", level: 0, id: newId(), catalogId, x, z, rot });
         break;
@@ -242,6 +306,7 @@ export function BuildTools() {
   };
 
   const onObjectDown = (id: string, e: ThreeEvent<PointerEvent>) => {
+    if (cameraGestureActive()) return;
     const s = useGame.getState();
     if (s.tool !== "select") {
       // Other tools act on the floor underneath.
@@ -256,13 +321,31 @@ export function BuildTools() {
     const o = s.view!.levels[0]!.objects[id]!;
     select(id);
     const c = cellAt([e.point.x, e.point.z]);
-    setB({ move: { id, offset: [o.x - c[0], o.z - c[1]], x: o.x, z: o.z, rot: o.rot, moved: false } });
+    setB({ move: { kind: "object", id, offset: [o.x - c[0], o.z - c[1]], x: o.x, z: o.z, rot: o.rot, dir: "h", flip: false, moved: false } });
+  };
+
+  const onOpeningDown = (id: string, e: ThreeEvent<PointerEvent>) => {
+    if (cameraGestureActive()) return;
+    const s = useGame.getState();
+    if (s.tool !== "select") {
+      onDown(e);
+      return;
+    }
+    const partner = heldByPartner(id);
+    if (partner) {
+      toast(`${partner.name} is moving that right now.`);
+      return;
+    }
+    const o = s.view!.levels[0]!.openings[id]!;
+    select(id);
+    setB({ move: { kind: "opening", id, offset: [0, 0], x: o.x, z: o.z, rot: 0, dir: o.dir, flip: o.flip, moved: false } });
   };
 
   return (
     <>
       <mesh geometry={plane} position={[0, 0.04, 0]} visible={false} onPointerMove={onMove} onPointerDown={onDown} onPointerLeave={() => setB({ pointer: null })} />
-      <Furniture objects={level.objects} hidden={move?.moved ? move.id : null} onObjectDown={onObjectDown} />
+      <Walls level={level} hiddenOpening={move?.moved && move.kind === "opening" ? move.id : null} onOpeningDown={onOpeningDown} />
+      <Furniture objects={level.objects} hidden={move?.moved && move.kind === "object" ? move.id : null} onObjectDown={onObjectDown} />
       {tool !== "select" && <Grid w={view.lot.w} d={view.lot.d} />}
       <Previews />
     </>
@@ -294,7 +377,7 @@ function Previews() {
   const placing = useGame((s) => s.placing);
   const selection = useGame((s) => s.selection);
   const view = useGame((s) => s.view);
-  const wallsDown = useGame((s) => s.wallsDown);
+  const wallsDown = useGame((s) => s.wallMode === "down");
   const level = view?.levels[0];
 
   const wallPreview = useMemo(() => {
@@ -338,16 +421,27 @@ function Previews() {
   }
 
   if (tool === "buy" && placing && pointer) {
-    const [x, z] = anchorUnder(pointer, placing.catalogId, placing.rot);
-    out.push(<Ghost key="placing" catalogId={placing.catalogId} x={x} z={z} rot={placing.rot} ignore={null} />);
+    const opening = catalog.openings.get(placing.catalogId);
+    if (opening) {
+      const spot = openingSpotAt(pointer, opening, null);
+      out.push(<OpeningGhost key="placing" catalogId={placing.catalogId} {...spot} flip={placing.rot % 2 === 1} ignore={null} />);
+    } else {
+      const [x, z] = anchorUnder(pointer, placing.catalogId, placing.rot);
+      out.push(<Ghost key="placing" catalogId={placing.catalogId} x={x} z={z} rot={placing.rot} ignore={null} />);
+    }
   }
 
-  if (move?.moved && level?.objects[move.id]) {
+  if (move?.moved && move.kind === "opening" && level?.openings[move.id]) {
+    out.push(<OpeningGhost key="moving" catalogId={level.openings[move.id]!.catalogId} dir={move.dir} x={move.x} z={move.z} flip={move.flip} ignore={move.id} />);
+  } else if (move?.moved && level?.objects[move.id]) {
     out.push(<Ghost key="moving" catalogId={level.objects[move.id]!.catalogId} x={move.x} z={move.z} rot={move.rot} ignore={move.id} />);
   } else if (selection && level?.objects[selection]) {
     const o = level.objects[selection]!;
     const f = footprintOf(catalog.furniture.get(o.catalogId)!, o);
     out.push(<FootprintMarker key="sel" {...f} color="#3a3631" />);
+  } else if (selection && level?.openings[selection]) {
+    const o = level.openings[selection]!;
+    out.push(<FootprintMarker key="sel" {...openingFootprint(o, catalog.openings.get(o.catalogId)!)} color="#3a3631" />);
   }
 
   return <>{out}</>;
@@ -363,6 +457,28 @@ export function Ghost({ catalogId, x, z, rot, ignore, color }: { catalogId: stri
         <Meshes meshes={modelFor(item, ok ? "ok" : "bad")} raycast={false} />
       </group>
       <FootprintMarker {...f} color={color ?? (ok ? "#6f9e5c" : "#c4534a")} />
+    </group>
+  );
+}
+
+/** A strip of floor either side of a door or window, for selection and hold markers. */
+export function openingFootprint(o: Pick<PlacedOpening, "dir" | "x" | "z">, item: OpeningItem) {
+  return o.dir === "h" ? { x: o.x, z: o.z - 0.3, w: item.width, d: 0.6 } : { x: o.x - 0.3, z: o.z, w: 0.6, d: item.width };
+}
+
+/** A see-through door or window snapped to a wall, green if it fits there and red if not. */
+export function OpeningGhost({ catalogId, dir, x, z, flip, ignore, color }: { catalogId: string; dir: "h" | "v"; x: number; z: number; flip: boolean; ignore: string | null; color?: string }) {
+  const item = catalog.openings.get(catalogId);
+  const level = useGame((s) => s.view?.levels[0]);
+  if (!item || !level) return null;
+  const ok = openingProblem(level, item, { dir, x, z }, ignore) === null;
+  const { position, rotationY } = openingTransform({ dir, x, z, flip }, item);
+  return (
+    <group>
+      <group position={position} rotation-y={rotationY}>
+        <Meshes meshes={openingModelFor(item, ok ? "ok" : "bad")} raycast={false} />
+      </group>
+      <FootprintMarker {...openingFootprint({ dir, x, z }, item)} color={color ?? (ok ? "#6f9e5c" : "#c4534a")} />
     </group>
   );
 }

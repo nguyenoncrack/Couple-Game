@@ -27,5 +27,5 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-export const createHouse = (houseName: string, playerName: string) => post<JoinedHouse>("/api/houses", { houseName, playerName });
+export const createHouse = (houseName: string, playerName: string, starter = false) => post<JoinedHouse>("/api/houses", { houseName, playerName, starter });
 export const joinHouse = (code: string, playerName: string) => post<JoinedHouse>("/api/join", { code, playerName });

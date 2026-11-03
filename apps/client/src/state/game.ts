@@ -1,5 +1,6 @@
 import {
   applyOp,
+  inverseOp,
   newId,
   REJECT_TEXT,
   type Blueprint,
@@ -9,10 +10,12 @@ import {
   type Presence,
   type Rot,
   type ServerMsg,
+  undoCheck,
 } from "@cg/shared";
 import { create } from "zustand";
 import { Connection } from "../net/connection";
 import { updateHouse, type SavedHouse } from "../net/session";
+import type { WallMode } from "../render/House";
 
 /**
  * Game state on the client. The server's confirmed house plus my edits it hasn't confirmed yet (`pending`) make
@@ -51,8 +54,11 @@ export interface GameState {
   floorMaterial: string;
   /** The catalog item being placed with the buy tool, and its rotation. */
   placing: { catalogId: string; rot: Rot } | null;
+  /** A selected object, door or window. */
   selection: string | null;
-  wallsDown: boolean;
+  wallMode: WallMode;
+  canUndo: boolean;
+  canRedo: boolean;
   catalogOpen: boolean;
   toasts: Toast[];
 }
@@ -73,7 +79,9 @@ export const useGame = create<GameState>(() => ({
   floorMaterial: "oak",
   placing: null,
   selection: null,
-  wallsDown: false,
+  wallMode: "cut",
+  canUndo: false,
+  canRedo: false,
   catalogOpen: false,
   toasts: [],
 }));
@@ -105,11 +113,14 @@ function rebase(confirmed: HouseState, pending: Pending[]) {
   return { view, kept, dropped };
 }
 
+const exists = (bp: Blueprint, id: string) => Boolean(bp.levels[0]?.objects[id] || bp.levels[0]?.openings[id]);
+
 function settle(confirmed: HouseState, pending: Pending[]) {
   const { view, kept, dropped } = rebase(confirmed, pending);
   if (dropped.length) toast("Your partner changed that first.");
+  for (const d of dropped) forgetHistory(d.clientOpId);
   const sel = get().selection;
-  set({ confirmed, pending: kept, view, selection: sel && view.levels[0]?.objects[sel] ? sel : null });
+  set({ confirmed, pending: kept, view, selection: sel && exists(view, sel) ? sel : null });
 }
 
 function handle(msg: ServerMsg) {
@@ -160,7 +171,10 @@ function handle(msg: ServerMsg) {
     }
     case "duplicate":
     case "rejected": {
-      if (msg.type === "rejected") toast(REJECT_TEXT[msg.reason as keyof typeof REJECT_TEXT] ?? "That didn't work.");
+      if (msg.type === "rejected") {
+        toast(REJECT_TEXT[msg.reason as keyof typeof REJECT_TEXT] ?? "That didn't work.");
+        forgetHistory(msg.clientOpId);
+      }
       if (s.confirmed) settle(s.confirmed, s.pending.filter((p) => p.clientOpId !== msg.clientOpId));
       break;
     }
@@ -189,6 +203,9 @@ function handle(msg: ServerMsg) {
 export function connect(house: SavedHouse) {
   disconnect();
   set({ house, status: "connecting", confirmed: null, pending: [], view: null, holds: {}, presence: {}, selection: null, placing: null, tool: "select" });
+  undoStack.length = 0;
+  redoStack.length = 0;
+  set({ canUndo: false, canRedo: false });
   conn = new Connection(house.houseId, house.token, {
     knownVersion: () => get().confirmed?.version ?? 0,
     onMessage: handle,
@@ -207,8 +224,36 @@ export function disconnect() {
   conn = null;
 }
 
+/**
+ * My edits, newest last, each with the op that reverses it. `check` fingerprints what the edit touched right
+ * after it, so an undo can tell whether my partner has changed those things since (and then leave them alone).
+ */
+interface HistoryEntry {
+  clientOpId: string;
+  forward: Op;
+  inverse: Op;
+  check: string;
+}
+
+const HISTORY = 100;
+const undoStack: HistoryEntry[] = [];
+const redoStack: HistoryEntry[] = [];
+
+function historyChanged() {
+  set({ canUndo: undoStack.length > 0, canRedo: redoStack.length > 0 });
+}
+
+/** The server turned an edit down (or my partner beat me to it): it can't be undone or redone. */
+function forgetHistory(clientOpId: string) {
+  for (const stack of [undoStack, redoStack]) {
+    const i = stack.findIndex((e) => e.clientOpId === clientOpId);
+    if (i >= 0) stack.splice(i, 1);
+  }
+  historyChanged();
+}
+
 /** Make an edit: shown immediately, sent to the server, and undone if the server says no. */
-export function submit(op: Op): boolean {
+export function submit(op: Op, history: "record" | "undo" | "redo" = "record"): boolean {
   const s = get();
   if (!s.view || !s.confirmed) return false;
   const r = applyOp(s.view, op);
@@ -217,10 +262,35 @@ export function submit(op: Op): boolean {
     return false;
   }
   const p = { clientOpId: newId(), op };
+  const inverse = inverseOp(s.view, op);
+  if (inverse) {
+    // An undo goes on the redo stack and vice versa; a fresh edit clears the redo stack.
+    const entry = { clientOpId: p.clientOpId, forward: op, inverse, check: undoCheck(r.blueprint, op) };
+    const stack = history === "undo" ? redoStack : undoStack;
+    stack.push(entry);
+    if (stack.length > HISTORY) stack.shift();
+    if (history === "record") redoStack.length = 0;
+    historyChanged();
+  }
   set({ pending: [...s.pending, p], view: r.blueprint });
   conn?.send({ type: "op", ...p });
   return true;
 }
+
+function stepHistory(from: HistoryEntry[], kind: "undo" | "redo") {
+  const view = get().view;
+  const e = from.pop();
+  historyChanged();
+  if (!e || !view) return;
+  if (undoCheck(view, e.forward) !== e.check) {
+    toast(kind === "undo" ? "Your partner changed that since, so it stays." : "Things changed since, so that can't be redone.");
+    return;
+  }
+  submit(e.inverse, kind);
+}
+
+export const undo = () => stepHistory(undoStack, "undo");
+export const redo = () => stepHistory(redoStack, "redo");
 
 export function hold(objectId: string | null) {
   conn?.send({ type: "hold", objectId });
@@ -261,4 +331,4 @@ export function setTool(tool: Tool) {
 }
 
 // Handy for poking at the game from the console while developing.
-if (import.meta.env.DEV) Object.assign(window, { __game: useGame, __submit: submit });
+if (import.meta.env.DEV) Object.assign(window, { __game: useGame, __submit: submit, __undo: undo, __redo: redo });

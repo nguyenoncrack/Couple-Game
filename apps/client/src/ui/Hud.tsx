@@ -1,6 +1,8 @@
-import { catalog, type FurnitureItem } from "@cg/shared";
+import { catalog, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
 import { useState } from "react";
-import { setTool, useGame, type Tool } from "../state/game";
+import type { WallMode } from "../render/House";
+import { redo, setTool, submit, undo, useGame, type Tool } from "../state/game";
+import { cameraApi } from "../render/CameraRig";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
 import { Icon } from "./icons";
 
@@ -13,6 +15,8 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       {status === "reconnecting" && <div className="banner">Reconnecting… your changes are kept and will sync.</div>}
       <ToolPanel />
       <SelectionCard />
+      <StarterOffer />
+      <CameraButtons />
       <Toolbar />
       <Toasts />
       {status === "gone" && <Gone onLeave={onLeave} />}
@@ -112,11 +116,15 @@ function HelpCard({ onClose }: { onClose: () => void }) {
       <div className="kicker">Controls</div>
       <ul className="hand">
         <li>
-          <b>Right-drag</b> to look around, <b>scroll</b> to zoom
+          <b>Right-drag</b> or <b>Option + drag</b> to look around
         </li>
         <li>
-          <b>W A S D</b> to pan, <b>Q / E</b> to turn the view
+          <b>Space + drag</b>, <b>Shift + right-drag</b> or <b>W A S D</b> to pan
         </li>
+        <li>
+          <b>Scroll</b> or <b>pinch</b> to zoom, <b>Q / E</b> to turn, <b>H</b> for the whole lot
+        </li>
+        <li>Dragging near the screen edge while building moves the view along</li>
         <li>
           <b>Drag</b> along grid lines to build or erase walls
         </li>
@@ -124,10 +132,19 @@ function HelpCard({ onClose }: { onClose: () => void }) {
           <b>Drag</b> over tiles to lay or lift floors
         </li>
         <li>
-          <b>Click</b> furniture to pick it, <b>drag</b> to move it
+          <b>Click</b> furniture, a door or a window to pick it, <b>drag</b> to move it
         </li>
         <li>
-          <b>R</b> rotates, <b>Delete</b> removes, <b>Esc</b> lets go
+          Doors and windows snap into the nearest wall
+        </li>
+        <li>
+          <b>R</b> rotates (or flips a door), <b>Delete</b> removes, <b>Esc</b> lets go
+        </li>
+        <li>
+          <b>⌘Z</b> / <b>Ctrl+Z</b> undoes, <b>⇧⌘Z</b> / <b>Ctrl+Y</b> redoes your own edits
+        </li>
+        <li>
+          <b>T</b> switches walls between up, cutaway and down
         </li>
       </ul>
       <button className="close" onClick={onClose} aria-label="Close">
@@ -143,14 +160,28 @@ const TOOLS: { tool: Tool; label: string; icon: () => React.JSX.Element; key: st
   { tool: "wallErase", label: "Erase walls", icon: Icon.wallErase, key: "3" },
   { tool: "floor", label: "Floor", icon: Icon.floor, key: "4" },
   { tool: "floorErase", label: "Lift floor", icon: Icon.floorErase, key: "5" },
-  { tool: "buy", label: "Furniture", icon: Icon.buy, key: "6" },
+  { tool: "buy", label: "Buy", icon: Icon.buy, key: "6" },
 ];
+
+export const WALL_MODES: { mode: WallMode; label: string; icon: () => React.JSX.Element }[] = [
+  { mode: "up", label: "Walls up", icon: Icon.wallsUp },
+  { mode: "cut", label: "Cutaway", icon: Icon.wallsCut },
+  { mode: "down", label: "Walls down", icon: Icon.wallsDown },
+];
+
+export function cycleWallMode() {
+  const i = WALL_MODES.findIndex((m) => m.mode === useGame.getState().wallMode);
+  useGame.setState({ wallMode: WALL_MODES[(i + 1) % WALL_MODES.length]!.mode });
+}
 
 export const TOOL_KEYS = Object.fromEntries(TOOLS.map((t) => [t.key, t.tool]));
 
 function Toolbar() {
   const tool = useGame((s) => s.tool);
-  const wallsDown = useGame((s) => s.wallsDown);
+  const mode = useGame((s) => s.wallMode);
+  const wallMode = WALL_MODES.find((m) => m.mode === mode) ?? WALL_MODES[0]!;
+  const canUndo = useGame((s) => s.canUndo);
+  const canRedo = useGame((s) => s.canRedo);
   return (
     <div className="toolbar">
       {TOOLS.map((t) => (
@@ -161,9 +192,40 @@ function Toolbar() {
         </button>
       ))}
       <span className="toolbar-gap" />
-      <button className={`slot round ${wallsDown ? "active" : ""}`} onClick={() => useGame.setState({ wallsDown: !wallsDown })} title="Walls up / down (T)">
-        {wallsDown ? <Icon.wallsDown /> : <Icon.wallsUp />}
-        <span className="slot-label">{wallsDown ? "Walls down" : "Walls up"}</span>
+      <button className={`slot round ${wallMode.mode !== "up" ? "active" : ""}`} onClick={cycleWallMode} title="Walls: up, cutaway, down (T)">
+        <wallMode.icon />
+        <span className="slot-label">{wallMode.label}</span>
+      </button>
+      <span className="toolbar-gap" />
+      <button className="slot round small" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">
+        <Icon.undo />
+        <span className="slot-label">Undo</span>
+      </button>
+      <button className="slot round small" onClick={redo} disabled={!canRedo} title="Redo (⇧⌘Z)">
+        <Icon.redo />
+        <span className="slot-label">Redo</span>
+      </button>
+    </div>
+  );
+}
+
+function CameraButtons() {
+  return (
+    <div className="camera-buttons">
+      <button className="pill icon-pill" onClick={() => cameraApi.turn(-1)} title="Turn left (Q)">
+        <Icon.turnLeft />
+      </button>
+      <button className="pill icon-pill" onClick={() => cameraApi.turn(1)} title="Turn right (E)">
+        <Icon.turnRight />
+      </button>
+      <button className="pill icon-pill" onClick={() => cameraApi.zoom(1)} title="Zoom in (+)">
+        <Icon.plus />
+      </button>
+      <button className="pill icon-pill" onClick={() => cameraApi.zoom(-1)} title="Zoom out (−)">
+        <Icon.minus />
+      </button>
+      <button className="pill icon-pill" onClick={cameraApi.recenter} title="Whole lot (H)">
+        <Icon.home />
       </button>
     </div>
   );
@@ -178,27 +240,34 @@ function Swatch({ color, label, active, onClick }: { color: string; label: strin
   );
 }
 
-const CATEGORIES: { id: FurnitureItem["category"]; label: string }[] = [
+type Category = FurnitureItem["category"] | "openings";
+
+const CATEGORIES: { id: Category; label: string }[] = [
   { id: "living", label: "Living" },
   { id: "bedroom", label: "Bedroom" },
   { id: "kitchen", label: "Kitchen" },
   { id: "bathroom", label: "Bathroom" },
   { id: "decor", label: "Decor" },
+  { id: "outdoor", label: "Outdoor" },
+  { id: "openings", label: "Doors & windows" },
 ];
 
 /** A colour to stand for an item in the catalog (its main fabric, wood or body colour). */
-function itemColor(item: FurnitureItem) {
+function itemColor(item: FurnitureItem | OpeningItem) {
   const m = item.model as Record<string, unknown>;
-  for (const k of ["fabric", "blanket", "color", "cabinet", "body", "wood", "shade", "leaves"]) if (typeof m[k] === "string") return m[k] as string;
-  return "#efe9dc";
+  for (const k of ["fabric", "blanket", "color", "cabinet", "body", "wood", "shade", "leaves", "cushion", "canopy", "water", "leaf", "panel"]) if (typeof m[k] === "string") return m[k] as string;
+  return "#cfe2ea";
 }
+
+/** What a catalog entry shows as its size: a footprint, or how many wall tiles wide. */
+const itemSize = (i: FurnitureItem | OpeningItem) => ("footprint" in i ? `${i.footprint[0]}×${i.footprint[1]}` : `${i.width} wide`);
 
 function ToolPanel() {
   const tool = useGame((s) => s.tool);
   const wallStyle = useGame((s) => s.wallStyle);
   const floorMaterial = useGame((s) => s.floorMaterial);
   const placing = useGame((s) => s.placing);
-  const [category, setCategory] = useState<FurnitureItem["category"]>("living");
+  const [category, setCategory] = useState<Category>("living");
 
   if (tool === "wall")
     return (
@@ -231,7 +300,8 @@ function ToolPanel() {
       </div>
     );
   if (tool === "buy") {
-    const items = [...catalog.furniture.values()].filter((i) => i.category === category);
+    const items: (FurnitureItem | OpeningItem)[] = category === "openings" ? [...catalog.openings.values()] : [...catalog.furniture.values()].filter((i) => i.category === category);
+    const placingOpening = placing ? catalog.openings.has(placing.catalogId) : false;
     return (
       <div className="card tool-panel catalog">
         <div className="tabs">
@@ -249,16 +319,22 @@ function ToolPanel() {
               onClick={() => useGame.setState({ placing: placing?.catalogId === i.id ? null : { catalogId: i.id, rot: 0 } })}
             >
               <span className="item-chip" style={{ background: itemColor(i) }}>
-                <span className="item-size">
-                  {i.footprint[0]}×{i.footprint[1]}
-                </span>
+                <span className="item-size">{itemSize(i)}</span>
               </span>
               <span className="item-name">{i.name}</span>
               <span className="item-price">${i.price}</span>
             </button>
           ))}
         </div>
-        <p className="hint hand">{placing ? "Click to place · R to turn · Esc to stop" : "Pick something, then click on the lot."}</p>
+        <p className="hint hand">
+          {placingOpening
+            ? "Point at a wall and click · R to face it the other way · Esc to stop"
+            : placing
+              ? "Click to place · R to turn · Esc to stop"
+              : category === "openings"
+                ? "Pick a door or window, then click on a wall."
+                : "Pick something, then click on the lot."}
+        </p>
       </div>
     );
   }
@@ -267,21 +343,49 @@ function ToolPanel() {
 
 function SelectionCard() {
   const selection = useGame((s) => s.selection);
-  const o = useGame((s) => (s.selection ? s.view?.levels[0]?.objects[s.selection] : undefined));
+  const o = useGame((s) => (s.selection ? (s.view?.levels[0]?.objects[s.selection] ?? s.view?.levels[0]?.openings[s.selection]) : undefined));
   if (!selection || !o) return null;
-  const item = catalog.furniture.get(o.catalogId);
+  const opening = catalog.openings.get(o.catalogId);
+  const item = opening ?? catalog.furniture.get(o.catalogId);
   return (
     <div className="card selection-card">
       <div className="kicker">Selected</div>
       <div className="sel-name">{item?.name ?? o.catalogId}</div>
       <div className="sel-actions">
         <button className="btn" onClick={rotateSelected}>
-          <Icon.rotate /> Rotate <kbd>R</kbd>
+          {opening ? (
+            <>
+              <Icon.flip /> Flip <kbd>R</kbd>
+            </>
+          ) : (
+            <>
+              <Icon.rotate /> Rotate <kbd>R</kbd>
+            </>
+          )}
         </button>
         <button className="btn danger" onClick={deleteSelected}>
           <Icon.trash /> Remove <kbd>Del</kbd>
         </button>
       </div>
+    </div>
+  );
+}
+
+/** On an empty lot, offer the starter house. It arrives as one edit, so Undo takes it all away again. */
+function StarterOffer() {
+  const empty = useGame((s) => {
+    const l = s.view?.levels[0];
+    return Boolean(l) && !Object.keys(l!.walls).length && !Object.keys(l!.objects).length && !Object.keys(l!.tiles).length;
+  });
+  const online = useGame((s) => s.status === "online");
+  if (!empty) return null;
+  return (
+    <div className="card starter-card">
+      <div className="kicker">An empty lot</div>
+      <p className="hand">Build from scratch, or start with a house you can change: two bedrooms, a bathroom, an open kitchen and living room, a garage and a pool.</p>
+      <button className="btn primary" disabled={!online} onClick={() => submit(starterHouseOp())}>
+        <Icon.house /> Build the starter house
+      </button>
     </div>
   );
 }

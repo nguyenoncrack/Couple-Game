@@ -1,0 +1,18 @@
+[
+  { "id": "door_wood", "name": "Wooden door", "kind": "door", "price": 180, "width": 1, "sill": 0, "top": 2.1,
+    "model": { "kind": "door", "leaf": "#a57a50", "frame": "#f4efe4" } },
+  { "id": "door_blue", "name": "Blue front door", "kind": "door", "price": 260, "width": 1, "sill": 0, "top": 2.1,
+    "model": { "kind": "door", "leaf": "#5d7f8f", "frame": "#f4efe4", "glass": true } },
+  { "id": "door_french", "name": "French doors", "kind": "door", "price": 420, "width": 2, "sill": 0, "top": 2.2,
+    "model": { "kind": "door", "leaf": "#f4efe4", "frame": "#f4efe4", "glass": true, "double": true } },
+  { "id": "arch", "name": "Open archway", "kind": "door", "price": 60, "width": 1, "sill": 0, "top": 2.2,
+    "model": { "kind": "arch", "frame": "#f4efe4" } },
+  { "id": "garage_door", "name": "Garage door", "kind": "door", "price": 900, "width": 3, "sill": 0, "top": 2.3,
+    "model": { "kind": "garage", "panel": "#efe9dc" } },
+  { "id": "window_small", "name": "Small window", "kind": "window", "price": 120, "width": 1, "sill": 0.95, "top": 2.0,
+    "model": { "kind": "window", "frame": "#f4efe4", "panes": 2 } },
+  { "id": "window_wide", "name": "Wide window", "kind": "window", "price": 220, "width": 2, "sill": 0.85, "top": 2.05,
+    "model": { "kind": "window", "frame": "#f4efe4", "panes": 3, "box": true } },
+  { "id": "window_tall", "name": "Tall window", "kind": "window", "price": 260, "width": 1, "sill": 0.35, "top": 2.2,
+    "model": { "kind": "window", "frame": "#f4efe4", "panes": 2 } }
+]

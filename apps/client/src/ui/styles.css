@@ -518,6 +518,28 @@ button.pill:active,
   width: 6px;
 }
 
+/* camera buttons, down the right side */
+
+.camera-buttons {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.camera-buttons .icon-pill {
+  width: 42px;
+  height: 42px;
+}
+
+.camera-buttons svg {
+  width: 22px;
+  height: 22px;
+}
+
 /* tool panel */
 
 .tool-panel {
@@ -769,4 +791,66 @@ button.pill:active,
   .selection-card {
     bottom: 96px;
   }
+}
+
+/* Starter house or empty lot, on the home screen */
+.lot-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--card);
+  border: 1.5px dashed var(--ink-soft);
+  border-radius: 12px;
+}
+
+.choice b {
+  font-size: 16px;
+}
+
+.choice span {
+  font-size: 15px;
+  line-height: 1.15;
+  color: var(--ink-soft);
+}
+
+.choice.on {
+  background: #fdf1c4;
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.slot.round.small {
+  width: 58px;
+}
+
+.slot:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Offered on an empty lot */
+.starter-card {
+  position: absolute;
+  left: 50%;
+  top: 84px;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  padding: 14px 18px 16px;
+  text-align: center;
+}
+
+.starter-card p {
+  margin: 4px 0 12px;
+  font-size: 17px;
+  line-height: 1.25;
 }

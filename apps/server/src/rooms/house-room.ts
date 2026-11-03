@@ -1,7 +1,7 @@
 import {
   applyOp,
   CLOSE,
-  objectTouchedBy,
+  upgradeBlueprint,
   type AppliedOp,
   type Blueprint,
   type MemberInfo,
@@ -10,6 +10,15 @@ import {
   type ServerMsg,
 } from "@cg/shared";
 import type { HouseRow, MemberRow, Store } from "../persistence/store";
+
+/** The object, door or window with this ID, if it exists. */
+function find(bp: Blueprint, id: string) {
+  for (const l of bp.levels) {
+    const it = l.objects[id] ?? l.openings[id];
+    if (it) return it;
+  }
+  return undefined;
+}
 
 /** One connected browser tab. */
 export interface Peer {
@@ -31,7 +40,7 @@ const KEEP_HISTORY = 1000;
  */
 export class HouseRoom {
   private peers = new Set<Peer>();
-  /** objectId → memberId currently dragging it. */
+  /** object or opening ID → memberId currently dragging it. */
   private holds = new Map<string, string>();
   private presence = new Map<string, Presence>();
   private queue: Promise<unknown> = Promise.resolve();
@@ -51,7 +60,7 @@ export class HouseRoom {
   static async load(house: HouseRow, store: Store): Promise<HouseRoom> {
     const snap = await store.loadSnapshot(house.id);
     if (!snap) throw new Error(`house ${house.id} has no snapshot`);
-    const room = new HouseRoom(house, store, snap.blueprint, snap.version);
+    const room = new HouseRoom(house, store, upgradeBlueprint(snap.blueprint), snap.version);
     room.snapshotVersion = snap.version;
     for (;;) {
       const ops = await store.opsSince(house.id, room.version, 1000);
@@ -145,16 +154,19 @@ export class HouseRoom {
         peer.send({ type: "duplicate", clientOpId });
         return;
       }
-      const target = objectTouchedBy(op);
-      const holder = target ? this.holds.get(target) : undefined;
-      if (holder && holder !== peer.memberId) {
-        peer.send({ type: "rejected", clientOpId, reason: "held" });
-        return;
-      }
       const r = applyOp(this.blueprint, op);
       if (!r.ok) {
         peer.send({ type: "rejected", clientOpId, reason: r.reason });
         return;
+      }
+      // Hands off anything the partner is holding, however the edit reaches it (a move, a batch, or knocking down
+      // the wall a door is in). Edits share everything they don't change, so a changed item is a different object.
+      const after = r.blueprint;
+      for (const [id, holder] of this.holds) {
+        if (holder !== peer.memberId && find(this.blueprint, id) !== find(after, id)) {
+          peer.send({ type: "rejected", clientOpId, reason: "held" });
+          return;
+        }
       }
       const applied: AppliedOp = { version: this.version + 1, op, by: peer.memberId, clientOpId };
       // Saved before anyone hears about it. If the write fails, the op never happened.
@@ -169,7 +181,10 @@ export class HouseRoom {
       this.version = applied.version;
       this.broadcast({ type: "applied", ...applied });
 
-      if (op.t === "object.remove" && this.holds.delete(op.id)) this.broadcast({ type: "holds", holds: this.holdsObject() });
+      // Anything that no longer exists can't be held (removing a wall also removes its doors and windows).
+      let released = false;
+      for (const id of this.holds.keys()) if (!this.exists(id)) released = this.holds.delete(id) || released;
+      if (released) this.broadcast({ type: "holds", holds: this.holdsObject() });
       if (this.version - this.snapshotVersion >= SNAPSHOT_EVERY) await this.snapshot();
     });
   }
@@ -177,10 +192,14 @@ export class HouseRoom {
   hold(peer: Peer, objectId: string | null) {
     const before = JSON.stringify(this.holdsObject());
     for (const [obj, m] of this.holds) if (m === peer.memberId && obj !== objectId) this.holds.delete(obj);
-    if (objectId && !this.holds.has(objectId) && this.blueprint.levels.some((l) => l.objects[objectId])) this.holds.set(objectId, peer.memberId);
+    if (objectId && !this.holds.has(objectId) && this.exists(objectId)) this.holds.set(objectId, peer.memberId);
     // Always answer the asker (it may have lost a race), and tell everyone if anything changed.
     if (JSON.stringify(this.holdsObject()) !== before) this.broadcast({ type: "holds", holds: this.holdsObject() });
     else peer.send({ type: "holds", holds: this.holdsObject() });
+  }
+
+  private exists(id: string) {
+    return find(this.blueprint, id) !== undefined;
   }
 
   setPresence(peer: Peer, p: Omit<Presence, "memberId">) {

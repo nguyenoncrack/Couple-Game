@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { emptyBlueprint, newId } from "@cg/shared";
+import { applyOp, emptyBlueprint, newId, starterHouseOp, type Blueprint } from "@cg/shared";
 import { z } from "zod";
 import { hashToken, newInviteCode, newToken, normalizeInviteCode } from "../auth/tokens";
 import type { Store } from "../persistence/store";
@@ -11,7 +11,14 @@ const MAX_MEMBERS = 2;
 const MAX_BODY = 4 * 1024;
 
 const name = z.string().trim().min(1).max(24);
-const CreateBody = z.object({ houseName: name, playerName: name });
+const CreateBody = z.object({ houseName: name, playerName: name, starter: z.boolean().optional() });
+/** A new lot with the starter house already built (it's data, so this can't fail unless the data is wrong). */
+function starterBlueprint(): Blueprint {
+  const r = applyOp(emptyBlueprint(), starterHouseOp());
+  if (!r.ok) throw new Error(`starter house doesn't fit: ${r.reason}`);
+  return r.blueprint;
+}
+
 const JoinBody = z.object({ code: z.string().max(20), playerName: name });
 
 class HttpError extends Error {
@@ -69,7 +76,7 @@ export function createApi(store: Store) {
       try {
         await store.createHouse(
           { id: houseId, name: body.houseName, inviteCode: newInviteCode(), maxMembers: MAX_MEMBERS },
-          { version: 0, blueprint: emptyBlueprint() },
+          { version: 0, blueprint: body.starter ? starterBlueprint() : emptyBlueprint() },
           owner,
           hashToken(token),
         );

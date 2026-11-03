@@ -189,6 +189,13 @@ const pencilFragment = /* glsl */ `
         grass = mix(grass, vec3(0.74, 0.72, 0.51), smoothstep(0.58, 0.85, n3) * 0.6);
         tone = grass * (0.9 + 0.16 * n2);
         lines = strokes(p, 1.35, 2.3, 0.07, vec3(2.0, 6.0, 0.0)) * 0.5;
+      #elif FINISH == 11
+        // water: deeper toward the middle, wobbly ripple lines and bright caustic flecks
+        float w1 = noise(vec3(vWorldPos.xz * 1.6, 0.0));
+        float w2 = noise(vec3(vWorldPos.xz * 4.5, 3.0));
+        float ripple = abs(fract(vWorldPos.x * 1.1 + vWorldPos.z * 0.35 + w1 * 1.8) - 0.5);
+        lines = (1.0 - smoothstep(0.0, 0.05, ripple - 0.42)) * 0.35;
+        tv = (w1 - 0.5) * 0.14 + smoothstep(0.72, 0.9, w2) * 0.22;
       #endif
       tone *= 1.0 + tv;
     #endif
@@ -231,7 +238,7 @@ const pencilFragment = /* glsl */ `
   }
 `;
 
-const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10 } as const;
+const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10, water: 11 } as const;
 export type Finish = keyof typeof FINISHES;
 
 export interface PencilOptions {
@@ -240,13 +247,15 @@ export interface PencilOptions {
   finish?: Finish;
   /** Drawn see-through, tinted: furniture you're carrying before you drop it. */
   ghost?: "ok" | "bad";
+  /** See-through (glass, water); 1 is solid. */
+  alpha?: number;
 }
 
 const cache = new Map<string, THREE.ShaderMaterial>();
 
 /** Shared pencil material. Calls with the same arguments return the same instance. */
 export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
-  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}`;
+  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}`;
   let m = cache.get(key);
   if (!m) {
     const ghost = opts.ghost;
@@ -262,13 +271,13 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
         uRim: { value: opts.rim === false ? 0 : 1 },
         uHighlight: { value: srgb(ghost === "bad" ? "#e0675a" : "#9ccf8a") },
         uHighlightAmt: { value: ghost ? 0.3 : 0 },
-        uAlpha: { value: ghost ? 0.72 : 1 },
+        uAlpha: { value: (ghost ? 0.72 : 1) * (opts.alpha ?? 1) },
         uFog: fogUniform,
         uTint: lighting.tint,
         uSat: lighting.sat,
       },
-      transparent: Boolean(ghost),
-      depthWrite: !ghost,
+      transparent: Boolean(ghost) || (opts.alpha ?? 1) < 1,
+      depthWrite: !ghost && (opts.alpha ?? 1) >= 1,
       defines: opts.finish ? { FINISH: FINISHES[opts.finish] } : {},
     });
     cache.set(key, m);

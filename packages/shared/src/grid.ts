@@ -75,3 +75,10 @@ export function edgeInLot(e: Edge, w: number, d: number): boolean {
 export function cellInLot(x: number, z: number, w: number, d: number): boolean {
   return x >= 0 && x < w && z >= 0 && z < d;
 }
+
+/** The unit edges a door or window of this width covers, starting at edge (dir, x, z). */
+export function openingEdges(dir: "h" | "v", x: number, z: number, width: number): EdgeKey[] {
+  const out: EdgeKey[] = [];
+  for (let i = 0; i < width; i++) out.push(dir === "h" ? edgeKey("h", x + i, z) : edgeKey("v", x, z + i));
+  return out;
+}

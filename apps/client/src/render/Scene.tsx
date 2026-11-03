@@ -2,7 +2,7 @@ import { Canvas } from "@react-three/fiber";
 import { useGame } from "../state/game";
 import { BuildTools } from "../tools/BuildTools";
 import { CameraRig } from "./CameraRig";
-import { Floors, Walls } from "./House";
+import { Floors } from "./House";
 import { Lot } from "./Lot";
 import { PartnerPresence } from "./Partner";
 import { FOG } from "./pencil";
@@ -26,7 +26,6 @@ export function Scene() {
       <CameraRig w={lot.w} d={lot.d} />
       <Lot w={lot.w} d={lot.d} />
       <Floors tiles={level.tiles} />
-      <Walls walls={level.walls} />
       <BuildTools />
       <PartnerPresence />
     </Canvas>

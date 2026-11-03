@@ -4,7 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import type * as THREE from "three";
 import { useGame } from "../state/game";
-import { Ghost } from "../tools/BuildTools";
+import { Ghost, OpeningGhost, openingFootprint, rotToOpening } from "../tools/BuildTools";
 import { FootprintMarker } from "./House";
 
 /**
@@ -31,16 +31,23 @@ export function PartnerPresence() {
               {p?.drag && catalog.furniture.has(p.drag.catalogId) && (
                 <Ghost catalogId={p.drag.catalogId} x={p.drag.x} z={p.drag.z} rot={p.drag.rot} ignore={p.drag.objectId} color={m.color} />
               )}
+              {p?.drag && catalog.openings.has(p.drag.catalogId) && (
+                <OpeningGhost catalogId={p.drag.catalogId} x={p.drag.x} z={p.drag.z} {...rotToOpening(p.drag.rot)} ignore={p.drag.objectId} color={m.color} />
+              )}
             </group>
           );
         })}
       {level &&
         Object.entries(holds).map(([objectId, memberId]) => {
           if (memberId === me) return null;
-          const o = level.objects[objectId];
           const m = members.find((x) => x.id === memberId);
+          if (!m) return null;
+          const o = level.objects[objectId];
           const item = o && catalog.furniture.get(o.catalogId);
-          return o && m && item ? <FootprintMarker key={objectId} {...footprintOf(item, o)} color={m.color} /> : null;
+          if (o && item) return <FootprintMarker key={objectId} {...footprintOf(item, o)} color={m.color} />;
+          const w = level.openings[objectId];
+          const wi = w && catalog.openings.get(w.catalogId);
+          return w && wi ? <FootprintMarker key={objectId} {...openingFootprint(w, wi)} color={m.color} /> : null;
         })}
     </>
   );

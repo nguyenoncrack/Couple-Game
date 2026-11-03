@@ -40,5 +40,17 @@
   { "id": "bathtub", "name": "Clawfoot tub", "category": "bathroom", "price": 640, "footprint": [2, 1], "layer": "floor",
     "model": { "kind": "bathtub", "body": "#f1ece2", "feet": "#b8955c" } },
   { "id": "bath_sink", "name": "Pedestal sink", "category": "bathroom", "price": 160, "footprint": [1, 1], "layer": "floor",
-    "model": { "kind": "pedsink" } }
+    "model": { "kind": "pedsink" } },
+  { "id": "car_hatch", "name": "Little hatchback", "category": "outdoor", "price": 9000, "footprint": [2, 4], "layer": "floor",
+    "model": { "kind": "car", "body": "#e07a5f" } },
+  { "id": "workbench", "name": "Workbench", "category": "outdoor", "price": 210, "footprint": [2, 1], "layer": "floor",
+    "model": { "kind": "workbench", "wood": "#b98a5a" } },
+  { "id": "pool_rect", "name": "Swimming pool", "category": "outdoor", "price": 4200, "footprint": [6, 3], "layer": "floor",
+    "model": { "kind": "pool", "coping": "#e4ddcf", "water": "#8fc3d1" } },
+  { "id": "lounger", "name": "Pool lounger", "category": "outdoor", "price": 140, "footprint": [1, 2], "layer": "floor",
+    "model": { "kind": "lounger", "frame": "#f4efe4", "cushion": "#3d8fa3" } },
+  { "id": "parasol", "name": "Parasol", "category": "outdoor", "price": 90, "footprint": [1, 1], "layer": "floor",
+    "model": { "kind": "parasol", "canopy": "#f2cf4a" } },
+  { "id": "shrub", "name": "Shrub", "category": "outdoor", "price": 40, "footprint": [1, 1], "layer": "floor",
+    "model": { "kind": "shrub", "leaves": "#88a873" } }
 ]

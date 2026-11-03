@@ -1,7 +1,7 @@
-import type { Blueprint, Level, PlacedObject } from "./blueprint";
-import { catalog as defaultCatalog, type Catalog, type FurnitureItem } from "./catalog";
-import { cellInLot, edgeInLot, interiorEdges, parseCell, parseEdge, rotatedSize, type Rot } from "./grid";
-import type { Op } from "./ops";
+import type { Blueprint, Level, PlacedObject, PlacedOpening } from "./blueprint";
+import { catalog as defaultCatalog, type Catalog, type FurnitureItem, type OpeningItem } from "./catalog";
+import { cellInLot, edgeInLot, interiorEdges, openingEdges, parseCell, parseEdge, rotatedSize, type Rot } from "./grid";
+import type { Op, SingleOp } from "./ops";
 
 /**
  * The game's building rules. `applyOp` is pure: the server runs it to decide what happens, and the client runs the
@@ -23,7 +23,8 @@ export type RejectReason =
   | "not-found"
   | "overlaps"
   | "wall-in-the-way"
-  | "blocks-furniture";
+  | "blocks-furniture"
+  | "needs-wall";
 
 /** Short, friendly explanations for the UI. */
 export const REJECT_TEXT: Record<RejectReason | "held" | "rate-limited" | "invalid", string> = {
@@ -39,6 +40,7 @@ export const REJECT_TEXT: Record<RejectReason | "held" | "rate-limited" | "inval
   overlaps: "Something's already there.",
   "wall-in-the-way": "A wall is in the way.",
   "blocks-furniture": "Furniture is in the way of that wall.",
+  "needs-wall": "Doors and windows go in a wall.",
   held: "Your partner is moving that right now.",
   "rate-limited": "Slow down a little.",
   invalid: "That edit didn't make sense.",
@@ -91,7 +93,27 @@ function withLevel(bp: Blueprint, index: number, level: Level): Blueprint {
   return { ...bp, levels };
 }
 
-export function applyOp(bp: Blueprint, op: Op, cat: Catalog = defaultCatalog): ApplyResult {
+/** The wall edges a placed door or window covers. */
+export function edgesOfOpening(item: OpeningItem, o: Pick<PlacedOpening, "dir" | "x" | "z">) {
+  return openingEdges(o.dir, o.x, o.z, item.width);
+}
+
+/** Why a door or window can't go here, or null if it can. `ignoreId` skips the one being moved. */
+export function openingProblem(level: Level, item: OpeningItem, at: Pick<PlacedOpening, "dir" | "x" | "z">, ignoreId: string | null, cat: Catalog = defaultCatalog): RejectReason | null {
+  const edges = edgesOfOpening(item, at);
+  if (edges.some((e) => !level.walls[e])) return "needs-wall";
+  const mine = new Set(edges);
+  for (const other of Object.values(level.openings)) {
+    if (other.id === ignoreId) continue;
+    const oi = cat.openings.get(other.catalogId);
+    if (oi && edgesOfOpening(oi, other).some((e) => mine.has(e))) return "overlaps";
+  }
+  return null;
+}
+
+const idTaken = (bp: Blueprint, id: string) => bp.levels.some((l) => l.objects[id] || l.openings[id]);
+
+function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
   const level = bp.levels[op.level];
   if (!level) return fail("no-level");
   const { w, d } = bp.lot;
@@ -112,9 +134,19 @@ export function applyOp(bp: Blueprint, op: Op, cat: Catalog = defaultCatalog): A
 
     case "walls.remove": {
       for (const key of op.edges) if (!parseEdge(key)) return fail("bad-edge");
+      const gone = new Set(op.edges);
       const walls = { ...level.walls };
       for (const key of op.edges) delete walls[key];
-      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, walls }) };
+      // Doors and windows in a removed wall go with it.
+      let openings = level.openings;
+      for (const o of Object.values(level.openings)) {
+        const item = cat.openings.get(o.catalogId);
+        if (item && edgesOfOpening(item, o).some((e) => gone.has(e))) {
+          if (openings === level.openings) openings = { ...openings };
+          delete openings[o.id];
+        }
+      }
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, walls, openings }) };
     }
 
     case "floor.paint": {
@@ -135,7 +167,7 @@ export function applyOp(bp: Blueprint, op: Op, cat: Catalog = defaultCatalog): A
     case "object.place": {
       const item = cat.furniture.get(op.catalogId);
       if (!item) return fail("unknown-item");
-      if (bp.levels.some((l) => l.objects[op.id])) return fail("id-taken");
+      if (idTaken(bp, op.id)) return fail("id-taken");
       const problem = placementProblem(bp, level, item, op, null, cat);
       if (problem) return fail(problem);
       const placed: PlacedObject = { id: op.id, catalogId: op.catalogId, x: op.x, z: op.z, rot: op.rot };
@@ -159,10 +191,45 @@ export function applyOp(bp: Blueprint, op: Op, cat: Catalog = defaultCatalog): A
       delete objects[op.id];
       return { ok: true, blueprint: withLevel(bp, op.level, { ...level, objects }) };
     }
+
+    case "opening.place": {
+      const item = cat.openings.get(op.catalogId);
+      if (!item) return fail("unknown-item");
+      if (idTaken(bp, op.id)) return fail("id-taken");
+      const problem = openingProblem(level, item, op, null, cat);
+      if (problem) return fail(problem);
+      const placed: PlacedOpening = { id: op.id, catalogId: op.catalogId, dir: op.dir, x: op.x, z: op.z, flip: op.flip };
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, openings: { ...level.openings, [op.id]: placed } }) };
+    }
+
+    case "opening.move": {
+      const current = level.openings[op.id];
+      if (!current) return fail("not-found");
+      const item = cat.openings.get(current.catalogId);
+      if (!item) return fail("unknown-item");
+      const problem = openingProblem(level, item, op, op.id, cat);
+      if (problem) return fail(problem);
+      const moved: PlacedOpening = { ...current, dir: op.dir, x: op.x, z: op.z, flip: op.flip };
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, openings: { ...level.openings, [op.id]: moved } }) };
+    }
+
+    case "opening.remove": {
+      if (!level.openings[op.id]) return fail("not-found");
+      const openings = { ...level.openings };
+      delete openings[op.id];
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, openings }) };
+    }
   }
 }
 
-/** The object IDs an op touches (used to respect another player's hold). */
-export function objectTouchedBy(op: Op): string | null {
-  return op.t === "object.move" || op.t === "object.remove" ? op.id : null;
+export function applyOp(bp: Blueprint, op: Op, cat: Catalog = defaultCatalog): ApplyResult {
+  if (op.t !== "batch") return applySingle(bp, op, cat);
+  // All or nothing: the first step that fails rejects the whole batch.
+  let cur = bp;
+  for (const step of op.ops) {
+    const r = applySingle(cur, step, cat);
+    if (!r.ok) return r;
+    cur = r.blueprint;
+  }
+  return { ok: true, blueprint: cur };
 }

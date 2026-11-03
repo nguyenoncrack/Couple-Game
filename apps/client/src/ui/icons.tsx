@@ -47,6 +47,16 @@ export const Icon = {
       <path d="M4 19.6h16M6.2 19.5V9.7h11.6v9.8M4.6 10.1 12 4.4l7.4 5.7" />
     </svg>
   ),
+  wallsCut: () => (
+    <svg {...base}>
+      <path d="M4 19.6h16M6.2 19.5V9.7l5.8-4.9 5.8 4.9v2.6M17.8 15.8v3.7M14 15.3l5.8-2.2" />
+    </svg>
+  ),
+  flip: () => (
+    <svg {...base}>
+      <path d="M12 3.6v16.8M9.4 7.2 4.3 17h5.1zM14.6 7.2l5.1 9.8h-5.1z" />
+    </svg>
+  ),
   rotate: () => (
     <svg {...base}>
       <path d="M19.2 12.4a7.2 7.2 0 1 1-2.3-5.6" />
@@ -73,6 +83,51 @@ export const Icon = {
   back: () => (
     <svg {...base}>
       <path d="M19.4 12.1H5M10.4 6.6 4.8 12l5.6 5.5" />
+    </svg>
+  ),
+  turnLeft: () => (
+    <svg {...base}>
+      <path d="M5.2 12.3a7 7 0 1 0 2.2-5.4" />
+      <path d="M6.7 3.3l.6 3.9 3.9-.5" />
+    </svg>
+  ),
+  turnRight: () => (
+    <svg {...base}>
+      <path d="M18.8 12.3a7 7 0 1 1-2.2-5.4" />
+      <path d="M17.3 3.3l-.6 3.9-3.9-.5" />
+    </svg>
+  ),
+  plus: () => (
+    <svg {...base}>
+      <path d="M12 5.2v13.5M5.3 12.1h13.4" />
+    </svg>
+  ),
+  minus: () => (
+    <svg {...base}>
+      <path d="M5.3 12.1h13.4" />
+    </svg>
+  ),
+  home: () => (
+    <svg {...base}>
+      <circle cx="12" cy="12" r="3.1" />
+      <path d="M12 3.4v3.2M12 17.4v3.2M3.4 12h3.2M17.4 12h3.2" />
+    </svg>
+  ),
+  undo: () => (
+    <svg {...base}>
+      <path d="M8.6 5.3 4.5 9.4l4.1 4" />
+      <path d="M4.8 9.4h9.6a5 5 0 0 1 0 10H10" />
+    </svg>
+  ),
+  redo: () => (
+    <svg {...base}>
+      <path d="m15.4 5.3 4.1 4.1-4.1 4" />
+      <path d="M19.2 9.4H9.6a5 5 0 0 0 0 10H14" />
+    </svg>
+  ),
+  house: () => (
+    <svg {...base}>
+      <path d="M3.8 11.2 12 4.6l8.2 6.6M6.2 9.4v10.2h11.6V9.4M10.1 19.5v-5.2h3.8v5.2" />
     </svg>
   ),
 };

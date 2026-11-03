@@ -6,6 +6,7 @@ import { forgetHouse, lastPlayerName, rememberPlayerName, savedHouses, saveHouse
 export function Home({ initialCode, notice, onOpen }: { initialCode?: string; notice?: string; onOpen: (houseId: string) => void }) {
   const [name, setName] = useState(lastPlayerName());
   const [houseName, setHouseName] = useState("Our little house");
+  const [starter, setStarter] = useState(true);
   const [code, setCode] = useState(initialCode ?? "");
   const [busy, setBusy] = useState<"create" | "join" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +23,7 @@ export function Home({ initialCode, notice, onOpen }: { initialCode?: string; no
     if (!name.trim()) return setError("Pop your name in first.");
     setBusy(what);
     try {
-      done(what === "create" ? await createHouse(houseName.trim() || "Our little house", name.trim()) : await joinHouse(code, name.trim()));
+      done(what === "create" ? await createHouse(houseName.trim() || "Our little house", name.trim(), starter) : await joinHouse(code, name.trim()));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Something went wrong.");
     } finally {
@@ -66,6 +67,16 @@ export function Home({ initialCode, notice, onOpen }: { initialCode?: string; no
                 <span className="kicker">House name</span>
                 <input value={houseName} maxLength={24} onChange={(e) => setHouseName(e.target.value)} />
               </label>
+              <div className="lot-choice">
+                <button className={`choice${starter ? " on" : ""}`} onClick={() => setStarter(true)}>
+                  <b>Starter house</b>
+                  <span className="hand">2 bedrooms, bath, kitchen, garage, pool</span>
+                </button>
+                <button className={`choice${!starter ? " on" : ""}`} onClick={() => setStarter(false)}>
+                  <b>Empty lot</b>
+                  <span className="hand">build it from scratch</span>
+                </button>
+              </div>
               <button className="btn primary big" disabled={busy !== null} onClick={() => run("create")}>
                 {busy === "create" ? "Building…" : "Make our house"}
               </button>

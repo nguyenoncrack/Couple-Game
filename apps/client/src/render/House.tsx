@@ -1,11 +1,11 @@
-import { catalog, cellKey, footprintOf, parseCell, parseEdge, type Level, type PlacedObject } from "@cg/shared";
-import type { ThreeEvent } from "@react-three/fiber";
-import { useMemo } from "react";
+import { catalog, cellKey, footprintOf, parseCell, parseEdge, type Level, type OpeningItem, type PlacedObject, type PlacedOpening } from "@cg/shared";
+import { useFrame, type ThreeEvent } from "@react-three/fiber";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useGame } from "../state/game";
 import type { Kit } from "./kit";
 import { KitMesh, Meshes } from "./KitMesh";
-import { modelFor, shade } from "./models";
+import { modelFor, openingModelFor, shade } from "./models";
 import { pencilMaterial, shadowMaterial } from "./pencil";
 
 export const WALL_H = 2.7;
@@ -13,13 +13,21 @@ export const WALL_DOWN_H = 0.32;
 export const WALL_T = 0.14;
 const FLOOR_Y = 0.04;
 
-interface Run {
+export interface Run {
   dir: "h" | "v";
   /** Fixed coordinate (z for h, x for v) and the span along the other axis. */
   at: number;
   from: number;
   to: number;
   style: string;
+}
+
+/** Where a door or window cuts a wall: its span along the run, and the open height. */
+export interface Gap {
+  from: number;
+  to: number;
+  sill: number;
+  top: number;
 }
 
 /** Merge unit wall edges into straight runs of the same style, so a long wall is one box with one outline. */
@@ -50,30 +58,166 @@ export function wallRuns(walls: Level["walls"]): Run[] {
   return runs;
 }
 
-/** Add one straight wall (with baseboards and a top cap) to a kit. Also used for the build previews. */
-export function addWall(k: Kit, run: Run, height: number, mat: THREE.Material, trim: THREE.Material) {
-  const len = run.to - run.from + WALL_T;
-  const mid = (run.from + run.to) / 2;
-  const [x, z] = run.dir === "h" ? [mid, run.at] : [run.at, mid];
-  const size = (l: number, h: number, t: number): [number, number, number] => (run.dir === "h" ? [l, h, t] : [t, h, l]);
-  k.box(mat, [x, height / 2, z], size(len, height, WALL_T), { outline: 0.024 });
-  k.box(trim, [x, 0.06, z], size(len + 0.02, 0.12, WALL_T + 0.035), { outline: 0.008 });
-  k.box(trim, [x, height + 0.015, z], size(len + 0.02, 0.03, WALL_T + 0.03), { outline: 0.008 });
+/** Span of an opening along its wall line. */
+function openingSpan(o: PlacedOpening, item: OpeningItem) {
+  const a = o.dir === "h" ? o.x : o.z;
+  return { at: o.dir === "h" ? o.z : o.x, from: a, to: a + item.width };
 }
 
-export function Walls({ walls }: { walls: Level["walls"] }) {
-  const down = useGame((s) => s.wallsDown);
+/** The doors and windows whose middle lies in this run (each belongs to exactly one run). */
+export function openingsInRun(run: Run, openings: Level["openings"]) {
+  const out: { o: PlacedOpening; item: OpeningItem }[] = [];
+  for (const o of Object.values(openings)) {
+    const item = catalog.openings.get(o.catalogId);
+    if (!item || o.dir !== run.dir) continue;
+    const s = openingSpan(o, item);
+    const mid = (s.from + s.to) / 2;
+    if (s.at === run.at && mid > run.from && mid < run.to) out.push({ o, item });
+  }
+  return out;
+}
+
+/**
+ * Add one straight wall (with baseboards and a top cap) to a kit, leaving holes for doors and windows. Also used
+ * for the build previews.
+ */
+export function addWall(k: Kit, run: Run, height: number, mat: THREE.Material, trim: THREE.Material, gaps: Gap[] = []) {
+  const place = (a: number, b: number, y0: number, y1: number) => {
+    if (b - a < 1e-3 || y1 - y0 < 1e-3) return;
+    const mid = (a + b) / 2;
+    const [x, z] = run.dir === "h" ? [mid, run.at] : [run.at, mid];
+    const size = (l: number, h: number, t: number): [number, number, number] => (run.dir === "h" ? [l, h, t] : [t, h, l]);
+    const len = b - a;
+    k.box(mat, [x, (y0 + y1) / 2, z], size(len, y1 - y0, WALL_T), { outline: 0.024 });
+    if (y0 === 0) k.box(trim, [x, 0.06, z], size(len + 0.02, 0.12, WALL_T + 0.035), { outline: 0.008 });
+    if (y1 === height) k.box(trim, [x, height + 0.015, z], size(len + 0.02, 0.03, WALL_T + 0.03), { outline: 0.008 });
+  };
+  // Solid wall between the gaps; the ends reach half a wall's thickness further so corners close.
+  const sorted = gaps.map((g) => ({ ...g, from: Math.max(g.from, run.from), to: Math.min(g.to, run.to) })).sort((a, b) => a.from - b.from);
+  let cursor = run.from - WALL_T / 2;
+  for (const g of sorted) {
+    place(cursor, g.from === run.from ? g.from - WALL_T / 2 : g.from, 0, height);
+    if (g.sill > 0) place(g.from, g.to, 0, Math.min(g.sill, height));
+    if (g.top < height) place(g.from, g.to, g.top, height);
+    cursor = g.to === run.to ? g.to + WALL_T / 2 : g.to;
+  }
+  place(cursor, run.to + WALL_T / 2, 0, height);
+}
+
+/** Where a door or window model sits: centred in its wall, turned to face its front. */
+export function openingTransform(o: Pick<PlacedOpening, "dir" | "x" | "z" | "flip">, item: OpeningItem) {
+  const half = item.width / 2;
+  const position: [number, number, number] = o.dir === "h" ? [o.x + half, 0, o.z] : [o.x, 0, o.z + half];
+  return { position, rotationY: (o.dir === "h" ? 0 : -Math.PI / 2) + (o.flip ? Math.PI : 0) };
+}
+
+export type WallMode = "up" | "cut" | "down";
+
+/**
+ * Should this wall be cut down? In cutaway mode walls between the camera and the middle of the view drop to a
+ * stub, so you can see into rooms; walls behind it stay up. Walls side-on to the view only drop once they're
+ * well in front, so rooms keep their side walls.
+ */
+function isCut(run: Run, cam: THREE.Vector3, target: THREE.Vector3) {
+  let vx = cam.x - target.x;
+  let vz = cam.z - target.z;
+  const len = Math.hypot(vx, vz) || 1;
+  vx /= len;
+  vz /= len;
+  const mid = (run.from + run.to) / 2;
+  const [cx, cz] = run.dir === "h" ? [mid, run.at] : [run.at, mid];
+  const ahead = (cx - target.x) * vx + (cz - target.z) * vz;
+  const facing = Math.abs(run.dir === "h" ? vz : vx);
+  return facing > 0.4 ? ahead > -0.3 : ahead > 2;
+}
+
+const ray = new THREE.Vector3();
+const lookTarget = new THREE.Vector3();
+
+export function Walls({
+  level,
+  hiddenOpening,
+  onOpeningDown,
+}: {
+  level: Level;
+  /** A door or window I'm dragging (drawn as a ghost instead). */
+  hiddenOpening: string | null;
+  onOpeningDown: (id: string, e: ThreeEvent<PointerEvent>) => void;
+}) {
+  const mode = useGame((s) => s.wallMode);
+  const runs = useMemo(() => wallRuns(level.walls), [level.walls]);
+  const groups = useMemo(() => runs.map((run) => ({ run, openings: openingsInRun(run, level.openings) })), [runs, level.openings]);
+  const full = useRef<(THREE.Group | null)[]>([]);
+  const low = useRef<(THREE.Group | null)[]>([]);
+
+  useFrame(({ camera }) => {
+    if (mode !== "cut") return;
+    // The middle of the view: where the camera's line of sight meets the floor.
+    camera.getWorldDirection(ray);
+    const t = ray.y < -0.05 ? -camera.position.y / ray.y : 12;
+    lookTarget.copy(camera.position).addScaledVector(ray, t);
+    for (let i = 0; i < groups.length; i++) {
+      const cut = isCut(groups[i]!.run, camera.position, lookTarget);
+      if (full.current[i]) full.current[i]!.visible = !cut;
+      if (low.current[i]) low.current[i]!.visible = cut;
+    }
+  });
+
+  return (
+    <>
+      {groups.map(({ run, openings }, i) => {
+        const key = `${run.dir}|${run.at}|${run.from}|${run.style}`;
+        return (
+          <group key={key}>
+            {mode !== "down" && (
+              <group ref={(g) => void (full.current[i] = g)}>
+                <WallRun run={run} openings={openings} height={WALL_H} />
+                {openings.map(({ o, item }) => o.id !== hiddenOpening && <OpeningModel key={o.id} o={o} item={item} low={null} onDown={onOpeningDown} />)}
+              </group>
+            )}
+            {mode !== "up" && (
+              <group ref={(g) => void (low.current[i] = g)} visible={mode === "down"}>
+                <WallRun run={run} openings={openings} height={WALL_DOWN_H} />
+                {openings.map(({ o, item }) => o.id !== hiddenOpening && <OpeningModel key={o.id} o={o} item={item} low={WALL_DOWN_H} onDown={onOpeningDown} />)}
+              </group>
+            )}
+          </group>
+        );
+      })}
+    </>
+  );
+}
+
+const TRIM = "#f7f2e8";
+
+function WallRun({ run, openings, height }: { run: Run; openings: { o: PlacedOpening; item: OpeningItem }[]; height: number }) {
+  const gapsKey = openings.map(({ o, item }) => `${o.id}:${o.x}:${o.z}:${item.id}`).join(",");
   return (
     <KitMesh
-      deps={[walls, down]}
+      deps={[run.dir, run.at, run.from, run.to, run.style, height, gapsKey]}
       make={(k) => {
-        const trim = pencilMaterial("#f7f2e8");
-        for (const run of wallRuns(walls)) {
-          const style = catalog.wallStyles.get(run.style);
-          addWall(k, run, down ? WALL_DOWN_H : WALL_H, pencilMaterial(style?.color ?? "#efe3cc", { finish: style?.finish, rim: false }), trim);
-        }
+        const style = catalog.wallStyles.get(run.style);
+        const gaps = openings.map(({ o, item }) => ({ ...openingSpan(o, item), sill: item.sill, top: item.top }));
+        addWall(k, run, height, pencilMaterial(style?.color ?? "#efe3cc", { finish: style?.finish, rim: false }), pencilMaterial(TRIM), gaps);
       }}
     />
+  );
+}
+
+function OpeningModel({ o, item, low, onDown }: { o: PlacedOpening; item: OpeningItem; low: number | null; onDown: (id: string, e: ThreeEvent<PointerEvent>) => void }) {
+  const { position, rotationY } = openingTransform(o, item);
+  return (
+    <group
+      position={position}
+      rotation-y={rotationY}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.stopPropagation();
+        onDown(o.id, e);
+      }}
+    >
+      <Meshes meshes={openingModelFor(item, null, low)} />
+    </group>
   );
 }
 
