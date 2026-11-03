@@ -19,7 +19,7 @@ function rng(seed: number) {
 
 export function Lot({ w, d }: { w: number; d: number }) {
   const lawn = pencilMaterial("#9cb57a", { finish: "lawn", rim: false });
-  const ground = useMemo(() => new THREE.PlaneGeometry(260, 260).rotateX(-Math.PI / 2), []);
+  const ground = useMemo(() => new THREE.PlaneGeometry(700, 700).rotateX(-Math.PI / 2), []);
 
   return (
     <group>

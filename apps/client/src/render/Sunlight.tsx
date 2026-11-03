@@ -139,7 +139,7 @@ export function Sunlight({ w, d }: { w: number; d: number }) {
       lighting.heightOn.value = 0;
       lighting.contact.value = 1;
     };
-    if (import.meta.env.DEV) Object.assign(window, { __gl: gl, __sunlight: passes });
+    if (import.meta.env.DEV) Object.assign(window, { __gl: gl, __scene: scene, __sunlight: passes });
     return () => {
       scene.onBeforeRender = before;
       scene.onAfterRender = after;

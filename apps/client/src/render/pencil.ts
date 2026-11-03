@@ -55,11 +55,11 @@ export const lighting = {
 const pencilVertex = /* glsl */ `
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
-  #if defined(FINISH) && FINISH == 11
+  #if defined(FINISH) && (FINISH == 11 || FINISH == 15)
     varying vec2 vUv;
   #endif
   void main() {
-    #if defined(FINISH) && FINISH == 11
+    #if defined(FINISH) && (FINISH == 11 || FINISH == 15)
       vUv = uv;
     #endif
     #ifdef USE_INSTANCING
@@ -128,7 +128,8 @@ const pencilFragment = /* glsl */ `
   uniform float uHeightOn;
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
-  #if defined(FINISH) && FINISH == 11
+  uniform float uFogScale;
+  #if defined(FINISH) && (FINISH == 11 || FINISH == 15)
     varying vec2 vUv;
   #endif
   ${shared}
@@ -271,9 +272,13 @@ const pencilFragment = /* glsl */ `
         tone = grass * (0.95 + 0.08 * n2);
         float blades = strokes(p * vec2(1.0, 1.6), 1.2 + (n1 - 0.5) * 0.9, 3.1, 0.06, vec3(2.0, 6.0, 0.0));
         lines = blades * smoothstep(0.45, 0.75, noise(vWorldPos * 0.35 + 7.0)) * 0.16;
-      #elif FINISH == 11
+      #elif FINISH == 11 || FINISH == 15
         // water: deeper and bluer toward the middle, ripples drifting across, the sky and sun caught on top
         vec2 q = vWorldPos.xz;
+        #if FINISH == 15
+          // a lake: broader, slower ripples
+          q *= 0.35;
+        #endif
         float t = uTime;
         vec3 wq = vec3(q * 1.7 + vec2(t * 0.22, t * 0.15), t * 0.18);
         float e = 0.08;
@@ -283,8 +288,13 @@ const pencilFragment = /* glsl */ `
         wx += (noise(wq2 + vec3(e, 0.0, 0.0)) - noise(wq2 - vec3(e, 0.0, 0.0))) * 0.5;
         wz += (noise(wq2 + vec3(0.0, e, 0.0)) - noise(wq2 - vec3(0.0, e, 0.0))) * 0.5;
         sn = normalize(n + vec3(-wx, 0.0, -wz) * 1.4);
-        vec2 edge = min(vUv, 1.0 - vUv);
-        float deep = smoothstep(0.0, 0.32, min(edge.x * 2.0, edge.y));
+        #if FINISH == 15
+          // the lake's uv.x runs from 0 at the shore to 1 in the middle
+          float deep = smoothstep(0.0, 0.55, vUv.x);
+        #else
+          vec2 edge = min(vUv, 1.0 - vUv);
+          float deep = smoothstep(0.0, 0.32, min(edge.x * 2.0, edge.y));
+        #endif
         tone = mix(tone * vec3(1.12, 1.1, 1.04) + 0.05, tone * vec3(0.62, 0.8, 0.95), deep);
         // bright wavering lines where the ripples gather the light on the bottom
         float caustic = 1.0 - smoothstep(0.0, 0.08, abs(noise(vec3(q * 2.3, t * 0.35)) - 0.5));
@@ -292,6 +302,15 @@ const pencilFragment = /* glsl */ `
         // the sky seen in the surface, stronger at a glance
         float fres = pow(1.0 - max(dot(sn, viewDir), 0.0), 3.0);
         glow = vec3(0.86, 0.94, 1.0) * (0.12 + fres * 0.5);
+      #elif FINISH == 16
+        // mountains: forest on the lower slopes, blue-grey rock with faint strata, snow on the high flatter parts
+        float m1 = noise(vWorldPos * 0.05);
+        float m2 = noise(vWorldPos * 0.21 + 4.0);
+        float trees = 1.0 - smoothstep(10.0, 18.0, vWorldPos.y + (m1 - 0.5) * 12.0);
+        tone = mix(tone * (0.9 + 0.2 * m2), vec3(0.24, 0.42, 0.3), trees * 0.9);
+        float snow = smoothstep(29.0, 34.0, vWorldPos.y + (m1 - 0.5) * 16.0 + (m2 - 0.5) * 5.0) * smoothstep(0.25, 0.5, n.y);
+        tone = mix(tone, vec3(0.97, 0.97, 1.0), snow);
+        lines = strokes(vec2(fp.x * 0.05, vWorldPos.y * 0.12), 0.25, 1.0, 0.08, vec3(5.0, 2.0, 0.0)) * (1.0 - snow) * (1.0 - trees) * 0.2;
       #endif
       tone *= 1.0 + tv;
     #endif
@@ -349,18 +368,22 @@ const pencilFragment = /* glsl */ `
     float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
     float chroma = max(col.r, max(col.g, col.b)) - min(col.r, min(col.g, col.b));
     float away = smoothstep(uFocus.z, uFocus.z + 28.0, length(vWorldPos.xz - uFocus.xy));
+    #if defined(FINISH) && FINISH == 16
+      // mountains keep some colour, or they'd fade to grey cardboard
+      away *= 0.4;
+    #endif
     col = mix(vec3(luma), col, 1.0 + uVibrance * (1.0 - chroma * 1.6) * (1.0 - away));
     col += vec3(-0.012, 0.0, 0.02) * (1.0 - smoothstep(0.05, 0.5, luma));
     col = mix(col, mix(vec3(luma), col, 0.7) * 0.94 + uFog * 0.06, away * 0.8);
     col = clamp(col, 0.0, 1.0);
     col = mix(col, uHighlight, uHighlightAmt);
     col *= uTint;
-    col = mix(col, uFog, fogAt(length(cameraPosition - vWorldPos)));
+    col = mix(col, uFog, fogAt(length(cameraPosition - vWorldPos)) * uFogScale);
     gl_FragColor = vec4(col, uAlpha);
   }
 `;
 
-const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10, water: 11, metal: 12, glass: 13, paint: 14 } as const;
+const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10, water: 11, metal: 12, glass: 13, paint: 14, lake: 15, mountain: 16 } as const;
 export type Finish = keyof typeof FINISHES;
 
 /**
@@ -371,6 +394,7 @@ const GLOSS: Partial<Record<Finish | "clear", [number, number]>> = {
   wood: [0.12, 22],
   checker: [0.3, 60],
   water: [1, 150],
+  lake: [1, 150],
   metal: [0.45, 48],
   glass: [0.6, 110],
   paint: [0.28, 40],
@@ -385,13 +409,15 @@ export interface PencilOptions {
   ghost?: "ok" | "bad";
   /** See-through (glass, water); 1 is solid. */
   alpha?: number;
+  /** How much distance haze it takes; far scenery like mountains takes less so it still reads. */
+  fog?: number;
 }
 
 const cache = new Map<string, THREE.ShaderMaterial>();
 
 /** Shared pencil material. Calls with the same arguments return the same instance. */
 export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
-  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}`;
+  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}`;
   let m = cache.get(key);
   if (!m) {
     const ghost = opts.ghost;
@@ -412,6 +438,7 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
         uHighlightAmt: { value: ghost ? 0.3 : 0 },
         uAlpha: { value: (ghost ? 0.72 : 1) * (opts.alpha ?? 1) },
         uFog: fogUniform,
+        uFogScale: { value: opts.fog ?? 1 },
         uTint: lighting.tint,
         uTime: lighting.time,
         uVibrance: lighting.vibrance,

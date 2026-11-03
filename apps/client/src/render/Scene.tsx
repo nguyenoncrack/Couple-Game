@@ -10,6 +10,7 @@ import { LifeProps } from "./LifeProps";
 import { Lot } from "./Lot";
 import { PartnerPresence } from "./Partner";
 import { FOG } from "./pencil";
+import { Scenery } from "./Scenery";
 import { Sunlight } from "./Sunlight";
 
 /** The 3D view. Reads the house I see (`view`) and draws it; never changes it directly. */
@@ -32,6 +33,7 @@ export function Scene() {
       <color attach="background" args={[FOG]} />
       {firstPerson ? <FirstPersonRig /> : <CameraRig w={lot.w} d={lot.d} />}
       <Lot w={lot.w} d={lot.d} />
+      <Scenery w={lot.w} d={lot.d} />
       <Floors tiles={level.tiles} />
       {mode === "live" ? <LiveTools /> : <BuildTools />}
       <Characters />
