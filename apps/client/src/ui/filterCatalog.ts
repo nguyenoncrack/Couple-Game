@@ -7,7 +7,8 @@ export function searchCatalog(items: readonly CatalogEntry[], query: string): Ca
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   return items.filter((item) => {
     const category = "category" in item ? item.category : `${item.kind === "window" ? "windows" : "doors"} openings`;
-    const tokens = `${item.name} ${category} ${item.model.kind} ${item.id}`.toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    const tags = "tags" in item ? item.tags?.join(" ") ?? "" : "";
+    const tokens = `${item.name} ${category} ${item.model.kind} ${item.id} ${tags}`.toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     return words.every((word) => tokens.some((token) => token.startsWith(word)));
   });
 }

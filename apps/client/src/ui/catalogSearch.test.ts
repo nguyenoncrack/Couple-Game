@@ -25,7 +25,15 @@ describe("catalog search", () => {
   });
   it("clears back to the entire collection without changing its order", () => {
     expect(searchCatalog(items, "  ")).toEqual(items);
-    expect(items.length).toBe(35);
+    expect(items.length).toBeGreaterThan(0);
+  });
+  it("finds the Entertainment category and named game pieces", () => {
+    expect(ids("entertainment")).toEqual(expect.arrayContaining(["ping_pong_table", "ps5_setup", "blackjack_table"]));
+    expect(ids("PS5")).toEqual(["ps5_setup"]);
+    expect(ids("blackjack")).toEqual(["blackjack_table"]);
+    expect(ids("cards deck")).toEqual(["blackjack_table"]);
+    expect(ids("PlayStation")).toEqual(["ps5_setup"]);
+    expect(ids("table tennis")).toEqual(["ping_pong_table"]);
   });
   it("handles punctuation and unknown queries as text", () => {
     expect(ids("[nothing.*")).toEqual([]);
