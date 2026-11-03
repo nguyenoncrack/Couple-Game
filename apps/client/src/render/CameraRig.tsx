@@ -17,12 +17,31 @@ const pointer = { x: -1, y: -1, inside: false };
 export const autoPan = { active: false };
 
 /**
- * Space or Option held: the left button drives the camera instead of the build tools (pan or orbit), which makes
- * the camera usable from a trackpad with no right or middle button.
+ * Space or Option held, or two fingers on a touchscreen: the press drives the camera instead of the build tools
+ * (pan or orbit), which makes the camera usable from a trackpad with no right or middle button.
  */
 export function cameraGestureActive() {
-  return held.has(" ") || held.has("alt");
+  return held.has(" ") || held.has("alt") || multiTouch();
 }
+
+/** Fingers on a touchscreen right now. With two or more down, the gesture belongs to the camera. */
+const touches = new Map<number, { x: number; y: number }>();
+export function multiTouch() {
+  return touches.size >= 2;
+}
+
+/** A wheel event that came from a trackpad (two fingers) rather than a mouse wheel. */
+function fromTrackpad(e: WheelEvent) {
+  const legacy = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY;
+  // Chrome and Safari report a mouse wheel in whole notches of 120; Firefox reports one in lines.
+  if (legacy) return legacy === -3 * e.deltaY || e.deltaX !== 0;
+  return e.deltaMode === 0;
+}
+
+/** Twist angle (radians) between two fingers. */
+const twistOf = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.atan2(b.y - a.y, b.x - a.x);
+/** How far fingers must twist before the view turns, so a pinch doesn't wobble it. */
+const TWIST_DEADZONE = 0.14;
 
 /** Where my character is, written every frame; the camera keeps it centred while following is on. */
 export const cameraFollow = { target: null as { x: number; z: number } | null };
@@ -50,9 +69,9 @@ export const cameraApi = {
 
 /**
  * The build camera.
- *  - orbit: right-drag, or Option + drag
- *  - pan: Space + drag, Shift + right-drag, middle-drag, W A S D / arrows
- *  - zoom: scroll or pinch, + / -
+ *  - orbit: right-drag, Option + drag, or twist two fingers (touchscreens, and trackpads in Safari)
+ *  - pan: two fingers on a trackpad or screen, Space + drag, Shift + right-drag, middle-drag, W A S D / arrows
+ *  - zoom: pinch, mouse wheel, + / -
  *  - Q / E turn a quarter, H goes back to the whole lot
  * While building, dragging near the edge of the screen pans the view along.
  */
@@ -122,6 +141,96 @@ export function CameraRig({ w, d }: { w: number; d: number }) {
       pointer.inside = true;
     };
     const leave = () => (pointer.inside = false);
+
+    // Only gestures over the 3D view; the HUD's own lists still scroll.
+    const onCanvas = (t: EventTarget | null) => t instanceof Element && t.closest(".scene") !== null;
+    const stopFollowing = () => useGame.getState().follow && useGame.setState({ follow: false });
+
+    // Trackpads: two fingers pan, pinch zooms toward the pointer. A mouse wheel still zooms.
+    const passOn = new WeakSet<WheelEvent>();
+    let stream = { at: 0, trackpad: false };
+    const wheel = (e: WheelEvent) => {
+      const c = ref.current;
+      if (!c || passOn.has(e) || !onCanvas(e.target)) return;
+      if (e.ctrlKey) {
+        // A pinch. The controls would change the lens for this; send it on as a plain wheel so it moves the camera.
+        e.preventDefault();
+        e.stopPropagation();
+        if (safariGesture) return;
+        c.mouseButtons.wheel = ACTION.DOLLY;
+        const again = new WheelEvent("wheel", { deltaY: e.deltaY * 2, deltaMode: 0, clientX: e.clientX, clientY: e.clientY, bubbles: true, cancelable: true });
+        passOn.add(again);
+        e.target!.dispatchEvent(again);
+        return;
+      }
+      // Decide once per burst of events, so a scroll's glide at the end doesn't flip between pan and zoom.
+      if (e.timeStamp - stream.at > 250) stream = { at: 0, trackpad: fromTrackpad(e) };
+      stream.at = e.timeStamp;
+      c.mouseButtons.wheel = stream.trackpad ? ACTION.SCREEN_PAN : ACTION.DOLLY;
+      if (stream.trackpad) stopFollowing();
+    };
+
+    // Safari tells us about trackpad pinches and twists directly.
+    let safariGesture: { rotation: number; distance: number } | null = null;
+    type Gesture = Event & { rotation: number; scale: number };
+    const gestureStart = (e: Event) => {
+      const c = ref.current;
+      if (!c || !onCanvas(e.target)) return;
+      e.preventDefault();
+      safariGesture = { rotation: 0, distance: c.distance };
+    };
+    const gestureChange = (e: Event) => {
+      const c = ref.current;
+      const g = e as Gesture;
+      if (!c || !safariGesture) return;
+      e.preventDefault();
+      void c.rotate(THREE.MathUtils.degToRad(g.rotation - safariGesture.rotation), 0, false);
+      safariGesture.rotation = g.rotation;
+      void c.dollyTo(safariGesture.distance / Math.max(g.scale, 0.05), false);
+    };
+    const gestureEnd = (e: Event) => {
+      if (!safariGesture) return;
+      e.preventDefault();
+      safariGesture = null;
+    };
+
+    // Touchscreens: the controls already pan and pinch with two fingers; twisting them turns the view too.
+    let twist: { angle: number; turning: boolean } | null = null;
+    const pairAngle = () => {
+      const [a, b] = [...touches.values()];
+      return twistOf(a!, b!);
+    };
+    const touchDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch" || !onCanvas(e.target)) return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      twist = touches.size === 2 ? { angle: pairAngle(), turning: false } : null;
+    };
+    const touchMove = (e: PointerEvent) => {
+      if (!touches.has(e.pointerId)) return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const c = ref.current;
+      if (!twist || !c || touches.size !== 2) return;
+      let delta = pairAngle() - twist.angle;
+      delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+      if (!twist.turning && Math.abs(delta) < TWIST_DEADZONE) return;
+      twist = { angle: pairAngle(), turning: true };
+      void c.rotate(delta, 0, false);
+      stopFollowing();
+    };
+    const touchUp = (e: PointerEvent) => {
+      touches.delete(e.pointerId);
+      if (touches.size < 2) twist = null;
+    };
+
+    // Capture, so these run before the controls and the build tools see the same events.
+    window.addEventListener("wheel", wheel, { capture: true, passive: false });
+    window.addEventListener("gesturestart", gestureStart, { capture: true });
+    window.addEventListener("gesturechange", gestureChange, { capture: true });
+    window.addEventListener("gestureend", gestureEnd, { capture: true });
+    window.addEventListener("pointerdown", touchDown, { capture: true });
+    window.addEventListener("pointermove", touchMove, { capture: true });
+    window.addEventListener("pointerup", touchUp, { capture: true });
+    window.addEventListener("pointercancel", touchUp, { capture: true });
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", clear);
@@ -133,6 +242,15 @@ export function CameraRig({ w, d }: { w: number; d: number }) {
       window.removeEventListener("blur", clear);
       window.removeEventListener("pointermove", move);
       document.removeEventListener("pointerleave", leave);
+      window.removeEventListener("wheel", wheel, { capture: true });
+      window.removeEventListener("gesturestart", gestureStart, { capture: true });
+      window.removeEventListener("gesturechange", gestureChange, { capture: true });
+      window.removeEventListener("gestureend", gestureEnd, { capture: true });
+      window.removeEventListener("pointerdown", touchDown, { capture: true });
+      window.removeEventListener("pointermove", touchMove, { capture: true });
+      window.removeEventListener("pointerup", touchUp, { capture: true });
+      window.removeEventListener("pointercancel", touchUp, { capture: true });
+      touches.clear();
     };
   }, []);
 
