@@ -854,3 +854,29 @@ button.pill:active,
   font-size: 17px;
   line-height: 1.25;
 }
+
+/* Catalog search stays inside the existing panel on narrow screens. */
+.catalog-search {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+.catalog-search-field {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 4px;
+}
+.catalog-search-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  font-size: 16px;
+}
+.catalog-search-clear { padding: 7px 10px; }
+.catalog-search-count { flex-basis: 100%; font-size: 13px; color: var(--ink-soft); }
+.catalog-empty { margin: 4px 0; font-size: 16px; }
+.catalog.tool-panel { max-height: calc(100dvh - 230px); overflow-y: auto; }
+.catalog .items { flex-shrink: 0; }
