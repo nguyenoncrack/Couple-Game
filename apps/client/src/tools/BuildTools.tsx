@@ -1,3 +1,4 @@
+import { allowsBuildShortcut } from "../input/buildShortcuts";
 import {
   catalog,
   cellsBetween,
@@ -195,6 +196,7 @@ export function BuildTools() {
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (!allowsBuildShortcut(e)) return;
       if (e.target instanceof HTMLElement && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
       const s = useGame.getState();
       const k = e.key.toLowerCase();
