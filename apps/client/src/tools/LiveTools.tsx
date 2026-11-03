@@ -20,6 +20,7 @@ const VERB: Record<Action, string> = {
   cook: "Cook",
   prep: "Cook",
   watch: "Watch TV",
+  play: "Play PS5",
   swim: "Swim",
   bathe: "Take a bath",
   toilet: "Use the toilet",
@@ -130,7 +131,9 @@ function Menu() {
     title = catalog.furniture.get(o.catalogId)?.name ?? "";
     const using = mine?.use?.objectId === o.id && !mine.use.station;
     const out = mine?.use?.action === "bathe" || mine?.use?.action === "swim";
-    if (using) options.push({ label: out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });
+    const playing = mine?.use?.action === "play" && (mine.use.consoleId === o.id || mine.use.tv === o.id || using);
+    if (playing) options.push({ label: "Stop playing", run: () => act({ do: "stop" }) });
+    else if (using) options.push({ label: out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });
     // watching this TV from a seat across the room
     else if (mine?.use?.tv === o.id) options.push({ label: "Stop watching", run: () => act({ do: "stop" }) });
     if (us.inBed && us.here && mine?.use?.objectId === o.id)
@@ -154,7 +157,7 @@ function Menu() {
               label: `Make ${r.name.toLowerCase()}`,
               run: () => act({ do: "cook", recipeId: r.id, objectId: o.id }),
             });
-      } else if (action === "watch" ? mine?.use?.action !== "watch" || (mine.use.objectId !== o.id && mine.use.tv !== o.id) : !using)
+      } else if (action === "play" ? !playing : action === "watch" ? mine?.use?.action !== "watch" || (mine.use.objectId !== o.id && mine.use.tv !== o.id) : !using)
         options.push({
           label: VERB[action],
           run: () => act({ do: "use", objectId: o.id, action }),

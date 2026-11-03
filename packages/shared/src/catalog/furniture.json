@@ -71,7 +71,8 @@
   { "id": "ping_pong_table", "name": "Ping-pong table", "tags": ["table tennis", "paddles", "ping pong"], "category": "entertainment", "price": 480, "footprint": [3, 2], "layer": "floor",
     "model": { "kind": "pingpong", "top": "#397d87" } },
   { "id": "ps5_setup", "name": "PS5 gaming setup", "tags": ["playstation", "console", "controllers", "video games"], "category": "entertainment", "price": 650, "footprint": [1, 1], "layer": "floor",
-    "model": { "kind": "gameconsole", "wood": "#ab8058", "body": "#f4f1e7" } },
+    "model": { "kind": "gameconsole", "wood": "#ab8058", "body": "#f4f1e7" },
+    "interactions": [{"action": "play", "slots": [{"stand": [[0, 1]], "pose": [0.35, 1.2], "y": 0, "face": 2}, {"stand": [[1, 0]], "pose": [1.2, 0.5], "y": 0, "face": 1}]}] },
   { "id": "blackjack_table", "name": "Blackjack card table", "tags": ["cards", "deck", "chips", "casino"], "category": "entertainment", "price": 390, "footprint": [2, 1], "layer": "floor",
     "model": { "kind": "blackjack", "felt": "#568a76", "wood": "#ab8058" } }
 ]

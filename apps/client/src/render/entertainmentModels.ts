@@ -131,7 +131,7 @@ function paddle(k: Kit, m: Mat, pos: [number, number, number], turn: number, ton
     k.box(m("#836447"), [0, 0.012, 0.15], [0.008, 0.003, 0.12], { outline: false });
   });
 }
-function controller(k: Kit, m: Mat, pos: [number, number, number], turn: number) {
+export function controller(k: Kit, m: Mat, pos: [number, number, number], turn: number) {
   k.at(pos, turn, () => {
     const white = m(IVORY), black = m(INK);
     k.add("soft", white, [0, 0.045, 0], [0.17, 0.065, 0.095], { outline: 0.003 });

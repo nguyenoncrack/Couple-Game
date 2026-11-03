@@ -7,7 +7,7 @@ import { Life } from "../life/engine";
 import { emptyLife } from "../life/state";
 import { buildNav, walkable } from "../life/nav";
 
-it.each(["ping_pong_table", "ps5_setup", "blackjack_table"])("%s places in every rotation, persists, and stays decorative", (catalogId) => {
+it.each(["ping_pong_table", "ps5_setup", "blackjack_table"])("%s places in every rotation, persists, and blocks its footprint", (catalogId) => {
   const item = catalog.furniture.get(catalogId)!;
   expect(item.category).toBe("entertainment");
   expect(item.surface).not.toBe(true);
@@ -18,7 +18,8 @@ it.each(["ping_pong_table", "ps5_setup", "blackjack_table"])("%s places in every
     if (!placed.ok) throw new Error(placed.reason);
     const restored = JSON.parse(JSON.stringify(placed.blueprint));
     expect(restored.levels[0].objects[object.id]).toMatchObject(object);
-    expect(slotsOf(object)).toEqual([]);
+    if (catalogId !== "ps5_setup") expect(slotsOf(object)).toEqual([]);
+    else expect(slotsOf(object).every((s) => s.action === "play")).toBe(true);
     const nav = buildNav(placed.blueprint);
     const f = footprintOf(item, object);
     expect(walkable(nav, f.x, f.z)).toBe(false);

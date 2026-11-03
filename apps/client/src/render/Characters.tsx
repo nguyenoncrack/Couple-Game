@@ -8,6 +8,8 @@ import { cameraFollow, cameraGestureActive } from "./CameraRig";
 import { FLOOR_Y } from "./House";
 import { HIP, THIGH, TORSO, SHOULDER, torso, arm, thigh, shin, looksFor, customizedLooks } from "../features/character/characterParts";
 import { KitMesh } from "./KitMesh";
+import { controller } from "./entertainmentModels";
+import { pencilMaterial } from "./pencil";
 
 /**
  * The two of you, drawn in pencil like the furniture. Each character is a few jointed parts (body, arms, thighs,
@@ -142,6 +144,19 @@ function poseFor(activity: string, seatY: number | null, t: number, standingTarg
         roll: 0,
       };
     }
+    case "play": {
+      const floor = (seatY ?? 0) < 0.2;
+      const press = Math.sin(s * 8) * 0.015;
+      return {
+        hip: floor ? 0.16 : (seatY ?? 0.45) + 0.05,
+        lean: -0.04,
+        thighs: floor ? [-2.0, -2.0] : [-1.45, -1.45],
+        knees: floor ? [2.2, 2.2] : [1.45, 1.45],
+        arms: [-1.02 + press, -1.02 - press],
+        spread: -0.2,
+        roll: 0,
+      };
+    }
     case "watch":
       // on the sofa, leaning back; on the floor, hugging your knees
       if ((seatY ?? 0) < 0.2)
@@ -252,6 +267,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
   const ripple = useRef<THREE.Mesh>(null);
   const hearts = useRef<HTMLDivElement>(null);
   const tag = useRef<HTMLDivElement>(null);
+  const gamepad = useRef<THREE.Group>(null);
   const first = useRef(true);
   // Html made in the scene's very first commit can lose its React root in development; add the tag a tick later.
   const [tagged, setTagged] = useState(false);
@@ -312,6 +328,10 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     for (const [r, a] of limbs) if (r.current) r.current.rotation.x = ease(r.current.rotation.x, a, j);
     if (armL.current) armL.current.rotation.z = ease(armL.current.rotation.z, -pose.spread, j);
     if (armR.current) armR.current.rotation.z = ease(armR.current.rotation.z, pose.spread, j);
+    if (gamepad.current) {
+      gamepad.current.visible = activity === "play";
+      gamepad.current.rotation.z = Math.sin(t * 0.004) * 0.025;
+    }
     if (zzz.current) zzz.current.style.opacity = activity === "sleep" ? "1" : "0";
     if (ripple.current) {
       ripple.current.visible = activity === "swim";
@@ -359,6 +379,9 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
         </group>
         <group ref={armR} position={[SHOULDER, TORSO - 0.06, 0]}>
           <KitMesh make={(k) => arm(k, looks)} deps={[looks]} />
+        </group>
+        <group ref={gamepad} visible={false} position={[0, 0.23, 0.405]} scale={1.45}>
+          <KitMesh make={(k) => controller(k, (tone, finish, alpha) => pencilMaterial(tone, { finish, alpha }), [0, -0.05, 0], 0)} deps={[]} />
         </group>
         {([-1, 1] as const).map((sx) => (
           <group key={sx} ref={sx < 0 ? thighL : thighR} position={[sx * 0.09, 0, 0]}>
