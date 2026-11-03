@@ -4,6 +4,8 @@ import * as THREE from "three";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
 import { FOG, pencilMaterial, SUN_DIR } from "./pencil";
+import { lakeShape } from "./sceneryLayout";
+import { Meadow } from "./Meadow";
 import { Yard } from "./Yard";
 
 /**
@@ -18,23 +20,6 @@ function rng(seed: number) {
     s = (s * 1664525 + 1013904223) >>> 0;
     return s / 4294967296;
   };
-}
-
-/** The lake: an irregular oval behind the house. */
-function lakeShape(w: number) {
-  const cx = w * 0.35;
-  const cz = -26;
-  const rx = 26;
-  const rz = 13;
-  /** The shore's distance from the middle at an angle, as a fraction of the radii. */
-  const reach = (a: number) => 1 + 0.12 * Math.sin(3 * a + 1) + 0.07 * Math.sin(5 * a + 2) + 0.05 * Math.sin(8 * a);
-  /** How far inside the shore a point is: < 1 in the water, with `margin` metres of extra room. */
-  const inside = (x: number, z: number, margin = 0) => {
-    const u = (x - cx) / rx;
-    const v = (z - cz) / rz;
-    return Math.hypot(u, v) < reach(Math.atan2(v, u)) + margin / rz;
-  };
-  return { cx, cz, rx, rz, reach, inside };
 }
 
 /** A flat disc on a polar grid; uv.x runs from 0 at the rim to 1 in the middle, so the water knows its depth. */
@@ -101,6 +86,7 @@ export function Scenery({ w, d }: { w: number; d: number }) {
       <Sky />
       <Lake lake={lake} />
       <Yard w={w} d={d} />
+      <Meadow w={w} d={d} />
       <KitMesh key="woods" deps={[w, d, lake]} make={(k) => woods(k, w, d, lake)} />
       <KitMesh key="mountains" deps={[w, d]} make={(k) => mountains(k, w, d)} />
     </group>

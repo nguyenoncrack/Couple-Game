@@ -1,6 +1,7 @@
 import type { FurnitureItem, OpeningItem } from "@cg/shared";
 import * as THREE from "three";
 import { Kit, type BuiltMesh } from "./kit";
+import { BOTANICAL_BUILDERS } from "./botanicalModels";
 import { ENTERTAINMENT_BUILDERS } from "./entertainmentModels";
 import { pencilMaterial, type Finish } from "./pencil";
 
@@ -114,6 +115,7 @@ const sofaLike = (seatsOverride?: number): Builder => (k, w, d, p, m) => {
 
 const BUILDERS: Record<string, Builder> = {
   ...ENTERTAINMENT_BUILDERS,
+  ...BOTANICAL_BUILDERS,
   sofa: sofaLike(),
   armchair: sofaLike(1),
 

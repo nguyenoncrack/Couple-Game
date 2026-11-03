@@ -1,6 +1,7 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { campLayout } from "./sceneryLayout";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
 import { pencilMaterial } from "./pencil";
@@ -35,26 +36,6 @@ function gable(w: number, h: number, t: number) {
   const g = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false });
   g.translate(0, 0, -t / 2);
   return g;
-}
-
-/** Where the campsite's pieces sit, beside the lot on the x < 0 side. */
-export function campLayout(d: number) {
-  const cabin = { x: -11, z: Math.max(5, d / 2 - 4) };
-  const fire: V3 = [-4.5, 0, Math.min(12.5, d - 4)];
-  // the trail: in from the pavement out front to the fire circle, then on from its far side to the cabin porch
-  const toFire: [number, number][] = [
-    [-3.2, d + 1.8],
-    [-3.0, d - 0.5],
-    [-3.4, d - 2.6],
-    [fire[0] + 0.4, fire[2] + 3.1],
-  ];
-  const toCabin: [number, number][] = [
-    [fire[0] - 2.3, fire[2] - 2.3],
-    [cabin.x + 4.2, cabin.z + 2.6],
-    [cabin.x + 3.8, cabin.z + 0.8],
-    [cabin.x + 3.4, cabin.z - 0.6],
-  ];
-  return { cabin, fire, trails: [toFire, toCabin] };
 }
 
 export function Yard({ w, d }: { w: number; d: number }) {
