@@ -172,6 +172,13 @@ const pencilFragment = /* glsl */ `
   const vec3 SKY = vec3(0.6, 0.64, 0.72);
   const vec3 BOUNCE = vec3(0.46, 0.42, 0.37);
 
+  // 1 well inside a map's picture (0..1), easing to 0 at its edge. Past the edge a map only repeats its border,
+  // which would smear whatever stands there into long straight stripes across the countryside.
+  float inPicture(vec2 uv) {
+    vec2 e = smoothstep(0.0, 0.06, uv) * smoothstep(0.0, 0.06, 1.0 - uv);
+    return e.x * e.y;
+  }
+
   // How much of the sun reaches here (1 in sunlight): a few soft taps of the sun's shadow map.
   float sunlit(vec3 pos, vec3 n, float ndl) {
     if (uShadowOn < 0.5 || ndl <= 0.0) return 1.0;
@@ -185,7 +192,8 @@ const pencilFragment = /* glsl */ `
     s += texture(uShadowMap, vec3(c.xy + vec2(r * 0.4, -r), z));
     s += texture(uShadowMap, vec3(c.xy + vec2(r, r * 0.4), z));
     s += texture(uShadowMap, vec3(c.xy + vec2(-r * 0.4, r), z));
-    return s / 6.0;
+    // thinning away toward the edge of the sun's picture rather than stopping on a straight line
+    return mix(1.0, s / 6.0, inPicture(c.xy));
   }
 
   // Contact shade on upward surfaces from whatever stands close by or overhead (walls, furniture, people, trees),
@@ -193,6 +201,8 @@ const pencilFragment = /* glsl */ `
   float tucked(vec3 pos, vec3 n) {
     if (uHeightOn < 0.5 || n.y < 0.6) return 0.0;
     vec2 uv = (uHeightMatrix * vec4(pos, 1.0)).xy;
+    float inside = inPicture(uv);
+    if (inside <= 0.0) return 0.0;
     float occ = 0.0;
     for (int i = 0; i < 8; i++) {
       float a = float(i) * 0.785398 + 0.4;
@@ -203,7 +213,7 @@ const pencilFragment = /* glsl */ `
     }
     float over = texture(uHeightMap, uv).r * uHeightScale.x - pos.y;
     occ += smoothstep(0.05, 0.3, over) * 0.45;
-    return clamp(occ, 0.0, 1.0);
+    return clamp(occ, 0.0, 1.0) * inside;
   }
 
   void main() {
