@@ -359,6 +359,10 @@ export class HouseRoom {
           return this.life.cancelCooking();
         case "eat":
           return this.life.eat(id, bp, intent.dishId, now);
+        case "fridge":
+          return this.life.takeOut(id, bp, intent.leftoverId, intent.objectId, intent.eat, now);
+        case "store":
+          return this.life.store(bp, intent.dishId, now);
         case "social":
           return this.life.social(id, bp, intent.action, now);
       }

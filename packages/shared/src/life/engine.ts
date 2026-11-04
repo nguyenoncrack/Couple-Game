@@ -17,10 +17,13 @@ import {
   cookingRate,
   EAT_MS,
   isTogether,
+  LEFTOVER_MS,
   MAX_DISHES,
+  MAX_LEFTOVERS,
   positionAt,
   type Avatar,
   type Dish,
+  type Leftover,
   type LifeState,
   type Social,
   TOGETHER_MS,
@@ -46,6 +49,7 @@ export type LifeReject =
   | "partner-busy"
   | "not-in-bed"
   | "no-tv"
+  | "no-fridge"
   | "not-at-table"
   | "round-changed"
   | "round-active"
@@ -64,6 +68,7 @@ export const LIFE_TEXT: Record<LifeReject, string> = {
   "partner-busy": "Your partner's busy. Try again in a moment.",
   "not-in-bed": "Get into the same bed first.",
   "no-tv": "There's no TV in view from here.",
+  "no-fridge": "There's no fridge to keep it in.",
   "not-at-table": "Join the card table and finish walking there first.",
   "round-changed": "The round changed. Choose again from the current hand.",
   "round-active": "Finish this round before dealing another.",
@@ -596,7 +601,7 @@ export class Life {
     return null;
   }
 
-  private serve(bp: Blueprint, recipeId: string, near: { x: number; z: number }) {
+  private serve(bp: Blueprint, recipeId: string, near: { x: number; z: number }, now: number, portions = this.cat.recipes.get(recipeId)?.serves ?? 1): Dish {
     const level = this.level(bp);
     let best: { id: string | null; x: number; z: number; dist: number } | null = null;
     for (const o of Object.values(level.objects)) {
@@ -617,13 +622,72 @@ export class Life {
       x: spot.x + (already % 2 ? 0.45 : -0.45) * Math.ceil(already / 2),
       z: spot.z,
       surfaceId: spot.id,
-      portions: this.cat.recipes.get(recipeId)?.serves ?? 1,
+      portions,
+      servedAt: now,
     };
     this.state.dishes.push(dish);
+    // too many plates out: the oldest one nobody's eating goes in the fridge (or, with no fridge, away)
     while (this.state.dishes.length > MAX_DISHES) {
-      const i = this.state.dishes.findIndex((d) => !Object.values(this.state.avatars).some((a) => a.use?.dishId === d.id));
-      this.state.dishes.splice(i < 0 ? 0 : i, 1);
+      const i = this.state.dishes.findIndex((d) => d !== dish && !this.beingEaten(d));
+      const [old] = this.state.dishes.splice(i < 0 ? 0 : i, 1);
+      if (old && this.fridges(bp).length) this.putAway(old, now);
     }
+    return dish;
+  }
+
+  // --- the fridge ---
+
+  private fridges(bp: Blueprint) {
+    return Object.values(this.level(bp).objects).filter((o) => this.cat.furniture.get(o.catalogId)?.fridge);
+  }
+
+  private beingEaten(d: Dish) {
+    return Object.values(this.state.avatars).some((a) => a.use?.dishId === d.id);
+  }
+
+  /** Off the table and into the fridge (the oldest thing in there goes, if it's full). */
+  private putAway(d: Dish, now: number) {
+    this.state.dishes = this.state.dishes.filter((x) => x !== d);
+    const fridge = (this.state.fridge ??= []);
+    fridge.push({ id: d.id, recipeId: d.recipeId, portions: d.portions, storedAt: now });
+    while (fridge.length > MAX_LEFTOVERS) fridge.shift();
+  }
+
+  /** Put a plate in the fridge for later. */
+  store(bp: Blueprint, dishId: string, now: number): LifeReject | null {
+    const d = this.state.dishes.find((x) => x.id === dishId);
+    if (!d) return "no-dish";
+    if (!this.fridges(bp).length) return "no-fridge";
+    if (this.beingEaten(d)) return "taken";
+    this.putAway(d, now);
+    return null;
+  }
+
+  /**
+   * Take a meal out of the fridge: it goes on the table nearest the fridge (the one you opened, or the nearest to you),
+   * and with `eat` you sit down to it straight away.
+   */
+  takeOut(memberId: string, bp: Blueprint, leftoverId: string, fridgeId: string | null, eat: boolean, now: number): LifeReject | null {
+    const a = this.state.avatars[memberId];
+    const fridge = this.state.fridge ?? [];
+    const i = fridge.findIndex((l) => l.id === leftoverId);
+    if (!a || i < 0) return "no-dish";
+    const fridges = this.fridges(bp);
+    const me = positionAt(a, now);
+    const from = fridges.find((o) => o.id === fridgeId) ?? fridges.sort((p, q) => Math.hypot(p.x - me.x, p.z - me.z) - Math.hypot(q.x - me.x, q.z - me.z))[0];
+    if (!from) return "no-fridge";
+    const item = this.cat.furniture.get(from.catalogId)!;
+    const f = footprintOf(item, from);
+    const [l] = fridge.splice(i, 1) as [Leftover];
+    const dish = this.serve(bp, l.recipeId, { x: f.x + f.w / 2, z: f.z + f.d / 2 }, now, l.portions);
+    if (!eat) return null;
+    const r = this.eat(memberId, bp, dish.id, now);
+    if (r) {
+      // couldn't get to it: back in the fridge as it was
+      this.state.dishes = this.state.dishes.filter((d) => d !== dish);
+      fridge.splice(i, 0, l);
+    }
+    return r;
   }
 
   // --- time passing ---
@@ -653,10 +717,19 @@ export class Life {
       const dish = this.state.dishes.find((d) => d.id === u.dishId);
       if (dish) {
         dish.portions -= 1;
+        dish.servedAt = now;
         if (dish.portions <= 0) this.state.dishes = this.state.dishes.filter((d) => d !== dish);
       }
       // stay seated after eating; standing eaters just stand
       a.use = u.objectId ? { ...u, action: "sit", dishId: undefined, until: undefined } : null;
+      changed = true;
+    }
+
+    // plates nobody's touched in a while go in the fridge; with no fridge (or someone at it), they wait another while
+    for (const d of [...this.state.dishes]) {
+      if (d.servedAt === undefined || now < d.servedAt + LEFTOVER_MS) continue;
+      if (!this.beingEaten(d) && this.fridges(bp).length) this.putAway(d, now);
+      else d.servedAt = now;
       changed = true;
     }
 
@@ -678,7 +751,7 @@ export class Life {
       if (c.step >= recipe.steps.length) {
         const last = finishers[0];
         const near = last?.use?.pose ?? (last ? { x: last.path[0]![0], z: last.path[0]![1] } : { x: bp.lot.w / 2, z: bp.lot.d / 2 });
-        this.serve(bp, recipe.id, near);
+        this.serve(bp, recipe.id, near, now);
         for (const a of this.workers(now)) this.stop(a.memberId, now);
         this.state.cooking = null;
         return true;
@@ -714,6 +787,7 @@ export class Life {
       if (a.use?.station && arrive > now) next = Math.min(next, arrive);
       if ((a.use?.action === "eat" || together(a.use) || brief(a.use)) && a.use!.until !== undefined) next = Math.min(next, a.use!.until);
     }
+    for (const d of this.state.dishes) if (d.servedAt !== undefined) next = Math.min(next, d.servedAt + LEFTOVER_MS);
     const c = this.state.cooking;
     const step = c && this.cat.recipes.get(c.recipeId)?.steps[c.step];
     if (c && step && c.rate > 0) next = Math.min(next, c.updatedAt + ((step.seconds - c.done) / c.rate) * 1000);
@@ -784,20 +858,31 @@ export class Life {
       }
     }
     const kept: Dish[] = [];
+    const gone: Dish[] = [];
     for (const d of this.state.dishes) {
       if (d.surfaceId && !level.objects[d.surfaceId]) {
         changed = true;
+        gone.push(d);
         for (const a of Object.values(this.state.avatars))
           if (a.use?.dishId === d.id) a.use = a.use.objectId ? { ...a.use, action: "sit", dishId: undefined, until: undefined } : null;
       } else kept.push(d);
     }
     this.state.dishes = kept;
+    // what was on a table that went is saved in the fridge, if there's one
+    if (gone.length && this.fridges(bp).length) for (const d of gone) this.putAway({ ...d }, now);
+    // and with the last fridge gone, so is what was in it
+    if (this.state.fridge?.length && !this.fridges(bp).length) {
+      this.state.fridge = [];
+      changed = true;
+    }
     return this.syncTableGames(bp) || changed;
   }
 
   /** Pick up from a saved state on a new clock: everyone where they were, meals paused, eating finished. */
   static restore(saved: LifeState, now: number, cat: Catalog = defaultCatalog): Life {
-    const state: LifeState = { avatars: {}, cooking: null, dishes: saved.dishes ?? [] };
+    // a plate's clock is the real one: one left out while the house was empty goes in the fridge on the first look
+    const state: LifeState = { avatars: {}, cooking: null, dishes: (saved.dishes ?? []).map((d) => ({ ...d, servedAt: d.servedAt ?? now })) };
+    if (saved.fridge) state.fridge = saved.fridge.map((l) => ({ ...l }));
     if (saved.blackjack) state.blackjack = structuredClone(saved.blackjack);
     for (const a of Object.values(saved.avatars ?? {})) {
       const end = a.path[a.path.length - 1]!;
@@ -843,6 +928,7 @@ export class Life {
       avatars,
       cooking: c && recipe ? { ...c, done: cookingDone(c, recipe, now), rate: 0, updatedAt: 0 } : null,
       dishes: this.state.dishes.map((d) => ({ ...d })),
+      ...(this.state.fridge ? { fridge: this.state.fridge.map((l) => ({ ...l })) } : {}),
       ...(this.state.blackjack ? { blackjack: structuredClone(this.state.blackjack) } : {}),
     };
   }
@@ -853,7 +939,7 @@ export class Life {
  * they stood, since from then on they go differently. One that's turned down, or finds nothing to do, puts them
  * back, so it leaves the state just as it was, like everything else it does.
  */
-const CHANGES = ["walk", "use", "cards", "move", "stop", "social", "cook", "help", "eat", "tick", "onBlueprint"] as const;
+const CHANGES = ["walk", "use", "cards", "move", "stop", "social", "cook", "help", "eat", "takeOut", "store", "tick", "onBlueprint"] as const;
 for (const name of CHANGES) {
   const change = Life.prototype[name] as (this: Life, ...args: unknown[]) => LifeReject | boolean | null;
   Object.defineProperty(Life.prototype, name, {

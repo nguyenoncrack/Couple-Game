@@ -49,7 +49,7 @@
   { "id": "stove", "name": "Stove", "category": "kitchen", "price": 480, "footprint": [1, 1], "layer": "floor",
     "model": { "kind": "stove", "body": "#ece6da" },
     "interactions": [{"action": "cook", "station": "stove", "slots": [{"stand": [[0, 1]], "pose": [0.5, 1.32], "y": 0, "face": 2}]}] },
-  { "id": "fridge", "name": "Fridge", "category": "kitchen", "price": 720, "footprint": [1, 1], "layer": "floor",
+  { "id": "fridge", "name": "Fridge", "category": "kitchen", "price": 720, "footprint": [1, 1], "layer": "floor", "fridge": true,
     "model": { "kind": "fridge", "body": "#dfe7e4" } },
   { "id": "toilet", "name": "Toilet", "category": "bathroom", "price": 220, "footprint": [1, 1], "layer": "floor",
     "model": { "kind": "toilet" },

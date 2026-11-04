@@ -232,8 +232,10 @@ export class FreeWill {
           .filter((d) => d.portions > Object.values(life.state.avatars).filter((o) => o.use?.dishId === d.id).length)
           .map((d) => () => life.eat(id, bp, d.id, now));
         const help = life.state.cooking ? [() => life.help(id, bp, now)] : [];
+        // leftovers before cooking something new, the oldest first
+        const fridge = (life.state.fridge ?? []).map((l) => () => life.takeOut(id, bp, l.id, null, true, now));
         const cook = this.shuffle([...this.cat.recipes.keys()]).map((r) => () => life.cook(id, bp, r, null, now));
-        return [...plates, ...help, ...cook];
+        return [...plates, ...help, ...fridge, ...cook];
       }
       case "energy":
         return [...use("sleep"), ...use("lounge"), ...use("sit")];

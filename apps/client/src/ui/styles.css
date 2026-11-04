@@ -1066,6 +1066,24 @@ button.pill:active,
   overscroll-behavior: contain;
 }
 
+.fridge-list {
+  width: 300px;
+}
+
+.fridge-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fridge-food {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
 .live-menu .btn.recipe {
   width: 100%;
   display: flex;

@@ -53,6 +53,8 @@ const FurnitureItem = z.object({
   layer: z.enum(["floor", "rug"]),
   /** Finished dishes are served on surfaces. */
   surface: z.boolean().optional(),
+  /** Leftovers are kept in it (one store for the house, whichever fridge you open). */
+  fridge: z.boolean().optional(),
   model: z.looseObject({ kind: z.string() }),
   interactions: z.array(Interaction).optional(),
 });

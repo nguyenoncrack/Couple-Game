@@ -1,4 +1,4 @@
-import { actionsOf, catalog, positionAt, slotsOf, tvFacing, type Action, type Level, type PlacedObject, type Recipe, type Together } from "@cg/shared";
+import { actionsOf, catalog, positionAt, slotsOf, tvFacing, type Action, type Level, type Leftover, type PlacedObject, type Recipe, type Together } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -30,6 +30,8 @@ const VERB: Record<Action, string> = {
   wash: "Wash your hands",
 };
 
+const isFridge = (o: PlacedObject) => Boolean(catalog.furniture.get(o.catalogId)?.fridge);
+
 /** Seats can be watched from too, when there's a TV in view. */
 const seatSeesTv = (level: Level, o: PlacedObject) => slotsOf(o, "sit").some((s) => tvFacing(level, s));
 const offers = (level: Level, o: PlacedObject): Action[] => [...new Set(actionsOf(o)), ...(seatSeesTv(level, o) ? (["watch"] as const) : [])];
@@ -37,7 +39,7 @@ const offers = (level: Level, o: PlacedObject): Action[] => [...new Set(actionsO
 /** Open what you can do with a piece of furniture, if anything. True if there's a menu. */
 export function openObjectMenu(level: Level, id: string) {
   const o = level.objects[id];
-  if (!o || !offers(level, o).length) return false;
+  if (!o || (!offers(level, o).length && !isFridge(o))) return false;
   const { position, item } = objectTransform(o);
   const h = (item.model as { height?: unknown }).height;
   useGame.setState({ menu: { objectId: id, at: [position[0], typeof h === "number" ? h + 0.4 : 1.2, position[2]] } });
@@ -153,11 +155,14 @@ function Menu() {
   let body = "";
   /** The stove or counter to start a meal at, when there's one to pick. */
   let cookAt: string | null = null;
+  /** The fridge you opened. */
+  let fridge: string | null = null;
 
   if (menu.objectId) {
     const o = level.objects[menu.objectId];
     if (!o) return null;
     title = catalog.furniture.get(o.catalogId)?.name ?? "";
+    if (isFridge(o)) fridge = o.id;
     const using = mine?.use?.objectId === o.id && !mine.use.station;
     const out = mine?.use?.action === "bathe" || mine?.use?.action === "swim";
     const playing = mine?.use?.action === "play" && (mine.use.consoleId === o.id || mine.use.tv === o.id || using);
@@ -219,6 +224,7 @@ function Menu() {
       label: d.portions > 1 ? `Eat (${d.portions} servings left)` : "Eat the last serving",
       run: () => act({ do: "eat", dishId: d.id }),
     });
+    if (Object.values(level.objects).some(isFridge)) options.push({ label: "Put in the fridge", run: () => act({ do: "store", dishId: d.id }) });
   }
 
   return (
@@ -227,6 +233,7 @@ function Menu() {
         <div className="kicker">{title}</div>
         {body && <p className="hand">{body}</p>}
         {cookAt && <RecipePicker objectId={cookAt} />}
+        {fridge && <FridgeShelf objectId={fridge} leftovers={life.fridge ?? []} />}
         {options.length ? (
           groups(options).map(([group, list]) =>
             group ? (
@@ -248,7 +255,7 @@ function Menu() {
               ))
             ),
           )
-        ) : cookAt ? null : (
+        ) : cookAt || fridge ? null : (
           <p className="hand">Nothing to do here right now.</p>
         )}
         <button className="close" onClick={() => useGame.setState({ menu: null })} aria-label="Close">
@@ -306,5 +313,30 @@ function RecipePicker({ objectId }: { objectId: string }) {
       </ul>
       {!found.length && <p className="hand">No recipe like that.</p>}
     </div>
+  );
+}
+
+/** What's in the fridge: eat something now, or put it out on the table to share. */
+function FridgeShelf({ objectId, leftovers }: { objectId: string; leftovers: Leftover[] }) {
+  if (!leftovers.length) return <p className="hand">Nothing in here yet. A plate left out for half an hour gets put away in here.</p>;
+  return (
+    <ul className="recipe-list fridge-list" aria-label="In the fridge">
+      {[...leftovers].reverse().map((l) => (
+        <li key={l.id} className="fridge-item">
+          <span className="fridge-food">
+            <span className="recipe-name">{catalog.recipes.get(l.recipeId)?.name ?? "Leftovers"}</span>
+            <span className="recipe-meta">
+              {l.portions} {l.portions === 1 ? "serving" : "servings"}
+            </span>
+          </span>
+          <button className="btn" onClick={() => act({ do: "fridge", leftoverId: l.id, objectId, eat: true })}>
+            Eat
+          </button>
+          <button className="btn" onClick={() => act({ do: "fridge", leftoverId: l.id, objectId, eat: false })} title="Put it out on the table">
+            Take out
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

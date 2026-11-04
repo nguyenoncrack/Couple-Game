@@ -38,6 +38,9 @@ export const LifeIntent = z.discriminatedUnion("do", [
   z.object({ do: z.literal("help") }),
   z.object({ do: z.literal("cancel") }),
   z.object({ do: z.literal("eat"), dishId: Id }),
+  // a meal from the fridge: onto the table nearest it, and eaten straight away if `eat`
+  z.object({ do: z.literal("fridge"), leftoverId: Id, eat: z.boolean(), objectId: Id.nullable() }),
+  z.object({ do: z.literal("store"), dishId: Id }),
   /** Hug or kiss your partner, or cuddle up (and stop) when you're both in the same bed. */
   z.object({ do: z.literal("social"), action: z.enum(SOCIAL) }),
 ]);

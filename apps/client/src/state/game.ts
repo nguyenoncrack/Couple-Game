@@ -1,5 +1,6 @@
 import {
   applyOp,
+  catalog,
   inverseOp,
   isTogether,
   LIFE_TEXT,
@@ -176,6 +177,8 @@ let conn: Connection | null = null;
 let toastSeq = 0;
 /** When I last asked for a hug or kiss, so the note about one coming only shows to whoever it's coming to. */
 let askedAt = -Infinity;
+/** When I last put a plate in the fridge myself, so that one isn't announced. */
+let storedAt = -Infinity;
 /** "<name> is coming over …" */
 const COMING_FOR: Record<Together, string> = {
   hug: "for a hug ♥",
@@ -318,6 +321,16 @@ function handle(msg: ServerMsg) {
         const other = msg.life.avatars[now.with];
         const name = s.members.find((m) => m.id === now.with)?.name ?? "Your partner";
         if (other?.use?.with === s.me && performance.now() - askedAt > 3000) toast(`${name} is coming over ${COMING_FOR[now.action]}`);
+      }
+      // food that's been left out goes in the fridge by itself: say so (not when I put it there)
+      const had = new Set((s.life?.fridge ?? []).map((l) => l.id));
+      const stored = s.life ? (msg.life.fridge ?? []).filter((l) => !had.has(l.id) && s.life!.dishes.some((d) => d.id === l.id)) : [];
+      if (stored.length && performance.now() - storedAt > 3000) {
+        const names = stored.map((l, i) => {
+          const name = catalog.recipes.get(l.recipeId)?.name ?? "Leftovers";
+          return i ? name.toLowerCase() : name;
+        });
+        toast(`${names.join(" and ")} went in the fridge`);
       }
       // a plate that's been eaten can't keep its menu open
       const menu = s.menu?.dishId && !msg.life.dishes.some((d) => d.id === s.menu!.dishId) ? null : s.menu;
@@ -537,6 +550,7 @@ export function setTool(tool: Tool) {
 export function act(intent: LifeIntent) {
   set({ menu: null });
   if (intent.do === "social") askedAt = performance.now();
+  if (intent.do === "store") storedAt = performance.now();
   conn?.send({ type: "life", intent });
 }
 

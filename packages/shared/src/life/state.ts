@@ -19,6 +19,10 @@ export const EAT_MS = 9000;
 export const HELP_BONUS = 0.5;
 /** Plates left out at once; older ones are cleared away. */
 export const MAX_DISHES = 4;
+/** A plate nobody's eaten from for this long goes in the fridge, if the house has one. */
+export const LEFTOVER_MS = 30 * 60_000;
+/** The fridge holds this many meals; the oldest goes out to make room. */
+export const MAX_LEFTOVERS = 12;
 /** Things the two of you do face to face, standing up, and how long each lasts. */
 export const TOGETHER_MS = {
   hug: 4000,
@@ -99,12 +103,24 @@ export interface Dish {
   z: number;
   surfaceId: string | null;
   portions: number;
+  /** When it was served, or last eaten from (missing in old saves): left alone too long, it goes in the fridge. */
+  servedAt?: number;
+}
+
+/** A meal put away in the fridge, to take out again later. */
+export interface Leftover {
+  id: string;
+  recipeId: string;
+  portions: number;
+  storedAt: number;
 }
 
 export interface LifeState {
   avatars: Record<string, Avatar>;
   cooking: Cooking | null;
   dishes: Dish[];
+  /** What's in the fridge, oldest first (one for the whole house, whichever fridge you open). Optional for old saves. */
+  fridge?: Leftover[];
   /** Optional for old saves. Each card table owns an independent round. */
   blackjack?: Record<string, BlackjackRound>;
 }
