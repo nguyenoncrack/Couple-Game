@@ -1,6 +1,7 @@
 import { LOW_NEED, moodName, moodOf, needsAt, NEEDS, worstNeed, type Avatar, type Need, type NeedValues } from "@cg/shared";
 import { useEffect, useRef, useState } from "react";
 import { serverNow, toast, useGame } from "../state/game";
+import { Floating } from "./Floating";
 import "./needs.css";
 
 /**
@@ -91,29 +92,12 @@ function useNeeds(avatar: Avatar | undefined): NeedValues | null {
   return avatar ? needsAt(avatar, serverNow()) : null;
 }
 
-const FOLD_KEY = "cg.needs.folded";
-
 export function NeedsPanel() {
   const me = useGame((s) => s.me);
   const members = useGame((s) => s.members);
   const avatars = useGame((s) => s.life?.avatars);
   const partner = members.find((m) => m.id !== me);
   const [whose, setWhose] = useState<"me" | "partner">("me");
-  const [folded, setFolded] = useState(() => {
-    try {
-      return localStorage.getItem(FOLD_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-  const fold = (f: boolean) => {
-    setFolded(f);
-    try {
-      localStorage.setItem(FOLD_KEY, f ? "1" : "0");
-    } catch {
-      // only a convenience
-    }
-  };
   const showing = whose === "partner" && partner && avatars?.[partner.id] ? partner.id : me;
   const v = useNeeds(showing ? avatars?.[showing] : undefined);
   const mine = useNeeds(me ? avatars?.[me] : undefined);
@@ -136,8 +120,21 @@ export function NeedsPanel() {
   const mood = moodOf(v);
   const who = showing === me ? "You" : (partner?.name ?? "Partner");
   return (
-    <div className={`card needs-panel ${folded ? "folded" : ""}`} aria-label="Needs">
-      <button className="needs-mood" onClick={() => fold(!folded)} title={folded ? "Show needs" : "Fold away"} aria-expanded={!folded}>
+    <Floating
+      id="needs"
+      title="Needs"
+      className="needs-panel"
+      aria-label="Needs"
+      chip={
+        <>
+          <span className={`needs-face ${levelOf(mood)}`}>
+            <MoodFace mood={mood} size={22} />
+          </span>
+          {who}: {moodName(mood)}
+        </>
+      }
+    >
+      <div className="needs-mood">
         <span className={`needs-face ${levelOf(mood)}`}>
           <MoodFace mood={mood} />
         </span>
@@ -145,42 +142,35 @@ export function NeedsPanel() {
           <span className="kicker">{who}</span>
           <span className="needs-mood-name">{moodName(mood)}</span>
         </span>
-        <span className="needs-chevron" aria-hidden>
-          {folded ? "▾" : "▴"}
-        </span>
-      </button>
-      {!folded && (
-        <>
-          {partner && avatars?.[partner.id] && (
-            <div className="seg needs-who">
-              <button className={whose === "me" ? "on" : ""} onClick={() => setWhose("me")}>
-                You
-              </button>
-              <button className={whose === "partner" ? "on" : ""} onClick={() => setWhose("partner")}>
-                <span className="needs-dot" style={{ background: partner.color }} />
-                {partner.name}
-              </button>
-            </div>
-          )}
-          <ul className="needs-bars">
-            {NEEDS.map((n) => {
-              const Pic = NEED_ICON[n];
-              return (
-                <li key={n} className={levelOf(v[n])} title={`${NEED_NAME[n]}: ${Math.round(v[n])}%. ${NEED_TIP[n]}`}>
-                  <span className="needs-label">
-                    <Pic />
-                    {NEED_NAME[n]}
-                  </span>
-                  <span className="needs-bar" role="meter" aria-label={NEED_NAME[n]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v[n])}>
-                    <span style={{ width: `${v[n]}%` }} />
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </>
+      </div>
+      {partner && avatars?.[partner.id] && (
+        <div className="seg needs-who">
+          <button className={whose === "me" ? "on" : ""} onClick={() => setWhose("me")}>
+            You
+          </button>
+          <button className={whose === "partner" ? "on" : ""} onClick={() => setWhose("partner")}>
+            <span className="needs-dot" style={{ background: partner.color }} />
+            {partner.name}
+          </button>
+        </div>
       )}
-    </div>
+      <ul className="needs-bars">
+        {NEEDS.map((n) => {
+          const Pic = NEED_ICON[n];
+          return (
+            <li key={n} className={levelOf(v[n])} title={`${NEED_NAME[n]}: ${Math.round(v[n])}%. ${NEED_TIP[n]}`}>
+              <span className="needs-label">
+                <Pic />
+                {NEED_NAME[n]}
+              </span>
+              <span className="needs-bar" role="meter" aria-label={NEED_NAME[n]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v[n])}>
+                <span style={{ width: `${v[n]}%` }} />
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Floating>
   );
 }
 

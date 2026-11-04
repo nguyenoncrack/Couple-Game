@@ -1,0 +1,334 @@
+/*
+ * Liquid glass, for everything on screen while you're in a house: frosted, see-through panels with a bright edge
+ * and a soft sheen, clean type, and panels you can move and fold away (Floating.tsx). It works by giving the HUD's
+ * own colour, border, shadow and font variables glass values inside `.game`, then softening the few things that
+ * set their own paper colours or hard ink shadows. The sign-in and house screens keep paper and ink.
+ */
+
+.game {
+  --ink: #17212b;
+  --ink-soft: rgb(23 33 43 / 0.62);
+  --glass-tint: rgb(255 255 255 / 0.26);
+  --glass-fill: rgb(255 255 255 / 0.4);
+  --glass-hi: rgb(255 255 255 / 0.75);
+  --glass-line: rgb(255 255 255 / 0.62);
+  --glass-blur: blur(22px) saturate(175%);
+  --card: linear-gradient(150deg, rgb(255 255 255 / 0.56), rgb(255 255 255 / 0.2) 42%, rgb(255 255 255 / 0.3));
+  --paper: var(--glass-fill);
+  --border: 1px solid var(--glass-line);
+  --shadow: 0 12px 32px rgb(16 28 40 / 0.2), 0 2px 6px rgb(16 28 40 / 0.1), inset 0 1px 0 var(--glass-hi), inset 0 -1px 1px rgb(255 255 255 / 0.18);
+  --soft: 0 4px 14px rgb(16 28 40 / 0.14), inset 0 1px 0 var(--glass-hi);
+  --hand: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  --serif: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  --logo: var(--serif);
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --yellow: #ffd65a;
+  /* the page's own font was set before these: start the HUD's over in the new one */
+  font-family: var(--hand);
+  /* the sizes were picked for a narrow handwriting: this sets the new one's small letters to that height */
+  font-size-adjust: 0.43;
+  color: var(--ink);
+}
+
+/* the glass itself */
+.game :is(.card, .pill, .toolbar, .toast, .banner, .speech, .pin-tag) {
+  background: var(--card);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.game .card {
+  border-radius: 24px;
+}
+
+.game :is(.toolbar) {
+  border-radius: 28px;
+}
+
+/* a phone can't fit the whole toolbar on one row: it takes two */
+@media (max-width: 760px) {
+  .game .toolbar {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: max-content;
+    max-width: calc(100vw - 16px);
+    bottom: 10px;
+  }
+  .game .toolbar .toolbar-gap {
+    display: none;
+  }
+}
+
+.game .invite-pill,
+.game .banner {
+  background: linear-gradient(150deg, rgb(255 226 120 / 0.85), rgb(255 205 70 / 0.6));
+}
+
+.game .title-pill {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.game .kicker {
+  font-family: var(--hand);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.game .hand {
+  font-family: var(--hand);
+}
+
+/* buttons, slots and fields inside the glass: lighter glass, no ink outlines */
+.game :is(.slot, .seg button, .item, .mode-switch button, .btn, .cal-stat, .cal-step, .chat-bubble, .chat-form input, .link-row input, .swatch-chip, .item-chip) {
+  background: var(--glass-tint);
+  border: 1px solid var(--glass-line);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+  color: var(--ink);
+}
+
+.game .icon-pill,
+.game .clock-cal {
+  border: 1px solid var(--glass-line);
+}
+
+.game :is(.slot.active, .seg button.on, .mode-switch button.on, .item.active, .cal-stat.big, .btn.primary, .chat-line.mine .chat-bubble, .clock-cal, .swatch.active, .choice.on) {
+  background: linear-gradient(150deg, rgb(255 226 120 / 0.9), rgb(255 200 60 / 0.65));
+  box-shadow: var(--soft);
+}
+
+.game .btn.danger {
+  background: rgb(255 120 105 / 0.22);
+}
+
+.game :is(button.pill:active, .btn:active, .slot:active) {
+  transform: scale(0.97);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+
+.game :is(.pill, .slot, .btn, .item, .icon-pill, .seg button, .cal-step, .clock-cal, .float-min, .float-grip):focus-visible {
+  outline: 3px solid rgb(61 143 163 / 0.85);
+  outline-offset: 2px;
+}
+
+/* bars: glass troughs with bright fills */
+.game :is(.needs-bar, .steps .bar) {
+  background: rgb(255 255 255 / 0.3);
+  border: 1px solid var(--glass-line);
+  box-shadow: inset 0 1px 2px rgb(16 28 40 / 0.12);
+}
+
+.game .needs-bar span {
+  border-right: 0;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.45), rgb(255 255 255 / 0) 60%), #5fbf72;
+}
+
+.game .needs-bars li.mid .needs-bar span {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.45), rgb(255 255 255 / 0) 60%), #f2c23f;
+}
+
+.game .needs-bars li.low .needs-bar span {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.45), rgb(255 255 255 / 0) 60%), #ee6352;
+}
+
+/* round things */
+.game :is(.needs-face, .welcome-coin, .avatar, .status-dot, .needs-dot, .pin-dot, .need-thought) {
+  border: 1px solid var(--glass-line);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+
+.game .needs-face.ok {
+  background: rgb(95 191 114 / 0.45);
+}
+
+.game .needs-face.mid {
+  background: rgb(242 194 63 / 0.5);
+}
+
+.game .needs-face.low {
+  background: rgb(238 99 82 / 0.5);
+}
+
+/* the calendar's days */
+.game .cal-day.visited {
+  background: rgb(95 191 114 / 0.38);
+  border: 1px solid var(--glass-line);
+}
+
+.game .cal-day.bonus {
+  background: rgb(255 214 90 / 0.7);
+}
+
+.game .cal-day.today {
+  border: 2px solid #ff8a5c;
+  box-shadow: var(--soft);
+}
+
+.game .cal-rewards li {
+  border: 1px solid rgb(255 255 255 / 0.4);
+  background: rgb(255 255 255 / 0.14);
+}
+
+.game :is(.cal-rewards li.earned, .cal-rewards li.earned-daily) {
+  background: rgb(95 191 114 / 0.25);
+  border-color: var(--glass-line);
+}
+
+.game .cal-rewards li.next {
+  background: rgb(255 214 90 / 0.35);
+  border-color: var(--glass-line);
+}
+
+.game .cal-month,
+.game .welcome-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.game .welcome-back {
+  background: var(--card);
+}
+
+/* speech and name tags over people's heads */
+.game .speech::after {
+  background: rgb(255 255 255 / 0.5);
+  border-color: var(--glass-line);
+}
+
+.game .overlay {
+  background: rgb(230 240 248 / 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+kbd {
+  font-family: var(--mono);
+}
+
+.game kbd {
+  background: rgb(255 255 255 / 0.4);
+  border: 1px solid var(--glass-line);
+}
+
+/* --- panels you can move and fold away --- */
+
+.game .floating {
+  /* room for the bar along the top */
+  padding-top: 26px;
+}
+
+.float-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.float-grip {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 11px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.float-grip:active {
+  cursor: grabbing;
+}
+
+.float-grip span {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgb(23 33 43 / 0.28);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.6);
+}
+
+.float-grip:hover span {
+  background: rgb(23 33 43 / 0.45);
+}
+
+.float-min {
+  pointer-events: auto;
+  position: absolute;
+  top: 3px;
+  left: 14px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font: 600 15px/1 var(--hand);
+  color: rgb(23 33 43 / 0.75);
+  background: rgb(23 33 43 / 0.08);
+  border: 1px solid rgb(23 33 43 / 0.14);
+  border-radius: 50%;
+}
+
+.float-min:hover {
+  background: rgb(255 214 90 / 0.9);
+  border-color: rgb(23 33 43 / 0.2);
+}
+
+/* the panel you're using, or a folded chip, sits over the others (and the toolbar) */
+.game .floating:focus-within {
+  z-index: 6;
+}
+
+.game .floating.minimized {
+  z-index: 7;
+}
+
+/* folded: just a chip where the panel was */
+.game .floating.minimized {
+  width: auto;
+  min-width: 0;
+  height: auto;
+  max-height: none;
+  padding: 24px 10px 8px;
+  overflow: visible;
+  gap: 0;
+}
+
+.float-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  font: 600 15px var(--hand);
+  color: var(--ink);
+  background: none;
+  border: 0;
+  white-space: nowrap;
+}
+
+.float-chip svg {
+  width: 20px;
+  height: 20px;
+}
+
+.float-chip .needs-face {
+  width: 28px;
+  height: 28px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .game {
+    --card: rgb(250 251 252 / 0.96);
+    --glass-tint: rgb(240 243 246);
+  }
+}

@@ -11,21 +11,10 @@
   gap: 8px;
 }
 
-.needs-panel.folded {
-  width: auto;
-  padding-bottom: 8px;
-}
-
 .needs-mood {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0;
-  background: none;
-  border: 0;
-  color: var(--ink);
-  text-align: left;
-  font: inherit;
 }
 
 .needs-face {
@@ -58,13 +47,6 @@
 .needs-mood-name {
   font-family: var(--hand);
   font-size: 21px;
-}
-
-.needs-chevron {
-  margin-left: auto;
-  padding-left: 8px;
-  color: var(--ink-soft);
-  font-size: 13px;
 }
 
 .needs-who button {

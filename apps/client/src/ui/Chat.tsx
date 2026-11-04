@@ -1,6 +1,7 @@
 import { CHAT_MAX } from "@cg/shared";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { openChat, say, useGame } from "../state/game";
+import { Floating } from "./Floating";
 import { Icon } from "./icons";
 
 /**
@@ -49,7 +50,7 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="card chat-panel" onPointerDown={(e) => e.stopPropagation()}>
+    <Floating id="chat" title="Chat" icon={<Icon.chat />} className="chat-panel" onPointerDown={(e) => e.stopPropagation()}>
       <div className="chat-head">
         <span className="kicker">{partner ? `You and ${partner.name}` : "Just you so far"}</span>
         <button className="close" onClick={() => openChat(false)} aria-label="Close chat">
@@ -92,6 +93,6 @@ export function ChatPanel() {
           Send
         </button>
       </form>
-    </div>
+    </Floating>
   );
 }

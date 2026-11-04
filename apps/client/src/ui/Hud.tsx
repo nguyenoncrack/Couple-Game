@@ -17,6 +17,7 @@ import { useFirstPersonMouse } from "../input/firstPersonMouse";
 import { TableGamePanel } from "./TableGamePanel";
 import { NeedsPanel } from "./Needs";
 import { ClockPill, WelcomeBack } from "./Calendar";
+import { Floating } from "./Floating";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -303,7 +304,7 @@ function LiveBar() {
   const busy = useGame((s) => Boolean(s.me && s.life?.avatars[s.me]?.use));
   const { here, inBed, cuddling } = useGame(useShallow(together));
   return (
-    <div className="toolbar">
+    <Floating id="toolbar" title="Tools" icon={<Icon.house />} className="toolbar">
       <ModeSwitch />
       <span className="toolbar-gap" />
       {here && inBed && (
@@ -341,7 +342,7 @@ function LiveBar() {
         <Icon.stand />
         <span className="slot-label">Stand</span>
       </button>
-    </div>
+    </Floating>
   );
 }
 
@@ -350,7 +351,7 @@ function Toolbar() {
   const canUndo = useGame((s) => s.canUndo);
   const canRedo = useGame((s) => s.canRedo);
   return (
-    <div className="toolbar">
+    <Floating id="toolbar" title="Tools" icon={<Icon.house />} className="toolbar">
       <ModeSwitch />
       <span className="toolbar-gap" />
       {TOOLS.map((t) => (
@@ -372,7 +373,7 @@ function Toolbar() {
         <Icon.redo />
         <span className="slot-label">Redo</span>
       </button>
-    </div>
+    </Floating>
   );
 }
 
@@ -464,7 +465,7 @@ function RoofPanel() {
   const erase = useGame((s) => s.roofErase);
   const has = useGame((s) => Object.keys(s.view?.levels[0]?.roofs ?? {}).length > 0);
   return (
-    <div className="card tool-panel">
+    <Floating id="tools" title="Roof" className="tool-panel">
       <div className="kicker">Roof</div>
       <div className="seg">
         <button className={!erase ? "on" : ""} onClick={() => useGame.setState({ roofErase: false })}>
@@ -488,7 +489,7 @@ function RoofPanel() {
         </button>
       </div>
       <p className="hint hand">{erase ? "Drag over the roof to take that part off." : "Drag a rectangle over the rooms. The roof slopes up from whatever edge it has, so any shape works."}</p>
-    </div>
+    </Floating>
   );
 }
 
@@ -503,7 +504,7 @@ function ToolPanel() {
 
   if (tool === "wall")
     return (
-      <div className="card tool-panel">
+      <Floating id="tools" title="Wall style" className="tool-panel">
         <div className="kicker">Wall style</div>
         <div className="swatches">
           {[...catalog.wallStyles.values()].map((s) => (
@@ -511,11 +512,11 @@ function ToolPanel() {
           ))}
         </div>
         <p className="hint hand">Drag along the grid lines. Draw over a wall to repaint it.</p>
-      </div>
+      </Floating>
     );
   if (tool === "floor")
     return (
-      <div className="card tool-panel">
+      <Floating id="tools" title="Floor" className="tool-panel">
         <div className="kicker">Floor</div>
         <div className="swatches">
           {[...catalog.floorMaterials.values()].map((m) => (
@@ -523,14 +524,14 @@ function ToolPanel() {
           ))}
         </div>
         <p className="hint hand">Drag a rectangle of tiles.</p>
-      </div>
+      </Floating>
     );
   if (tool === "roof") return <RoofPanel />;
   if (tool === "wallErase" || tool === "floorErase")
     return (
-      <div className="card tool-panel slim">
+      <Floating id="tools" title={tool === "wallErase" ? "Knock down walls" : "Lift the floor"} className="tool-panel slim">
         <p className="hint hand">{tool === "wallErase" ? "Drag along a wall to knock it down." : "Drag over tiles to lift the floor."}</p>
-      </div>
+      </Floating>
     );
   if (tool === "buy") {
     const searching = Boolean(query.trim());
@@ -539,7 +540,7 @@ function ToolPanel() {
       : category === "openings" ? [...catalog.openings.values()] : [...catalog.furniture.values()].filter((i) => i.category === category);
     const placingOpening = placing ? catalog.openings.has(placing.catalogId) : false;
     return (
-      <div className="card tool-panel catalog">
+      <Floating id="tools" title="Buy" icon={<Icon.coin />} className="tool-panel catalog">
         <div className="tabs">
           {CATEGORIES.map((c) => (
             <button key={c.id} className={`tab ${!searching && category === c.id ? "active" : ""}`} aria-pressed={!searching && category === c.id} onClick={() => { setCategory(c.id); setQuery(""); }}>
@@ -577,7 +578,7 @@ function ToolPanel() {
                   ? "Switch to Live mode to play. Leave space around tables for both players."
                   : "Pick something, then click on the lot."}
         </p>
-      </div>
+      </Floating>
     );
   }
   return null;
@@ -590,7 +591,7 @@ function SelectionCard() {
   const opening = catalog.openings.get(o.catalogId);
   const item = opening ?? catalog.furniture.get(o.catalogId);
   return (
-    <div className="card selection-card">
+    <Floating id="selection" title={item?.name ?? "Selected"} className="selection-card">
       <div className="sel-head">
         {item && <ItemPicture item={item} size={false} />}
         <div>
@@ -614,7 +615,7 @@ function SelectionCard() {
           <Icon.trash /> Remove{item ? <span className="refund">+{item.price.toLocaleString()}</span> : null} <kbd>Del</kbd>
         </button>
       </div>
-    </div>
+    </Floating>
   );
 }
 
@@ -631,14 +632,14 @@ function StarterOffer() {
   if (!empty) return null;
   const short = cost !== null && view !== null && cost > view.funds;
   return (
-    <div className="card starter-card">
+    <Floating id="starter" title="Starter house" icon={<Icon.house />} className="starter-card">
       <div className="kicker">An empty lot</div>
       <p className="hand">Build from scratch, or start with a house you can change: two bedrooms, a bathroom, an open kitchen and living room, a garage and a pool.</p>
       <button className="btn primary" disabled={!online || short} onClick={() => submit(starterHouseOp())}>
         <Icon.house /> Build the starter house{cost !== null ? ` · ${cost.toLocaleString()} coins` : ""}
       </button>
       {short && <p className="hint hand">Its furniture costs more than the house has right now.</p>}
-    </div>
+    </Floating>
   );
 }
 
@@ -663,7 +664,7 @@ function CookingCard() {
   const amCooking = Boolean(me && avatars[me]?.use?.station);
   const name = (id: string) => (id === me ? "You" : (members.find((m) => m.id === id)?.name ?? "Someone"));
   return (
-    <div className="card cooking-card">
+    <Floating id="cooking" title={recipe.name} icon={<Icon.pot />} className="cooking-card">
       <div className="kicker">
         <Icon.pot /> Cooking
       </div>
@@ -701,7 +702,7 @@ function CookingCard() {
           Stop cooking
         </button>
       </div>
-    </div>
+    </Floating>
   );
 }
 
