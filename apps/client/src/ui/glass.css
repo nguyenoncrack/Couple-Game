@@ -84,7 +84,7 @@
 }
 
 /* buttons, slots and fields inside the glass: lighter glass, no ink outlines */
-.game :is(.slot, .seg button, .item, .mode-switch button, .btn, .cal-stat, .cal-step, .chat-bubble, .chat-form input, .link-row input, .swatch-chip, .item-chip) {
+.game :is(.slot, .seg button, .item, .mode-switch button, .btn, .cal-stat, .cal-step, .chat-bubble, .chat-form input, .link-row input, .recipe-search, .swatch-chip, .item-chip) {
   background: var(--glass-tint);
   border: 1px solid var(--glass-line);
   box-shadow: inset 0 1px 0 var(--glass-hi);

@@ -19,15 +19,28 @@ export const EAT_MS = 9000;
 export const HELP_BONUS = 0.5;
 /** Plates left out at once; older ones are cleared away. */
 export const MAX_DISHES = 4;
-/** How long a hug and a kiss last. */
-export const HUG_MS = 4000;
-export const KISS_MS = 3000;
+/** Things the two of you do face to face, standing up, and how long each lasts. */
+export const TOGETHER_MS = {
+  hug: 4000,
+  kiss: 3000,
+  highfive: 2600,
+  dance: 9000,
+  slowdance: 10_000,
+  tickle: 5000,
+  joke: 6000,
+  talk: 10_000,
+  backrub: 8000,
+} as const;
+export type Together = keyof typeof TOGETHER_MS;
+export const isTogether = (action: string | undefined): action is Together => action !== undefined && Object.hasOwn(TOGETHER_MS, action);
+export const HUG_MS = TOGETHER_MS.hug;
+export const KISS_MS = TOGETHER_MS.kiss;
 
-/** Things the two of you do together: hug and kiss standing up, cuddle when you're both in the same bed. */
-export const SOCIAL = ["hug", "kiss", "cuddle", "uncuddle"] as const;
+/** Things the two of you do together: all of those standing up, and cuddling when you're both in the same bed. */
+export const SOCIAL = ["hug", "kiss", "highfive", "dance", "slowdance", "tickle", "joke", "talk", "backrub", "cuddle", "uncuddle"] as const;
 export type Social = (typeof SOCIAL)[number];
 
-export type LifeAction = Action | "eat" | "hug" | "kiss" | "cuddle";
+export type LifeAction = Action | "eat" | Together | "cuddle";
 
 /** What a character is going to do (or is doing) once they get where they're walking. */
 export interface Use {
@@ -41,9 +54,11 @@ export interface Use {
   /** Eating: the plate, and when the last bite is. A hug, kiss or quick thing (washing your hands): when it's over. */
   dishId?: string;
   until?: number;
-  /** Hugging, kissing or cuddling: who with. */
+  /** Hugging, kissing, cuddling and the rest: who with. */
   with?: string;
-  /** A hug or kiss starts once you've both got there; until then you wait, facing each other. */
+  /** The one who started it, when it isn't the same both ways: tickling, telling the joke, giving the back rub. */
+  lead?: boolean;
+  /** Something together starts once you've both got there; until then you wait, facing each other. */
   startsAt?: number;
   /** Watching or gaming: the TV. When it isn't the object being used, you're on a seat. */
   tv?: string;

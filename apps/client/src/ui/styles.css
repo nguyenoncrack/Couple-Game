@@ -1033,6 +1033,71 @@ button.pill:active,
 .live-menu p {
   margin: 0;
   font-size: 16px;
+  max-width: 260px;
+}
+
+.recipe-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 250px;
+}
+
+.recipe-search {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-line, #3a3631);
+  background: var(--glass-tint, #fff);
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.recipe-list {
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 248px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.live-menu .btn.recipe {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.recipe-meta {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.live-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.live-group-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding-left: 2px;
+}
+
+.live-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
 }
 
 /* characters' name tags */

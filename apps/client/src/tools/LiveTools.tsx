@@ -1,4 +1,4 @@
-import { actionsOf, catalog, slotsOf, tvFacing, type Action, type Level, type PlacedObject } from "@cg/shared";
+import { actionsOf, catalog, positionAt, slotsOf, tvFacing, type Action, type Level, type PlacedObject, type Recipe, type Together } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { cameraGestureActive } from "../render/CameraRig";
 import { FLOOR_Y, Furniture, objectTransform, Walls } from "../render/House";
 import { Roofs } from "../render/Roof";
-import { act, openChat, sharePresence, useGame } from "../state/game";
+import { act, openChat, serverNow, sharePresence, useGame } from "../state/game";
 import { together } from "../state/together";
 
 /**
@@ -43,6 +43,23 @@ export function openObjectMenu(level: Level, id: string) {
   useGame.setState({ menu: { objectId: id, at: [position[0], typeof h === "number" ? h + 0.4 : 1.2, position[2]] } });
   return true;
 }
+
+/** Open what you can do with your partner, over wherever they are. */
+export function openPartnerMenu() {
+  const s = useGame.getState();
+  const partner = s.members.find((m) => m.id !== s.me);
+  const avatar = partner && s.life?.avatars[partner.id];
+  if (!avatar) return;
+  const p = positionAt(avatar, serverNow());
+  useGame.setState({ menu: { memberId: partner.id, at: [p.x, 2.3, p.z] } });
+}
+
+/** Things to do with your partner, in the menu you get by clicking them. */
+const WITH_PARTNER: { group: string; items: [Together, string][] }[] = [
+  { group: "Sweet", items: [["hug", "Hug"], ["kiss", "Kiss ♥"], ["slowdance", "Slow dance"], ["backrub", "Back rub"]] },
+  { group: "Fun", items: [["highfive", "High five"], ["dance", "Dance"], ["tickle", "Tickle"], ["joke", "Tell a joke"]] },
+  { group: "Talk", items: [["talk", "Have a chat"]] },
+];
 
 export function LiveTools() {
   const view = useGame((s) => s.view);
@@ -131,9 +148,11 @@ function Menu() {
   if (!menu || !level || !life || !me) return null;
   const us = together({ life, members, me });
   const mine = life.avatars[me];
-  const options: { label: string; run: () => void }[] = [];
+  const options: { label: string; run: () => void; group?: string }[] = [];
   let title = "";
   let body = "";
+  /** The stove or counter to start a meal at, when there's one to pick. */
+  let cookAt: string | null = null;
 
   if (menu.objectId) {
     const o = level.objects[menu.objectId];
@@ -161,12 +180,7 @@ function Menu() {
               label: `Help make ${name.toLowerCase()}`,
               run: () => act({ do: "help" }),
             });
-        } else
-          for (const r of catalog.recipes.values())
-            options.push({
-              label: `Make ${r.name.toLowerCase()}`,
-              run: () => act({ do: "cook", recipeId: r.id, objectId: o.id }),
-            });
+        } else cookAt = o.id;
       } else if (action === "play" ? !playing : action === "watch" ? mine?.use?.action !== "watch" || (mine.use.objectId !== o.id && mine.use.tv !== o.id) : !using)
         options.push({
           label: VERB[action],
@@ -177,20 +191,20 @@ function Menu() {
     const who = members.find((m) => m.id === menu.memberId);
     if (!who) return null;
     title = who.name;
-    if (!who.online) {
-      body = `${who.name} is away right now. Leave them a message?`;
-    } else if (us.inBed)
+    if (!who.online) body = `${who.name} is away, but they're still about the house.`;
+    if (!us.here) body = `${who.name} is away right now. Leave them a message?`;
+    else if (us.inBed)
       options.push(
         us.cuddling
           ? { label: "Stop cuddling", run: () => act({ do: "social", action: "uncuddle" }) }
           : { label: "Cuddle up ♥", run: () => act({ do: "social", action: "cuddle" }) },
       );
-    else {
-      options.push({ label: "Hug", run: () => act({ do: "social", action: "hug" }) });
-      options.push({ label: "Kiss ♥", run: () => act({ do: "social", action: "kiss" }) });
-    }
+    else
+      for (const { group, items } of WITH_PARTNER)
+        for (const [action, label] of items) options.push({ group, label, run: () => act({ do: "social", action }) });
     options.push({
-      label: "Say something…",
+      group: us.here && !us.inBed ? "Talk" : undefined,
+      label: who.online ? "Say something…" : "Leave a message…",
       run: () => {
         useGame.setState({ menu: null });
         openChat(true);
@@ -212,13 +226,29 @@ function Menu() {
       <div className="card live-menu" onPointerDown={(e) => e.stopPropagation()}>
         <div className="kicker">{title}</div>
         {body && <p className="hand">{body}</p>}
+        {cookAt && <RecipePicker objectId={cookAt} />}
         {options.length ? (
-          options.map((o) => (
-            <button key={o.label} className="btn" onClick={o.run}>
-              {o.label}
-            </button>
-          ))
-        ) : (
+          groups(options).map(([group, list]) =>
+            group ? (
+              <section key={group} className="live-group" aria-label={group}>
+                <div className="live-group-name">{group}</div>
+                <div className="live-grid">
+                  {list.map((o) => (
+                    <button key={o.label} className="btn" onClick={o.run}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              list.map((o) => (
+                <button key={o.label} className="btn" onClick={o.run}>
+                  {o.label}
+                </button>
+              ))
+            ),
+          )
+        ) : cookAt ? null : (
           <p className="hand">Nothing to do here right now.</p>
         )}
         <button className="close" onClick={() => useGame.setState({ menu: null })} aria-label="Close">
@@ -226,5 +256,55 @@ function Menu() {
         </button>
       </div>
     </Html>
+  );
+}
+
+/** Options in their groups, in order (the ungrouped ones as they come). */
+function groups<T extends { group?: string }>(options: T[]): [string | undefined, T[]][] {
+  const out: [string | undefined, T[]][] = [];
+  for (const o of options) {
+    const last = out.at(-1);
+    const same = o.group ? out.find(([g]) => g === o.group) : last && !last[0] ? last : undefined;
+    if (same) same[1].push(o);
+    else out.push([o.group, [o]]);
+  }
+  return out;
+}
+
+/** What to cook: every recipe, narrowed down as you type (by name or what's in it). */
+function RecipePicker({ objectId }: { objectId: string }) {
+  const [q, setQ] = useState("");
+  const all = useMemo(() => [...catalog.recipes.values()].sort((a, b) => a.name.localeCompare(b.name)), []);
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const found = all.filter((r) => words.every((w) => r.name.toLowerCase().includes(w) || r.ingredients.some((i) => i.includes(w))));
+  const cook = (r: Recipe) => act({ do: "cook", recipeId: r.id, objectId });
+  return (
+    <div className="recipe-picker">
+      <input
+        className="recipe-search"
+        type="search"
+        placeholder={`Search ${all.length} recipes…`}
+        aria-label="Search recipes"
+        value={q}
+        autoFocus
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && found[0]) cook(found[0]);
+        }}
+      />
+      <ul className="recipe-list" aria-label="Recipes">
+        {found.map((r) => (
+          <li key={r.id}>
+            <button className="btn recipe" onClick={() => cook(r)}>
+              <span className="recipe-name">{r.name}</span>
+              <span className="recipe-meta">
+                serves {r.serves} · {r.steps.reduce((t, s) => t + s.seconds, 0)}s
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {!found.length && <p className="hand">No recipe like that.</p>}
+    </div>
   );
 }

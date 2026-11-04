@@ -6,6 +6,7 @@ import { act, redo, roofVisible, serverNow, setFirstPerson, setMode, setRoofShow
 import { cameraApi } from "../render/CameraRig";
 import { useThumbnail } from "../render/thumbnails";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
+import { openPartnerMenu } from "../tools/LiveTools";
 import { together } from "../state/together";
 import { ChatPanel } from "./Chat";
 import { Icon } from "./icons";
@@ -294,6 +295,10 @@ function LiveBar() {
           <button className="slot round" onClick={() => act({ do: "social", action: "kiss" })} title="Go and kiss your partner">
             <Icon.kiss />
             <span className="slot-label">Kiss</span>
+          </button>
+          <button className="slot round" onClick={openPartnerMenu} title="Dance, high five, chat and more with your partner">
+            <Icon.more />
+            <span className="slot-label">More</span>
           </button>
         </>
       )}

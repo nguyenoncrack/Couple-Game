@@ -19,5 +19,117 @@
       { "station": "stove", "action": "boil", "seconds": 20 },
       { "station": "stove", "action": "simmer", "seconds": 10 }
     ]
+  },
+  {
+    "id": "omelette",
+    "name": "Cheese omelette",
+    "serves": 1,
+    "ingredients": ["egg", "cheese", "chives"],
+    "steps": [
+      { "station": "counter", "action": "mix", "seconds": 5 },
+      { "station": "stove", "action": "fry", "seconds": 10 }
+    ]
+  },
+  {
+    "id": "grilled_cheese",
+    "name": "Grilled cheese",
+    "serves": 1,
+    "ingredients": ["bread", "cheese", "butter"],
+    "steps": [
+      { "station": "counter", "action": "chop", "seconds": 4 },
+      { "station": "stove", "action": "fry", "seconds": 10 }
+    ]
+  },
+  {
+    "id": "fried_rice",
+    "name": "Fried rice",
+    "serves": 2,
+    "ingredients": ["rice", "egg", "peas", "carrot"],
+    "steps": [
+      { "station": "counter", "action": "chop", "seconds": 6 },
+      { "station": "stove", "action": "boil", "seconds": 12 },
+      { "station": "stove", "action": "fry", "seconds": 10 }
+    ]
+  },
+  {
+    "id": "curry",
+    "name": "Chicken curry",
+    "serves": 3,
+    "ingredients": ["chicken", "onion", "curry paste", "coconut milk"],
+    "steps": [
+      { "station": "counter", "action": "chop", "seconds": 8 },
+      { "station": "stove", "action": "fry", "seconds": 6 },
+      { "station": "stove", "action": "simmer", "seconds": 20 }
+    ]
+  },
+  {
+    "id": "tomato_soup",
+    "name": "Tomato soup",
+    "serves": 2,
+    "ingredients": ["tomato", "onion", "cream"],
+    "steps": [
+      { "station": "counter", "action": "chop", "seconds": 6 },
+      { "station": "stove", "action": "simmer", "seconds": 18 }
+    ]
+  },
+  {
+    "id": "ramen",
+    "name": "Ramen",
+    "serves": 2,
+    "ingredients": ["noodles", "broth", "egg", "spring onion"],
+    "steps": [
+      { "station": "stove", "action": "boil", "seconds": 14 },
+      { "station": "counter", "action": "chop", "seconds": 4 },
+      { "station": "stove", "action": "simmer", "seconds": 8 }
+    ]
+  },
+  {
+    "id": "pho",
+    "name": "Beef pho",
+    "serves": 2,
+    "ingredients": ["rice noodles", "beef", "broth", "herbs"],
+    "steps": [
+      { "station": "counter", "action": "chop", "seconds": 6 },
+      { "station": "stove", "action": "simmer", "seconds": 24 }
+    ]
+  },
+  {
+    "id": "stir_fry",
+    "name": "Veggie stir-fry",
+    "serves": 2,
+    "ingredients": ["broccoli", "pepper", "soy sauce"],
+    "steps": [
+      { "station": "counter", "action": "chop", "seconds": 8 },
+      { "station": "stove", "action": "fry", "seconds": 12 }
+    ]
+  },
+  {
+    "id": "tacos",
+    "name": "Tacos",
+    "serves": 3,
+    "ingredients": ["tortilla", "beef", "lettuce", "salsa"],
+    "steps": [
+      { "station": "counter", "action": "chop", "seconds": 6 },
+      { "station": "stove", "action": "fry", "seconds": 10 }
+    ]
+  },
+  {
+    "id": "mac_cheese",
+    "name": "Mac and cheese",
+    "serves": 3,
+    "ingredients": ["macaroni", "cheese", "milk"],
+    "steps": [
+      { "station": "stove", "action": "boil", "seconds": 14 },
+      { "station": "counter", "action": "mix", "seconds": 6 }
+    ]
+  },
+  {
+    "id": "salad",
+    "name": "Garden salad",
+    "serves": 2,
+    "ingredients": ["lettuce", "tomato", "cucumber"],
+    "steps": [
+      { "station": "counter", "action": "chop", "seconds": 10 }
+    ]
   }
 ]

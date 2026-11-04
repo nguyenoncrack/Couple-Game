@@ -55,7 +55,7 @@ const NEED_TIP: Record<Need, string> = {
   hygiene: "Take a bath, or wash your hands at a sink.",
   bladder: "Find a toilet.",
   fun: "Watch TV, play a game, swim, or shoot some ping pong.",
-  social: "Hug, kiss or cuddle your partner.",
+  social: "Click your partner: hug, dance, chat…",
 };
 
 /** What someone acting on their own is up to, for the panel. */

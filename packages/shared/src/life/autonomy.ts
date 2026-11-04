@@ -3,7 +3,7 @@ import type { Action, Catalog } from "../catalog";
 import type { Life, LifeReject } from "./engine";
 import { actionsOf } from "./interactions";
 import { GAIN, LOW_NEED, needsAt, NEEDS, type Need, type NeedValues } from "./needs";
-import { arrivalTime, positionAt, type Avatar, type LifeAction } from "./state";
+import { arrivalTime, positionAt, type Avatar, type LifeAction, type Together } from "./state";
 
 /**
  * Free will, Sims style: a character left to themselves looks after their own needs. Whatever's pressing comes
@@ -14,6 +14,10 @@ import { arrivalTime, positionAt, type Avatar, type LifeAction } from "./state";
  * usual life updates. It looks after any character whose player hasn't told them to do anything for a while,
  * whether that player is still here or has gone. Any order from the player takes over at once (see `Life.command`).
  */
+
+/** What they'll do with their partner for company (a chat more often than not), or just for fun. */
+const FOR_COMPANY: readonly Together[] = ["talk", "talk", "hug", "hug", "kiss", "slowdance", "backrub", "highfive"];
+const FOR_FUN: readonly Together[] = ["dance", "tickle", "joke", "highfive"];
 
 /** How long a player leaves their character alone (here or away) before it starts doing things by itself. */
 export const AUTO_AFTER_MS = 60_000;
@@ -208,6 +212,15 @@ export class FreeWill {
     return Object.values(this.life.state.avatars).find((o) => o.memberId !== a.memberId && this.life.present(o.memberId));
   }
 
+  /** Doing one of these with your partner, if they're free for it. */
+  private withPartner(a: Avatar, bp: Blueprint, from: readonly Together[], now: number): (() => LifeReject | null)[] {
+    const p = this.partner(a);
+    // only someone who's also up to themselves: never pull a player's character away from what they asked for
+    if (!p || !this.free(p.memberId, now) || (p.use && !p.auto) || p.use?.action === "sleep") return [];
+    const action = from[Math.floor(this.random() * from.length)]!;
+    return [() => this.life.social(a.memberId, bp, action, now)];
+  }
+
   /** The ways to see to a need, best first: each tries one thing and returns why it couldn't, or null if it's on. */
   private ways(a: Avatar, bp: Blueprint, need: Need, now: number): (() => LifeReject | null)[] {
     const id = a.memberId;
@@ -229,13 +242,9 @@ export class FreeWill {
       case "bladder":
         return use("toilet");
       case "fun":
-        return this.shuffle([use("watch"), use("play"), use("swim"), use("pingpong"), use("lounge")]).flat();
-      case "social": {
-        const p = this.partner(a);
-        // only someone who's also up to themselves: never pull a player's character away from what they asked for
-        if (!p || !this.free(p.memberId, now) || (p.use && !p.auto) || p.use?.action === "sleep") return [];
-        return [() => life.social(id, bp, this.random() < 0.7 ? "hug" : "kiss", now)];
-      }
+        return this.shuffle([use("watch"), use("play"), use("swim"), use("pingpong"), use("lounge"), this.withPartner(a, bp, FOR_FUN, now)]).flat();
+      case "social":
+        return this.withPartner(a, bp, FOR_COMPANY, now);
     }
   }
 

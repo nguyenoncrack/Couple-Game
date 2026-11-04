@@ -16,14 +16,14 @@ import {
   cookingDone,
   cookingRate,
   EAT_MS,
-  HUG_MS,
-  KISS_MS,
+  isTogether,
   MAX_DISHES,
   positionAt,
   type Avatar,
   type Dish,
   type LifeState,
   type Social,
+  TOGETHER_MS,
   type Use,
 } from "./state";
 
@@ -74,7 +74,20 @@ export const LIFE_TEXT: Record<LifeReject, string> = {
 const slotAction = (u: Use): Action =>
   u.action === "play" ? (u.tv === u.objectId ? "watch" : "sit") :
   u.action === "eat" || (u.action === "watch" && u.tv !== u.objectId) ? "sit" : u.action === "cuddle" ? "sleep" : (u.action as Action);
-const together = (u: Use | null | undefined) => u?.action === "hug" || u?.action === "kiss";
+const together = (u: Use | null | undefined) => isTogether(u?.action);
+
+/** How close together each thing is done: each stands this far from the middle (metres). */
+const GAP: Record<keyof typeof TOGETHER_MS, number> = {
+  hug: 0.23,
+  kiss: 0.21,
+  highfive: 0.36,
+  dance: 0.5,
+  slowdance: 0.2,
+  tickle: 0.28,
+  joke: 0.45,
+  talk: 0.5,
+  backrub: 0.3,
+};
 /** Quick things that are over by themselves after a while. */
 const brief = (u: Use | null | undefined) => u?.action === "toilet" || u?.action === "wash";
 
@@ -438,7 +451,10 @@ export class Life {
     return this.present(memberId);
   }
 
-  /** Hug or kiss your partner (you go to them), or cuddle up when you're both in the same bed. */
+  /**
+   * Do something with your partner face to face (a hug, a dance, a joke: you go to them), or cuddle up when you're
+   * both in the same bed.
+   */
   social(memberId: string, bp: Blueprint, action: Social, now: number): LifeReject | null {
     const a = this.state.avatars[memberId];
     const p = Object.values(this.state.avatars).find((o) => o.memberId !== memberId);
@@ -476,16 +492,23 @@ export class Life {
     const [ax, az] = cellOf(a);
     const mx = (ax + px) / 2 + 0.5;
     const mz = (az + pz) / 2 + 0.5;
-    const gap = action === "kiss" ? 0.21 : 0.23;
+    const gap = GAP[action];
     const startsAt = Math.max(arrivalTime(a), arrivalTime(p));
-    const until = startsAt + (action === "kiss" ? KISS_MS : HUG_MS);
-    const settle = (who: Avatar, other: Avatar, dx: number, dz: number) => {
-      const face = rotToward(dx, dz);
+    const until = startsAt + TOGETHER_MS[action];
+    const settle = (who: Avatar, other: Avatar, dx: number, dz: number, at: number, face: Rot, lead: boolean) => {
       who.face = face;
-      who.use = { objectId: null, action, slot: 0, pose: { x: mx - dx * gap, z: mz - dz * gap, y: 0, face }, with: other.memberId, startsAt, until };
+      who.use = { objectId: null, action, slot: 0, pose: { x: mx + dx * at, z: mz + dz * at, y: 0, face }, with: other.memberId, startsAt, until };
+      if (lead) who.use.lead = true;
     };
-    settle(a, p, px - ax, pz - az);
-    settle(p, a, ax - px, az - pz);
+    // a back rub: you stand behind them, both facing the same way; anything else is face to face
+    const [dx, dz] = [px - ax, pz - az];
+    if (action === "backrub") {
+      settle(a, p, dx, dz, -0.3, rotToward(dx, dz), true);
+      settle(p, a, dx, dz, 0.02, rotToward(dx, dz), false);
+    } else {
+      settle(a, p, dx, dz, -gap, rotToward(dx, dz), true);
+      settle(p, a, dx, dz, gap, rotToward(-dx, -dz), false);
+    }
     return null;
   }
 

@@ -27,22 +27,67 @@ function topOf(level: Level, surfaceId: string | null) {
   return typeof h === "number" ? h : 0.75;
 }
 
+/** How each meal looks on the plate: its shape, what it's mostly made of, the bits through it and on top. */
+const LOOK: Record<string, { shape: "stack" | "bowl" | "flat" | "sandwich" | "tacos"; base: string; bits: string; top: string }> = {
+  pancakes: { shape: "stack", base: "#e0aa5c", bits: "#f6dc7a", top: "#f6dc7a" },
+  pasta: { shape: "bowl", base: "#e8c77a", bits: "#c24b33", top: "#6f9a52" },
+  omelette: { shape: "flat", base: "#f3cf5a", bits: "#f7e9a8", top: "#5f9a4a" },
+  grilled_cheese: { shape: "sandwich", base: "#d69a4e", bits: "#f2c23f", top: "#d69a4e" },
+  fried_rice: { shape: "bowl", base: "#f1e3c0", bits: "#e08a3c", top: "#7bb55c" },
+  curry: { shape: "bowl", base: "#d9822b", bits: "#f4ede0", top: "#5f9a4a" },
+  tomato_soup: { shape: "bowl", base: "#c9442f", bits: "#f4ede0", top: "#6f9a52" },
+  ramen: { shape: "bowl", base: "#e2c48e", bits: "#f3cf5a", top: "#5f9a4a" },
+  pho: { shape: "bowl", base: "#e9d3a6", bits: "#8a4b3a", top: "#5f9a4a" },
+  stir_fry: { shape: "bowl", base: "#5f9a4a", bits: "#e0533c", top: "#f3cf5a" },
+  tacos: { shape: "tacos", base: "#e9c068", bits: "#7bb55c", top: "#c24b33" },
+  mac_cheese: { shape: "bowl", base: "#f2b93b", bits: "#f7d36a", top: "#d69a4e" },
+  salad: { shape: "bowl", base: "#7bb55c", bits: "#d9452f", top: "#b8d98a" },
+};
+
 function plate(k: Kit, recipeId: string, portions: number, serves: number) {
   k.add("cyl", pencilMaterial(PORCELAIN, { finish: "ceramic" }), [0, 0.01, 0], [0.3, 0.02, 0.3], {
     outline: 0.006,
   });
   const left = serves ? portions / serves : 1;
-  if (recipeId === "pancakes") {
-    const n = Math.max(1, Math.round(4 * left));
-    for (let i = 0; i < n; i++)
-      k.add("cyl", pencilMaterial("#e0aa5c"), [0, 0.035 + i * 0.026, 0], [0.2 - i * 0.008, 0.024, 0.2 - i * 0.008], { outline: 0.005, rot: [0, i * 0.7, 0] });
-    k.box(pencilMaterial("#f6dc7a"), [0.01, 0.04 + n * 0.026, 0], [0.05, 0.02, 0.04], { outline: 0.004 });
-  } else {
-    const s = 0.5 + left * 0.5;
-    k.add("half", pencilMaterial("#e8c77a"), [0, 0.02, 0], [0.2 * s, 0.1 * s, 0.2 * s], { outline: 0.005 });
-    for (let i = 0; i < 4; i++)
-      k.add("sphere", pencilMaterial("#c24b33"), [Math.cos(i * 1.6) * 0.04 * s, 0.055 * s + 0.02, Math.sin(i * 1.6) * 0.04 * s], 0.035 * s, { outline: 0.004 });
-    k.add("sphere", pencilMaterial("#6f9a52"), [0.02, 0.09 * s + 0.02, 0], 0.025, { outline: false });
+  const look = LOOK[recipeId] ?? LOOK.pasta!;
+  const s = 0.5 + left * 0.5;
+  switch (look.shape) {
+    case "stack": {
+      const n = Math.max(1, Math.round(4 * left));
+      for (let i = 0; i < n; i++)
+        k.add("cyl", pencilMaterial(look.base), [0, 0.035 + i * 0.026, 0], [0.2 - i * 0.008, 0.024, 0.2 - i * 0.008], { outline: 0.005, rot: [0, i * 0.7, 0] });
+      k.box(pencilMaterial(look.top), [0.01, 0.04 + n * 0.026, 0], [0.05, 0.02, 0.04], { outline: 0.004 });
+      break;
+    }
+    case "flat":
+      k.add("half", pencilMaterial(look.base), [0, 0.022, 0], [0.22 * s, 0.05, 0.13 * s], { outline: 0.005 });
+      for (let i = 0; i < 3; i++) k.add("sphere", pencilMaterial(look.top), [-0.05 + i * 0.05, 0.05, 0.01 * (i - 1)], 0.012, { outline: false });
+      break;
+    case "sandwich": {
+      const n = Math.max(1, Math.round(2 * left));
+      for (let i = 0; i < n; i++) {
+        const x = (i - (n - 1) / 2) * 0.12;
+        k.box(pencilMaterial(look.base), [x, 0.035, 0], [0.11, 0.022, 0.16], { outline: 0.004, rot: [0, 0.3 * i, 0] });
+        k.box(pencilMaterial(look.bits), [x, 0.054, 0], [0.115, 0.012, 0.165], { outline: false, rot: [0, 0.3 * i, 0] });
+        k.box(pencilMaterial(look.top), [x, 0.072, 0], [0.11, 0.022, 0.16], { outline: 0.004, rot: [0, 0.3 * i, 0] });
+      }
+      break;
+    }
+    case "tacos": {
+      const n = Math.max(1, Math.round(3 * left));
+      for (let i = 0; i < n; i++) {
+        const x = (i - (n - 1) / 2) * 0.09;
+        k.add("half", pencilMaterial(look.base), [x, 0.03, 0], [0.04, 0.09, 0.15], { outline: 0.004, rot: [0, 0, Math.PI / 2] });
+        k.add("sphere", pencilMaterial(look.bits), [x, 0.085, 0.02], 0.025, { outline: false });
+        k.add("sphere", pencilMaterial(look.top), [x, 0.085, -0.03], 0.02, { outline: false });
+      }
+      break;
+    }
+    default:
+      k.add("half", pencilMaterial(look.base), [0, 0.02, 0], [0.2 * s, 0.1 * s, 0.2 * s], { outline: 0.005 });
+      for (let i = 0; i < 4; i++)
+        k.add("sphere", pencilMaterial(look.bits), [Math.cos(i * 1.6) * 0.04 * s, 0.055 * s + 0.02, Math.sin(i * 1.6) * 0.04 * s], 0.035 * s, { outline: 0.004 });
+      k.add("sphere", pencilMaterial(look.top), [0.02, 0.09 * s + 0.02, 0], 0.025, { outline: false });
   }
 }
 

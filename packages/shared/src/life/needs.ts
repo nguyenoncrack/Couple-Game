@@ -50,6 +50,13 @@ export const GAIN: Partial<Record<Activity, Partial<NeedValues>>> = {
   prep: { fun: 4 },
   hug: { social: 250, fun: 20 },
   kiss: { social: 400, fun: 60 },
+  highfive: { fun: 150, social: 150 },
+  dance: { fun: 140, social: 80, energy: -10 },
+  slowdance: { social: 160, fun: 60 },
+  tickle: { fun: 300, social: 100 },
+  joke: { fun: 220, social: 80 },
+  talk: { social: 180, fun: 30 },
+  backrub: { energy: 90, social: 120 },
   walk: { energy: -0.3 },
 };
 

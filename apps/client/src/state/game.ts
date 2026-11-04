@@ -1,6 +1,7 @@
 import {
   applyOp,
   inverseOp,
+  isTogether,
   LIFE_TEXT,
   localDay,
   newId,
@@ -16,6 +17,7 @@ import {
   type Presence,
   type Rot,
   type ServerMsg,
+  type Together,
   undoCheck,
   type VisitResult,
 } from "@cg/shared";
@@ -174,6 +176,18 @@ let conn: Connection | null = null;
 let toastSeq = 0;
 /** When I last asked for a hug or kiss, so the note about one coming only shows to whoever it's coming to. */
 let askedAt = -Infinity;
+/** "<name> is coming over …" */
+const COMING_FOR: Record<Together, string> = {
+  hug: "for a hug ♥",
+  kiss: "for a kiss ♥",
+  highfive: "for a high five ✦",
+  dance: "to dance ♪",
+  slowdance: "for a slow dance ♥",
+  tickle: "to tickle you!",
+  joke: "with a joke",
+  talk: "for a chat",
+  backrub: "to rub your back ♥",
+};
 
 /** Server clock minus mine. Character positions are worked out from server times. */
 let clockOffset = 0;
@@ -297,13 +311,13 @@ function handle(msg: ServerMsg) {
     }
     case "life": {
       syncClock(msg.now);
-      // my partner came over for a hug or a kiss: say so, in case I'm looking elsewhere
+      // my partner came over for a hug, a kiss, a dance…: say so, in case I'm looking elsewhere
       const was = s.me ? s.life?.avatars[s.me]?.use : null;
       const now = s.me ? msg.life.avatars[s.me]?.use : null;
-      if (now?.with && (now.action === "hug" || now.action === "kiss") && !(was?.with && was.action === now.action)) {
+      if (now?.with && isTogether(now.action) && !(was?.with && was.action === now.action)) {
         const other = msg.life.avatars[now.with];
         const name = s.members.find((m) => m.id === now.with)?.name ?? "Your partner";
-        if (other?.use?.with === s.me && performance.now() - askedAt > 3000) toast(now.action === "hug" ? `${name} is coming over for a hug ♥` : `${name} is coming over for a kiss ♥`);
+        if (other?.use?.with === s.me && performance.now() - askedAt > 3000) toast(`${name} is coming over ${COMING_FOR[now.action]}`);
       }
       // a plate that's been eaten can't keep its menu open
       const menu = s.menu?.dishId && !msg.life.dishes.some((d) => d.id === s.menu!.dishId) ? null : s.menu;

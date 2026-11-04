@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { emptyBlueprint, type Blueprint } from "../blueprint";
 import { catalog } from "../catalog";
 import { edgesBetween } from "../grid";
-import { slotsOf, toWorld } from "../life/interactions";
+import { faceDir, slotsOf, toWorld } from "../life/interactions";
 import { Life } from "../life/engine";
 import { buildNav, findPath, walkable } from "../life/nav";
-import { activityAt, arrivalTime, cookingRate, emptyLife, positionAt, type Avatar } from "../life/state";
+import { needsAt } from "../life/needs";
+import { activityAt, arrivalTime, cookingRate, emptyLife, positionAt, TOGETHER_MS, type Avatar, type Together } from "../life/state";
 import { Op } from "../ops";
 import { applyOp } from "../rules";
 import { withStarterHouse } from "../starter";
@@ -212,6 +213,40 @@ describe("together", () => {
     expect(ben().use?.action).toBe("kiss");
     life.walk("ben", bp, [5, 5], 61_000);
     expect(amy().use).toBeNull();
+  });
+
+  it.each(Object.keys(TOGETHER_MS) as Together[])("does a %s together, for its own while, with the one who asked leading", (action) => {
+    const bp = emptyBlueprint(6, 6);
+    const { life, amy, ben } = pair(bp);
+    expect(life.social("amy", bp, action, 60_000)).toBeNull();
+    expect(amy().use).toMatchObject({ action, with: "ben", lead: true });
+    expect(ben().use).toMatchObject({ action, with: "amy" });
+    expect(ben().use!.lead).toBeFalsy();
+    const start = ben().use!.startsAt!;
+    expect(amy().use!.until).toBe(start + TOGETHER_MS[action]);
+    expect(activityAt(ben(), start + 1)).toBe(action);
+    life.tick(bp, amy().use!.until!);
+    expect(amy().use).toBeNull();
+    expect(ben().use).toBeNull();
+  });
+
+  it("rubs your back from behind, both facing the same way", () => {
+    const bp = emptyBlueprint(6, 6);
+    const { life, amy, ben } = pair(bp);
+    life.social("amy", bp, "backrub", 60_000);
+    const [a, b] = [amy().use!.pose!, ben().use!.pose!];
+    expect(a.face).toBe(b.face);
+    // Amy's behind Ben: Ben is ahead of her, the way they both face
+    const ahead = faceDir(a.face);
+    expect((b.x - a.x) * ahead[0] + (b.z - a.z) * ahead[1]).toBeGreaterThan(0.2);
+    // and it does them both good
+    const start = ben().use!.startsAt!;
+    for (const who of [amy(), ben()]) {
+      const before = needsAt(who, start);
+      const after = needsAt(who, start + TOGETHER_MS.backrub);
+      expect(after.social).toBeGreaterThan(before.social);
+      expect(after.energy).toBeGreaterThan(before.energy);
+    }
   });
 
   it("gets a sitter up, but not someone busy, away, or behind a wall", () => {

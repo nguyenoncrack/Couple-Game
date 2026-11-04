@@ -1,4 +1,4 @@
-import { normalizeAppearance, activityAt, arrivalTime, faceDir, pingPongMoment, positionAt, type Avatar, type MemberInfo } from "@cg/shared";
+import { normalizeAppearance, activityAt, arrivalTime, faceDir, pingPongMoment, positionAt, TOGETHER_MS, type Avatar, type MemberInfo } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +16,8 @@ import { NeedThought } from "../ui/Needs";
  * The two of you, drawn in pencil like the furniture. Each character is a few jointed parts (body, arms, thighs,
  * shins) so they can walk, sit, lie down, cook, bathe and swim. Where they are comes from the server's life state: a path and
  * the time they set off, so both screens work out the same position every frame without more messages. Things
- * you say float over your head for a few seconds; hearts float up while you hug, kiss or cuddle.
+ * you say float over your head for a few seconds; hearts float up while you hug, kiss or cuddle (notes while you
+ * dance, a "ha" while you laugh).
  */
 
 /** Joint angles (radians, about x; negative swings forward) and how the whole body sits. */
@@ -31,6 +32,25 @@ export interface Pose {
   spread: number;
   /** Turned about the spine before leaning back, to lie on one side (cuddling). */
   roll: number;
+  /** Twisting at the waist (dancing, laughing). */
+  twist?: number;
+}
+
+/** For things done with someone: how long since it started, and whether you're the one who started it. */
+export interface WithSomeone {
+  since: number;
+  lead: boolean;
+}
+
+/** Laughing: bent over a little, shaking, arms going. */
+function laugh(s: number): Pose {
+  const shake = Math.sin(s * 9);
+  return { hip: HIP + Math.abs(shake) * 0.025, lean: 0.12 + Math.sin(s * 7) * 0.08, thighs: [0, 0], knees: [0.06, 0.06], arms: [-0.5 + shake * 0.25, -0.7 - shake * 0.25], spread: 0.25, roll: 0, twist: Math.sin(s * 6) * 0.18 };
+}
+
+/** Standing and listening: a nod now and then. */
+function listen(s: number): Pose {
+  return { hip: HIP, lean: -0.03 + Math.max(0, Math.sin(s * 1.8)) * 0.05, thighs: [0, 0.04], knees: [0, 0.08], arms: [-0.15, -0.15], spread: 0.08, roll: 0 };
 }
 
 const ease = (from: number, to: number, k: number) => from + (to - from) * k;
@@ -38,8 +58,9 @@ const ease = (from: number, to: number, k: number) => from + (to - from) * k;
 const EYE = new THREE.Vector3(0, TORSO + 0.24, 0.05);
 const eyeAt = new THREE.Vector3();
 
-export function poseFor(activity: string, seatY: number | null, t: number, standingTarget: boolean): Pose {
+export function poseFor(activity: string, seatY: number | null, t: number, standingTarget: boolean, us: WithSomeone = { since: 0, lead: true }): Pose {
   const s = t / 1000;
+  const since = us.since / 1000;
   switch (activity) {
     case "walk": {
       const w = Math.sin(s * Math.PI * 2 * 1.7);
@@ -111,6 +132,53 @@ export function poseFor(activity: string, seatY: number | null, t: number, stand
     }
     case "kiss":
       return { hip: HIP + 0.02, lean: -0.09, thighs: [0, 0.05], knees: [0, 0.18], arms: [-0.85, -0.85], spread: -0.45, roll: 0 };
+    case "highfive": {
+      // hands up, a slap in the middle, then a little hop
+      if (since < 0.7) return { hip: HIP, lean: 0.05, thighs: [0, 0], knees: [0, 0], arms: [0.05, -2.9 * Math.min(1, since / 0.5)], spread: 0.1, roll: 0 };
+      if (since < 1.1) return { hip: HIP, lean: -0.14, thighs: [0, -0.15], knees: [0, 0.2], arms: [0.05, -2.35], spread: 0.12, roll: 0 };
+      const hop = Math.max(0, Math.sin((since - 1.1) * 7)) * 0.05;
+      return { hip: HIP + hop, lean: 0, thighs: [0, 0], knees: [hop * 2, hop * 2], arms: [-2.6, -2.6], spread: 0.35, roll: 0 };
+    }
+    case "dance": {
+      const beat = s * Math.PI * 2 * 1.1;
+      const bounce = Math.abs(Math.sin(beat)) * 0.05;
+      return {
+        hip: HIP - 0.03 + bounce,
+        lean: Math.sin(beat / 2) * 0.05,
+        thighs: [Math.sin(beat) * 0.25, -Math.sin(beat) * 0.25],
+        knees: [0.15 + bounce * 3, 0.15 + bounce * 3],
+        arms: [-1.6 + Math.sin(beat) * 1.1, -1.6 - Math.sin(beat) * 1.1],
+        spread: 0.45,
+        roll: 0,
+        twist: Math.sin(beat / 2) * 0.35,
+      };
+    }
+    case "slowdance": {
+      const sway = Math.sin(s * 1.3);
+      return { hip: HIP + Math.abs(sway) * 0.01, lean: -0.05, thighs: [sway * 0.08, -sway * 0.08], knees: [0.05, 0.05], arms: [-1.15, -1.25], spread: -0.55, roll: 0, twist: sway * 0.18 };
+    }
+    case "tickle": {
+      if (!us.lead) return laugh(s);
+      const wiggle = Math.sin(s * 18) * 0.25;
+      return { hip: HIP - 0.02, lean: -0.16, thighs: [0, 0], knees: [0.1, 0.1], arms: [-1.3 + wiggle, -1.3 - wiggle], spread: -0.3, roll: 0, twist: Math.sin(s * 3) * 0.1 };
+    }
+    case "joke": {
+      // the telling, then both of you crack up at the end
+      if (us.since > TOGETHER_MS.joke - 2200) return laugh(s);
+      if (!us.lead) return listen(s);
+      return { hip: HIP, lean: -0.04, thighs: [0, 0], knees: [0, 0], arms: [-0.7 + Math.sin(s * 3.2) * 0.35, -1.0 - Math.sin(s * 2.5) * 0.4], spread: 0.3, roll: 0, twist: Math.sin(s * 1.6) * 0.08 };
+    }
+    case "talk": {
+      // taking turns
+      const speaking = (Math.floor(us.since / 2200) % 2 === 0) === us.lead;
+      if (!speaking) return listen(s);
+      return { hip: HIP, lean: -0.03, thighs: [0, 0], knees: [0, 0], arms: [-0.6 + Math.sin(s * 3) * 0.3, -0.85 - Math.sin(s * 2.4) * 0.35], spread: 0.2, roll: 0, twist: Math.sin(s * 1.3) * 0.06 };
+    }
+    case "backrub": {
+      if (!us.lead) return { hip: HIP - 0.02, lean: 0.06, thighs: [0, 0], knees: [0.04, 0.04], arms: [0.05, 0.05], spread: 0.06, roll: 0, twist: Math.sin(s * 0.8) * 0.04 };
+      const rub = Math.sin(s * 6) * 0.12;
+      return { hip: HIP, lean: -0.08, thighs: [0, 0], knees: [0, 0], arms: [-1.45 + rub, -1.45 - rub], spread: -0.12, roll: 0 };
+    }
     case "cuddle":
       return {
         hip: (seatY ?? 0.5) + 0.14,
@@ -215,6 +283,21 @@ export function poseFor(activity: string, seatY: number | null, t: number, stand
   }
 }
 
+/** What floats up over your head while you're doing something together. */
+const GLYPH: Record<string, string> = {
+  hug: "♥",
+  kiss: "♥",
+  cuddle: "♥",
+  slowdance: "♥",
+  backrub: "♥",
+  dance: "♪",
+  tickle: "ha",
+  joke: "ha",
+  highfive: "✦",
+};
+/** Close enough that the two name tags would sit on top of each other. */
+const CLOSE = new Set(["hug", "kiss", "cuddle", "slowdance", "backrub", "tickle"]);
+
 /** Swimming laps: this far either side of the middle of your lane, at this speed (metres, metres a second). */
 const LAP_HALF = 1.5;
 const SWIM_SPEED = 0.7;
@@ -318,7 +401,8 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     g.position.z = ease(g.position.z, tz, k);
     g.rotation.y = turnToward(g.rotation.y, yaw, snap ? 1 : 1 - Math.exp(-dt * 10));
 
-    const pose = poseFor(activity, posed ? avatar.use!.pose!.y : null, t, !posed);
+    const u = avatar.use;
+    const pose = poseFor(activity, posed ? u!.pose!.y : null, t, !posed, { since: t - (u?.startsAt ?? t), lead: Boolean(u?.lead) });
     if (activity === "pingpong" && avatar.use?.objectId) {
       const state = useGame.getState();
       const moment = state.life && pingPongMoment(state.life, avatar.use.objectId, t, new Set(state.members.filter((m) => m.online).map((m) => m.id)));
@@ -328,7 +412,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     const b = body.current;
     b.position.y = ease(b.position.y, pose.hip, j);
     b.rotation.x = ease(b.rotation.x, -pose.lean, j);
-    b.rotation.y = ease(b.rotation.y, pose.roll * roll, j);
+    b.rotation.y = ease(b.rotation.y, pose.roll * roll + (pose.twist ?? 0), j);
     const limbs: [React.RefObject<THREE.Group | null>, number][] = [
       [armL, pose.arms[0]],
       [armR, pose.arms[1]],
@@ -353,10 +437,16 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
       ripple.current.scale.setScalar(0.6 + r * 0.9);
       (ripple.current.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - r);
     }
-    // close together: hearts float up, and the name tags step aside so they don't pile up on each other
-    const close = activity === "hug" || activity === "kiss" || activity === "cuddle";
-    if (hearts.current) hearts.current.style.display = close ? "" : "none";
-    if (tag.current) tag.current.dataset.close = close ? "1" : "";
+    // together: hearts (or notes, or a laugh) float up, and close up the name tags step aside so they don't pile up
+    const glyph = GLYPH[activity];
+    if (hearts.current) {
+      hearts.current.style.display = glyph ? "" : "none";
+      if (glyph && hearts.current.dataset.glyph !== glyph) {
+        hearts.current.dataset.glyph = glyph;
+        for (const span of hearts.current.children) span.textContent = glyph;
+      }
+    }
+    if (tag.current) tag.current.dataset.close = CLOSE.has(activity) ? "1" : "";
     if (mine) {
       cameraFollow.target = { x: g.position.x, z: g.position.z };
       g.updateMatrixWorld();
