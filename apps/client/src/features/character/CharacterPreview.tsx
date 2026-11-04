@@ -2,7 +2,6 @@ import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Meshes } from "../../render/KitMesh";
-import { pencilMaterial } from "../../render/pencil";
 import { buildPreviewCharacter as buildCharacter } from "./characterParts";
 import type { Appearance } from "./appearance";
 
@@ -26,12 +25,12 @@ export function CharacterPreview({ appearance }: { appearance: Appearance }) {
     <div className="character-canvas" role="img" aria-label="Rotatable preview of your character">
       <PreviewBoundary>
         <Canvas flat dpr={[1, 1.5]} camera={{ position: [0.8, 1.2, 3.7], fov: 32 }}>
-          <color attach="background" args={["#ede8d7"]} />
           <group rotation={[0, turn * Math.PI / 2, 0]}>
             <CharacterMesh appearance={appearance} />
           </group>
-          <mesh position={[0, -0.035, 0]} material={pencilMaterial("#d2d8bf", { finish: "stone" })}>
-            <cylinderGeometry args={[0.64, 0.69, 0.07, 48]} />
+          <mesh position={[0, -0.035, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[0.8, 0.5, 1]}>
+            <circleGeometry args={[0.65, 40]} />
+            <meshBasicMaterial color="#b8a17c" transparent opacity={0.18} depthWrite={false} />
           </mesh>
           <OrbitControls target={[0, 0.94, 0]} enablePan={false} enableZoom={false} minPolarAngle={0.85} maxPolarAngle={1.65} />
         </Canvas>
