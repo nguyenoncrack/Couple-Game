@@ -8,7 +8,7 @@ import { buildNav, findPath, walkable } from "../life/nav";
 import { activityAt, arrivalTime, cookingRate, emptyLife, positionAt, type Avatar } from "../life/state";
 import { Op } from "../ops";
 import { applyOp } from "../rules";
-import { starterHouseOp } from "../starter";
+import { withStarterHouse } from "../starter";
 
 function apply(bp: Blueprint, op: Op): Blueprint {
   const r = applyOp(bp, Op.parse(op));
@@ -21,7 +21,7 @@ const split = () => apply(emptyBlueprint(6, 6), { t: "walls.add", level: 0, edge
 
 let n = 0;
 const ids = () => `id${String(++n).padStart(8, "0")}`;
-const starter = () => apply(emptyBlueprint(24, 20), starterHouseOp(0, ids));
+const starter = () => withStarterHouse(emptyBlueprint(24, 20), ids);
 
 describe("walking", () => {
   it("can't go through walls or windows, only doors", () => {

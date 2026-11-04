@@ -1,4 +1,4 @@
-import { CLOSE } from "@cg/shared";
+import { CLOSE, type VisitResult } from "@cg/shared";
 import { sameOrigin, signedIn } from "@cg/server/auth/session";
 import { createApi } from "@cg/server/http/api";
 import { createTables, DIRECTORY_SCHEMA, HOUSE_SCHEMA, type Row, type Sql, type SqlValue } from "@cg/server/persistence/sql";
@@ -82,6 +82,10 @@ export class DirectoryDO extends DurableObject<Env> {
   async listMembers(houseId: string): Promise<MemberRow[]> {
     return this.directory.listMembers(houseId);
   }
+
+  async recordVisit(houseId: string, memberId: string, day: string): Promise<VisitResult | null> {
+    return this.directory.recordVisit(houseId, memberId, day);
+  }
 }
 
 /** A connection gets dropped once it's this quiet (the game pings every 15 seconds). */
@@ -129,7 +133,10 @@ export class HouseDO extends DurableObject<Env> {
     const row = JSON.parse(req.headers.get("x-cg-house") ?? "null") as HouseRow | null;
     if (!memberId || !row || this.dropped) return new Response("Not found", { status: 404 });
 
-    this.room ??= HouseRoom.load(row, this.store, () => directory(this.env).listMembers(row.id));
+    this.room ??= HouseRoom.load(row, this.store, {
+      listMembers: () => directory(this.env).listMembers(row.id),
+      recordVisit: (memberId, day) => directory(this.env).recordVisit(row.id, memberId, day),
+    });
     let room: HouseRoom;
     try {
       room = await this.room;

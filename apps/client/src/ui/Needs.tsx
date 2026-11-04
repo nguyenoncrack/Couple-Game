@@ -118,16 +118,18 @@ export function NeedsPanel() {
   const v = useNeeds(showing ? avatars?.[showing] : undefined);
   const mine = useNeeds(me ? avatars?.[me] : undefined);
 
-  // a nudge when one of your own needs first gets low
+  // a nudge when one of your own needs first gets low; only the worst, if several do at once
   const low = useRef(new Set<Need>());
   useEffect(() => {
     if (!mine) return;
+    let worst: Need | null = null;
     for (const n of NEEDS) {
       if (mine[n] < LOW_NEED && !low.current.has(n)) {
         low.current.add(n);
-        toast(`${NUDGE[n]}. ${NEED_TIP[n]}`);
+        if (!worst || mine[n] < mine[worst]) worst = n;
       } else if (mine[n] >= LOW_NEED + 10) low.current.delete(n);
     }
+    if (worst) toast(`${NUDGE[worst]}. ${NEED_TIP[worst]}`);
   });
 
   if (!v) return null;

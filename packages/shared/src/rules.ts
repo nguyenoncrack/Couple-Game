@@ -1,7 +1,7 @@
-import type { Blueprint, Level, PlacedObject, PlacedOpening } from "./blueprint";
+import { STARTING_FUNDS, type Blueprint, type Level, type PlacedObject, type PlacedOpening } from "./blueprint";
 import { catalog as defaultCatalog, type Catalog, type FurnitureItem, type OpeningItem } from "./catalog";
 import { cellInLot, edgeInLot, interiorEdges, openingEdges, parseCell, parseEdge, rotatedSize, type Rot } from "./grid";
-import type { Op, SingleOp } from "./ops";
+import type { LoggedOp, SingleOp } from "./ops";
 
 /**
  * The game's building rules. `applyOp` is pure: the server runs it to decide what happens, and the client runs the
@@ -25,7 +25,8 @@ export type RejectReason =
   | "overlaps"
   | "wall-in-the-way"
   | "blocks-furniture"
-  | "needs-wall";
+  | "needs-wall"
+  | "cant-afford";
 
 /** Short, friendly explanations for the UI. */
 export const REJECT_TEXT: Record<RejectReason | "held" | "rate-limited" | "invalid", string> = {
@@ -43,6 +44,7 @@ export const REJECT_TEXT: Record<RejectReason | "held" | "rate-limited" | "inval
   "wall-in-the-way": "A wall is in the way.",
   "blocks-furniture": "Furniture is in the way of that wall.",
   "needs-wall": "Doors and windows go in a wall.",
+  "cant-afford": "Not enough coins for that yet. Dropping by each day earns more.",
   held: "Your partner is moving that right now.",
   "rate-limited": "Slow down a little.",
   invalid: "That edit didn't make sense.",
@@ -89,10 +91,11 @@ function objectsCutBy(level: Level, edges: Set<string>, cat: Catalog): string[] 
   return hit;
 }
 
-function withLevel(bp: Blueprint, index: number, level: Level): Blueprint {
+/** The house with one level changed, and `cost` coins spent on it (or given back, when it's negative). */
+function withLevel(bp: Blueprint, index: number, level: Level, cost = 0): Blueprint {
   const levels = bp.levels.slice();
   levels[index] = level;
-  return { ...bp, levels };
+  return { ...bp, levels, funds: (bp.funds ?? STARTING_FUNDS) - cost };
 }
 
 /** The wall edges a placed door or window covers. */
@@ -141,14 +144,16 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
       for (const key of op.edges) delete walls[key];
       // Doors and windows in a removed wall go with it.
       let openings = level.openings;
+      let refund = 0;
       for (const o of Object.values(level.openings)) {
         const item = cat.openings.get(o.catalogId);
         if (item && edgesOfOpening(item, o).some((e) => gone.has(e))) {
           if (openings === level.openings) openings = { ...openings };
           delete openings[o.id];
+          refund += item.price;
         }
       }
-      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, walls, openings }) };
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, walls, openings }, -refund) };
     }
 
     case "floor.paint": {
@@ -188,7 +193,7 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
       const problem = placementProblem(bp, level, item, op, null, cat);
       if (problem) return fail(problem);
       const placed: PlacedObject = { id: op.id, catalogId: op.catalogId, x: op.x, z: op.z, rot: op.rot };
-      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, objects: { ...level.objects, [op.id]: placed } }) };
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, objects: { ...level.objects, [op.id]: placed } }, item.price) };
     }
 
     case "object.move": {
@@ -203,10 +208,11 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
     }
 
     case "object.remove": {
-      if (!level.objects[op.id]) return fail("not-found");
+      const gone = level.objects[op.id];
+      if (!gone) return fail("not-found");
       const objects = { ...level.objects };
       delete objects[op.id];
-      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, objects }) };
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, objects }, -(cat.furniture.get(gone.catalogId)?.price ?? 0)) };
     }
 
     case "opening.place": {
@@ -216,7 +222,7 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
       const problem = openingProblem(level, item, op, null, cat);
       if (problem) return fail(problem);
       const placed: PlacedOpening = { id: op.id, catalogId: op.catalogId, dir: op.dir, x: op.x, z: op.z, flip: op.flip };
-      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, openings: { ...level.openings, [op.id]: placed } }) };
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, openings: { ...level.openings, [op.id]: placed } }, item.price) };
     }
 
     case "opening.move": {
@@ -231,22 +237,42 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
     }
 
     case "opening.remove": {
-      if (!level.openings[op.id]) return fail("not-found");
+      const gone = level.openings[op.id];
+      if (!gone) return fail("not-found");
       const openings = { ...level.openings };
       delete openings[op.id];
-      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, openings }) };
+      return { ok: true, blueprint: withLevel(bp, op.level, { ...level, openings }, -(cat.openings.get(gone.catalogId)?.price ?? 0)) };
     }
   }
 }
 
-export function applyOp(bp: Blueprint, op: Op, cat: Catalog = defaultCatalog): ApplyResult {
-  if (op.t !== "batch") return applySingle(bp, op, cat);
-  // All or nothing: the first step that fails rejects the whole batch.
+/**
+ * Apply an edit. Furniture, doors and windows cost their catalog price and give it back when they go (walls,
+ * floors and roofs are free), and an edit that spends more than the house has is turned down. `accepted` is for
+ * edits from the log, which the server already took: they always go through, even if a price changed since.
+ */
+export function applyOp(bp: Blueprint, op: LoggedOp, cat: Catalog = defaultCatalog, { accepted = false } = {}): ApplyResult {
+  if (op.t === "funds.add") return { ok: true, blueprint: { ...bp, funds: (bp.funds ?? STARTING_FUNDS) + op.amount } };
   let cur = bp;
-  for (const step of op.ops) {
-    const r = applySingle(cur, step, cat);
+  if (op.t !== "batch") {
+    const r = applySingle(bp, op, cat);
     if (!r.ok) return r;
     cur = r.blueprint;
+  } else {
+    // All or nothing: the first step that fails rejects the whole batch. Only the total cost matters, so a batch
+    // can sell one thing to pay for the next.
+    for (const step of op.ops) {
+      const r = applySingle(cur, step, cat);
+      if (!r.ok) return r;
+      cur = r.blueprint;
+    }
   }
+  if (!accepted && cur.funds < 0 && cur.funds < (bp.funds ?? STARTING_FUNDS)) return fail("cant-afford");
   return { ok: true, blueprint: cur };
+}
+
+/** What an edit costs the house (negative if it gives coins back), or null if it can't be done at all. */
+export function costOf(bp: Blueprint, op: LoggedOp, cat: Catalog = defaultCatalog): number | null {
+  const r = applyOp(bp, op, cat, { accepted: true });
+  return r.ok ? (bp.funds ?? STARTING_FUNDS) - r.blueprint.funds : null;
 }

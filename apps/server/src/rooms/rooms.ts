@@ -27,7 +27,12 @@ export class Rooms {
       const house = await this.directory.getHouse(houseId);
       if (!house) return null;
       // Re-check: another connection may have started loading while we looked the house up.
-      room = this.rooms.get(houseId) ?? HouseRoom.load(house, this.houses, () => this.directory.listMembers(houseId), this.houseIdleMs);
+      room = this.rooms.get(houseId) ?? HouseRoom.load(
+          house,
+          this.houses,
+          { listMembers: () => this.directory.listMembers(houseId), recordVisit: (memberId, day) => this.directory.recordVisit(houseId, memberId, day) },
+          this.houseIdleMs,
+        );
       this.rooms.set(houseId, room);
       room.catch(() => this.rooms.delete(houseId));
     }

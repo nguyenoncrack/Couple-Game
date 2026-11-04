@@ -2,6 +2,7 @@ import {
   applyOp,
   inverseOp,
   LIFE_TEXT,
+  localDay,
   newId,
   REJECT_TEXT,
   type Blueprint,
@@ -16,6 +17,7 @@ import {
   type Rot,
   type ServerMsg,
   undoCheck,
+  type VisitResult,
 } from "@cg/shared";
 import { create } from "zustand";
 import { Connection } from "../net/connection";
@@ -97,6 +99,11 @@ export interface GameState {
   chat: ChatMessage[];
   chatOpen: boolean;
   unread: number;
+
+  /** A new day just counted, for the welcome-back note (until it's closed). */
+  welcomeBack: VisitResult | null;
+  /** Goes up whenever a visit is counted, so the calendar knows to look again. */
+  visitsSeen: number;
 }
 
 export const useGame = create<GameState>(() => ({
@@ -132,6 +139,8 @@ export const useGame = create<GameState>(() => ({
   chat: [],
   chatOpen: false,
   unread: 0,
+  welcomeBack: null,
+  visitsSeen: 0,
 }));
 
 function storedRoofShown() {
@@ -214,12 +223,13 @@ function handle(msg: ServerMsg) {
       else {
         confirmed = s.confirmed!;
         for (const a of msg.sync.ops) {
-          const r = applyOp(confirmed.blueprint, a.op);
+          const r = applyOp(confirmed.blueprint, a.op, undefined, { accepted: true });
           confirmed = { version: a.version, blueprint: r.ok ? r.blueprint : confirmed.blueprint };
           if (a.by === msg.memberId) pending = pending.filter((p) => p.clientOpId !== a.clientOpId);
         }
       }
       syncClock(msg.now);
+      checkedIn = null;
       set({ me: msg.memberId, members: msg.members, holds: msg.holds, life: msg.life, chat: msg.chat });
       set((st) => ({ house: st.house && { ...st.house, houseName: msg.house.name, inviteCode: msg.house.inviteCode } }));
       settle(confirmed, pending);
@@ -237,7 +247,8 @@ function handle(msg: ServerMsg) {
         conn?.resync();
         return;
       }
-      const r = applyOp(c.blueprint, msg.op);
+      // the server took it, so it goes through here too (coins included)
+      const r = applyOp(c.blueprint, msg.op, undefined, { accepted: true });
       if (!r.ok) {
         // Our copy disagrees with the server's; start over from a fresh snapshot.
         set({ confirmed: { ...c, version: 0 } });
@@ -301,6 +312,9 @@ function handle(msg: ServerMsg) {
     }
     case "lifeRejected":
       toast(LIFE_TEXT[msg.reason] ?? "That didn't work.");
+      break;
+    case "visit":
+      if (msg.visit) set({ welcomeBack: msg.visit, visitsSeen: s.visitsSeen + 1 });
       break;
     case "pong":
       syncClock(msg.now);
@@ -379,6 +393,24 @@ export function disconnect() {
   conn?.dispose();
   conn = null;
 }
+
+/** The day this connection last asked to have counted. */
+let checkedIn: string | null = null;
+
+/**
+ * I'm here and doing something: count today (my own date) if it isn't yet. Called on any click or key once the
+ * house has loaded; the server counts a day only once however often it's asked, so a refresh or a second tab
+ * brings nothing more. Past midnight with the game still open, the next thing I do counts the new day.
+ */
+export function checkIn() {
+  if (get().status !== "online" || !get().view) return;
+  const day = localDay();
+  if (day === checkedIn) return;
+  checkedIn = day;
+  conn?.send({ type: "visit", day });
+}
+
+export const closeWelcomeBack = () => set({ welcomeBack: null });
 
 /**
  * My edits, newest last, each with the op that reverses it. `check` fingerprints what the edit touched right

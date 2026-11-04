@@ -5,7 +5,10 @@ import type { CellKey, EdgeKey, Rot } from "./grid";
  * Everything in it is keyed by a stable ID, so an edit names exactly what it touches.
  */
 
-export const BLUEPRINT_SCHEMA = 3;
+export const BLUEPRINT_SCHEMA = 4;
+
+/** Coins a house starts with (its furnishings come free): enough to make it your own. */
+export const STARTING_FUNDS = 10_000;
 
 export interface WallEdge {
   /** A wall style ID from the catalog. */
@@ -57,23 +60,30 @@ export interface Blueprint {
   lot: { w: number; d: number };
   /** Index 0 is the ground floor. Only one floor for now. */
   levels: Level[];
+  /** The household's coins: furniture, doors and windows cost their price and give it back when they go. */
+  funds: number;
 }
 
 export const emptyLevel = (): Level => ({ walls: {}, tiles: {}, objects: {}, openings: {}, roofs: {} });
 
 export function emptyBlueprint(w = 24, d = 20): Blueprint {
-  return { schema: BLUEPRINT_SCHEMA, lot: { w, d }, levels: [emptyLevel()] };
+  return { schema: BLUEPRINT_SCHEMA, lot: { w, d }, levels: [emptyLevel()], funds: STARTING_FUNDS };
 }
 
 /**
  * Bring a saved blueprint up to the current schema. Old houses keep working as the game grows: each schema step
  * only adds what's missing.
  */
-export function upgradeBlueprint(raw: Blueprint | (Omit<Blueprint, "schema"> & { schema: number })): Blueprint {
+export function upgradeBlueprint(raw: Blueprint | (Omit<Blueprint, "schema" | "funds"> & { schema: number; funds?: number })): Blueprint {
   const bp = raw as Blueprint;
   if (bp.schema === BLUEPRINT_SCHEMA) return bp;
-  // 1 → 2: doors and windows; 2 → 3: roofs
-  return { ...bp, schema: BLUEPRINT_SCHEMA, levels: bp.levels.map((l) => ({ ...l, openings: l.openings ?? {}, roofs: l.roofs ?? {} })) };
+  // 1 → 2: doors and windows; 2 → 3: roofs; 3 → 4: coins (what's already there was free)
+  return {
+    ...bp,
+    schema: BLUEPRINT_SCHEMA,
+    levels: bp.levels.map((l) => ({ ...l, openings: l.openings ?? {}, roofs: l.roofs ?? {} })),
+    funds: bp.funds ?? STARTING_FUNDS,
+  };
 }
 
 /** A blueprint and the number of edits that produced it. */

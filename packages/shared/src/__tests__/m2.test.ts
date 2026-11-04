@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BLUEPRINT_SCHEMA, emptyBlueprint, upgradeBlueprint, type Blueprint } from "../blueprint";
 import { edgesBetween } from "../grid";
 import { Op } from "../ops";
-import { applyOp } from "../rules";
+import { applyOp, costOf } from "../rules";
 import { starterHouseOp } from "../starter";
 import { inverseOp, undoCheck } from "../undo";
 
@@ -116,11 +116,16 @@ describe("undo", () => {
 });
 
 describe("starter house", () => {
-  it("fits on the default lot in one batch and undoes cleanly", () => {
+  it("fits on the default lot in one batch, costs its furniture, and undoes cleanly", () => {
     let n = 0;
     const op = starterHouseOp(0, () => `starter${String(++n).padStart(4, "0")}`);
-    const bp = emptyBlueprint();
+    // built on an empty lot it has to be paid for: more than a new house has to spend
+    expect(applyOp(emptyBlueprint(), op)).toEqual({ ok: false, reason: "cant-afford" });
+    const bp = { ...emptyBlueprint(), funds: 40_000 };
+    const cost = costOf(bp, op)!;
+    expect(cost).toBeGreaterThan(20_000);
     const after = apply(bp, op);
+    expect(after.funds).toBe(40_000 - cost);
     const l = after.levels[0]!;
     expect(Object.keys(l.openings).length).toBeGreaterThan(10);
     expect(Object.values(l.objects).filter((o) => o.catalogId === "bed_double")).toHaveLength(2);

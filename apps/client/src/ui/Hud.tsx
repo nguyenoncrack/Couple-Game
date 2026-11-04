@@ -1,6 +1,6 @@
 import { CharacterButton } from "../features/character/CharacterButton";
-import { catalog, cookingDone, enclosedCells, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
-import { useEffect, useState } from "react";
+import { catalog, cookingDone, costOf, enclosedCells, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { WallMode } from "../render/House";
 import { act, redo, roofVisible, serverNow, setFirstPerson, setMode, setRoofShown, setTool, submit, toast, undo, useGame, wake, type Tool } from "../state/game";
@@ -16,6 +16,7 @@ import { searchCatalog } from "./filterCatalog";
 import { useFirstPersonMouse } from "../input/firstPersonMouse";
 import { TableGamePanel } from "./TableGamePanel";
 import { NeedsPanel } from "./Needs";
+import { ClockPill, WelcomeBack } from "./Calendar";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -41,6 +42,7 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       {firstPerson ? <FirstPersonHint /> : <CameraButtons />}
       {live ? <LiveBar /> : <Toolbar />}
       <ChatPanel />
+      <WelcomeBack />
       <Toasts />
       {status === "asleep" && <Asleep onLeave={onLeave} />}
       {status === "gone" && <Gone onLeave={onLeave} />}
@@ -57,9 +59,20 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const music = useMusicOn();
   const partner = members.find((m) => m.id !== me);
+  const bar = useRef<HTMLDivElement>(null);
+  // the bar wraps onto more rows on narrow screens: panels below it go by where it actually ends
+  useLayoutEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    const place = () => document.documentElement.style.setProperty("--topbar-bottom", `${Math.round(el.getBoundingClientRect().bottom)}px`);
+    place();
+    const watch = new ResizeObserver(place);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, []);
 
   return (
-    <div className="topbar">
+    <div className="topbar" ref={bar}>
       <div className="topbar-left">
         <button className="pill icon-pill" onClick={onLeave} title="Back to your houses">
           <Icon.back />
@@ -69,6 +82,7 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
           <span className="status-dot" />
           {status === "online" ? "saved" : status === "connecting" ? "connecting" : status === "reconnecting" ? "offline" : status === "asleep" ? "paused" : "closed"}
         </div>
+        <ClockPill />
       </div>
       <div className="topbar-right">
         {members.map((m) => (
@@ -485,6 +499,7 @@ function ToolPanel() {
   const placing = useGame((s) => s.placing);
   const [category, setCategory] = useState<Category>("living");
   const [query, setQuery] = useState("");
+  const funds = useGame((s) => s.view?.funds ?? 0);
 
   if (tool === "wall")
     return (
@@ -538,12 +553,16 @@ function ToolPanel() {
           {items.map((i) => (
             <button
               key={i.id}
-              className={`item ${placing?.catalogId === i.id ? "active" : ""}`}
+              className={`item ${placing?.catalogId === i.id ? "active" : ""} ${i.price > funds ? "dear" : ""}`}
+              title={i.price > funds ? `${i.price.toLocaleString()} coins: ${(i.price - funds).toLocaleString()} more than the house has` : undefined}
               onClick={() => useGame.setState({ placing: placing?.catalogId === i.id ? null : { catalogId: i.id, rot: 0 } })}
             >
               <ItemPicture item={i} />
               <span className="item-name">{i.name}</span>
-              <span className="item-price">${i.price}</span>
+              <span className="item-price">
+                <Icon.coin />
+                {i.price.toLocaleString()}
+              </span>
             </button>
           ))}
         </div>
@@ -591,8 +610,8 @@ function SelectionCard() {
             </>
           )}
         </button>
-        <button className="btn danger" onClick={deleteSelected}>
-          <Icon.trash /> Remove <kbd>Del</kbd>
+        <button className="btn danger" onClick={deleteSelected} title={item ? `Gives back ${item.price.toLocaleString()} coins` : undefined}>
+          <Icon.trash /> Remove{item ? <span className="refund">+{item.price.toLocaleString()}</span> : null} <kbd>Del</kbd>
         </button>
       </div>
     </div>
@@ -606,14 +625,19 @@ function StarterOffer() {
     return Boolean(l) && !Object.keys(l!.walls).length && !Object.keys(l!.objects).length && !Object.keys(l!.tiles).length;
   });
   const online = useGame((s) => s.status === "online");
+  const view = useGame((s) => s.view);
+  // a fixed price, whatever the fresh IDs: work it out once per empty lot
+  const cost = useMemo(() => (empty && view ? costOf(view, starterHouseOp()) : null), [empty, view]);
   if (!empty) return null;
+  const short = cost !== null && view !== null && cost > view.funds;
   return (
     <div className="card starter-card">
       <div className="kicker">An empty lot</div>
       <p className="hand">Build from scratch, or start with a house you can change: two bedrooms, a bathroom, an open kitchen and living room, a garage and a pool.</p>
-      <button className="btn primary" disabled={!online} onClick={() => submit(starterHouseOp())}>
-        <Icon.house /> Build the starter house
+      <button className="btn primary" disabled={!online || short} onClick={() => submit(starterHouseOp())}>
+        <Icon.house /> Build the starter house{cost !== null ? ` · ${cost.toLocaleString()} coins` : ""}
       </button>
+      {short && <p className="hint hand">Its furniture costs more than the house has right now.</p>}
     </div>
   );
 }

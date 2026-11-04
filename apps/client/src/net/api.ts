@@ -1,4 +1,4 @@
-import type { Appearance, DeviceClaim, HouseSummary, Me } from "@cg/shared";
+import type { Appearance, DeviceClaim, HouseSummary, Me, Visit } from "@cg/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -40,3 +40,6 @@ export const leaveHouse = (houseId: string) => call<{ ok: true }>("DELETE", `/ap
 export const saveAppearance = (appearance: Appearance) => call<{ appearance: Appearance }>("PUT", "/api/account/appearance", appearance);
 
 export const getAppearance = () => call<{ appearance: Appearance | null }>("GET", "/api/account/appearance");
+
+/** Every day I came by, for the calendar. */
+export const getVisits = () => call<{ visits: Visit[] }>("GET", "/api/visits");

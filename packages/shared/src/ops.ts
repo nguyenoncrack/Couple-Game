@@ -39,3 +39,14 @@ export type SingleOp = z.infer<typeof SingleOp>;
 export const Op = z.discriminatedUnion("t", [...single, z.object({ t: z.literal("batch"), ops: z.array(SingleOp).min(1).max(400) })]);
 
 export type Op = z.infer<typeof Op>;
+
+/**
+ * Coins for the house from the server (a daily visit). Players never send this: it's only ever in the log, next to
+ * the edits, so the house's funds replay like everything else.
+ */
+export const FundsOp = z.object({ t: z.literal("funds.add"), amount: z.number().int().min(0).max(100_000), note: z.string().max(60) });
+export type FundsOp = z.infer<typeof FundsOp>;
+
+/** Anything in a house's log: a player's edit, or coins from the server. */
+export const LoggedOp = z.union([Op, FundsOp]);
+export type LoggedOp = Op | FundsOp;

@@ -7,6 +7,7 @@ export * from "./protocol";
 export * from "./ids";
 export * from "./undo";
 export * from "./starter";
+export * from "./visits";
 export * from "./life/nav";
 export * from "./life/interactions";
 export * from "./life/state";
