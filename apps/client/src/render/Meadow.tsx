@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useGame } from "../state/game";
-import { flower, grassTuft } from "./botanicalModels";
+import { flower, grassTuft, SWAY } from "./botanicalModels";
 import { Kit, type BuiltMesh } from "./kit";
 import { meadowLayout, type Sprig } from "./meadowLayout";
 import { pencilMaterial } from "./pencil";
@@ -12,7 +12,7 @@ export function Meadow({ w, d }: { w: number; d: number }) {
   const layout = useMemo(() => level ? meadowLayout(w, d, level) : null, [w, d, level]);
   const models = useMemo(() => {
     const make = (fn: (k: Kit) => void) => { const k = new Kit(); fn(k); return k.build(); };
-    const m = (tone: string) => pencilMaterial(tone, { rim: false });
+    const m = (tone: string) => pencilMaterial(tone, { rim: false, sway: SWAY });
     return [
       make((k) => grassTuft(k, m)),
       make((k) => flower(k, m, "daisy", "#f5eed9")),

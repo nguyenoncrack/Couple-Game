@@ -1,6 +1,9 @@
 import { catalog, cellKey, edgeKey, footprintOf, parseCell, parseEdge, type Level } from "@cg/shared";
 import * as THREE from "three";
 import { campLayout, lakeShape } from "./sceneryLayout";
+import { scenesLayout } from "./scenesLayout";
+import { shoreLayout } from "./shoreLayout";
+import { nearTrail, trailNetwork } from "./trailLayout";
 
 export interface Sprig { x: number; z: number; turn: number; scale: number; kind: number }
 export interface MeadowLayout { grass: Sprig[]; flowers: Sprig[] }
@@ -10,7 +13,10 @@ const PAD = 0.35; // covers the whole plant, including leaning leaves
 export function meadowClearance(w: number, d: number, level: Level) {
   const lake = lakeShape(w);
   const camp = campLayout(d);
-  const paths = camp.trails.flatMap((pts) => new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(x, 0, z))).getSpacedPoints(100));
+  const net = trailNetwork(w, d);
+  const onTrail = nearTrail(net);
+  const shore = shoreLayout(w, d);
+  const shoreClear = [...shore.clearings, ...shore.seat.stones.map(([x, z]) => ({ x, z, r: 0.45 })), ...scenesLayout(w, d).clearings];
   const boxes = [...Object.keys(level.tiles), ...Object.keys(level.roofs)].flatMap((key) => {
     const cell = parseCell(key);
     return cell ? [{ x: cell.x, z: cell.z, w: 1, d: 1 }] : [];
@@ -50,7 +56,8 @@ export function meadowClearance(w: number, d: number, level: Level) {
     if (Math.abs(x - (w + 5)) < 4.1 && Math.abs(z - (d / 2 + 0.5)) < 4.8) return false;
     if (Math.abs(x - camp.cabin.x) < 3.7 && Math.abs(z - camp.cabin.z) < 3) return false;
     if (Math.hypot(x - camp.fire[0], z - camp.fire[2]) < 3.85) return false;
-    if (paths.some((p) => Math.hypot(p.x - x, p.z - z) < 1.05)) return false;
+    if (onTrail(x, z, 1.05) || net.bare.some((b) => Math.hypot(b.x - x, b.z - z) < b.r * 1.15)) return false;
+    if (shoreClear.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + 0.3)) return false;
     // Fence and front entrance strip; the lawn itself remains open for walking/building.
     if ((Math.abs(x + 0.6) < 0.5 || Math.abs(x - w - 0.6) < 0.5) && z > -1.1 && z < d + 0.7) return false;
     if (Math.abs(z + 0.6) < 0.6 && x > -1.1 && x < w + 1.1) return false;

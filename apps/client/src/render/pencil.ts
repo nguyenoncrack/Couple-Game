@@ -50,9 +50,34 @@ export const lighting = {
   heightOn: { value: 0 },
   /** How strong the drawn contact patches under furniture are (full when there are no real shadows). */
   contact: { value: 1 },
+  /** How hard the breeze blows on plants that sway (0 holds them still, for people who'd rather less motion). */
+  wind: { value: 1 },
 };
 
+/** The way the breeze blows (x, z): plants lean this way and leaves drift with it. */
+export const WIND: [number, number] = [0.87, 0.49];
+
+/**
+ * The breeze, for plants that sway: everything above the ground leans downwind and rocks, more the higher up it
+ * is (by the square of its height, so a stem's foot stays put), in slow gusts that roll across the countryside.
+ * It works in world space, so merged kits and instanced meshes sway alike and their outlines move with them.
+ */
+const swayGlsl = /* glsl */ `
+  uniform float uTime;
+  uniform float uSway;
+  uniform float uWind;
+  vec3 sway(vec3 p) {
+    float h = max(p.y, 0.0);
+    float gust = 0.55 + 0.45 * sin(uTime * 0.31 + p.x * 0.045 - p.z * 0.03);
+    float rock = sin(uTime * 1.6 + p.x * 0.35 + p.z * 0.22) * 0.75 + sin(uTime * 2.7 - p.x * 0.8 + p.z * 0.6) * 0.25;
+    return vec3(${WIND[0]}, 0.0, ${WIND[1]}) * (0.35 + rock) * gust * h * h * uSway * uWind;
+  }
+`;
+
 const pencilVertex = /* glsl */ `
+  #ifdef SWAY
+    ${swayGlsl}
+  #endif
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
   #if defined(FINISH) && (FINISH == 11 || FINISH == 15)
@@ -68,6 +93,9 @@ const pencilVertex = /* glsl */ `
       mat4 m = modelMatrix;
     #endif
     vec4 world = m * vec4(position, 1.0);
+    #ifdef SWAY
+      world.xyz += sway(world.xyz);
+    #endif
     vWorldPos = world.xyz;
     vWorldNormal = normalize(mat3(m) * normal);
     gl_Position = projectionMatrix * viewMatrix * world;
@@ -428,13 +456,16 @@ export interface PencilOptions {
   fog?: number;
   /** Extra soft light from all round, for surfaces the sun and sky never reach (a ceiling). */
   fill?: number;
+  /** Sways in the breeze (grass, reeds, flowers): how far, per metre of height squared. Its outlines should be
+   * drawn with the same `sway` (Kit does this). */
+  sway?: number;
 }
 
 const cache = new Map<string, THREE.ShaderMaterial>();
 
 /** Shared pencil material. Calls with the same arguments return the same instance. */
 export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
-  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}|${opts.fill ?? 0}`;
+  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}|${opts.fill ?? 0}|${opts.sway ?? 0}`;
   let m = cache.get(key);
   if (!m) {
     const ghost = opts.ghost;
@@ -469,17 +500,23 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
         uHeightMatrix: lighting.heightMatrix,
         uHeightScale: lighting.heightScale,
         uHeightOn: lighting.heightOn,
+        uSway: { value: opts.sway ?? 0 },
+        uWind: lighting.wind,
       },
       transparent: Boolean(ghost) || (opts.alpha ?? 1) < 1,
       depthWrite: !ghost && (opts.alpha ?? 1) >= 1,
-      defines: opts.finish ? { FINISH: FINISHES[opts.finish] } : {},
+      defines: { ...(opts.finish ? { FINISH: FINISHES[opts.finish] } : {}), ...(opts.sway ? { SWAY: 1 } : {}) },
     });
+    m.userData.sway = opts.sway ?? 0;
     cache.set(key, m);
   }
   return m;
 }
 
 const outlineVertex = /* glsl */ `
+  #ifdef SWAY
+    ${swayGlsl}
+  #endif
   uniform float uThickness;
   uniform float uRadial;
   #ifdef MERGED
@@ -504,6 +541,9 @@ const outlineVertex = /* glsl */ `
       vec3 pushed = position + dir * uThickness * jitter / s;
     #endif
     vec4 world = m * vec4(pushed, 1.0);
+    #ifdef SWAY
+      world.xyz += sway(world.xyz);
+    #endif
     vFog = fogAt(length(cameraPosition - world.xyz));
     gl_Position = projectionMatrix * viewMatrix * world;
   }
@@ -525,18 +565,27 @@ const outlineCache = new Map<string, THREE.ShaderMaterial>();
  * Hand-drawn outline: an inverted hull pushed out along the normals (or out from each part's center), with a
  * little static per-vertex noise so the contour isn't machine-perfect.
  */
-export function outlineMaterial(thickness = 0.02, radial = true, merged = false, ghost = false) {
-  const key = `${thickness}|${radial}|${merged}|${ghost}`;
+export function outlineMaterial(thickness = 0.02, radial = true, merged = false, ghost = false, sway = 0) {
+  const key = `${thickness}|${radial}|${merged}|${ghost}|${sway}`;
   let m = outlineCache.get(key);
   if (!m) {
     m = new THREE.ShaderMaterial({
       vertexShader: outlineVertex,
       fragmentShader: outlineFragment,
-      uniforms: { uThickness: { value: thickness }, uRadial: { value: radial ? 1 : 0 }, uInk: { value: srgb(INK) }, uFog: fogUniform, uAlpha: { value: ghost ? 0.5 : 1 } },
+      uniforms: {
+        uThickness: { value: thickness },
+        uRadial: { value: radial ? 1 : 0 },
+        uInk: { value: srgb(INK) },
+        uFog: fogUniform,
+        uAlpha: { value: ghost ? 0.5 : 1 },
+        uTime: lighting.time,
+        uSway: { value: sway },
+        uWind: lighting.wind,
+      },
       side: THREE.BackSide,
       transparent: ghost,
       depthWrite: !ghost,
-      defines: merged ? { MERGED: 1 } : {},
+      defines: { ...(merged ? { MERGED: 1 } : {}), ...(sway ? { SWAY: 1 } : {}) },
     });
     outlineCache.set(key, m);
   }

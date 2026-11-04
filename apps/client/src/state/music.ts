@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from "react";
+import { startAmbience, stopAmbience } from "./ambience";
 
 /**
  * Quiet lo-fi music while you're in a house. Browsers only let a page make sound after you've clicked or typed,
- * so it starts on your first one; it fades in and out rather than cutting. Whether it's on is remembered on
- * this device.
+ * so it starts on your first one; it fades in and out rather than cutting. The country sounds (ambience) come
+ * and go with it. Whether it's on is remembered on this device.
  */
 
 const SRC = "/audio/lofi.m4a";
@@ -51,13 +52,17 @@ function play() {
   // refused until the first click or key press; we try again then
   audio
     .play()
-    .then(() => fadeTo(VOLUME))
+    .then(() => {
+      fadeTo(VOLUME);
+      startAmbience();
+    })
     .catch(() => {});
 }
 
 function pause() {
   const a = audio;
   if (a && !a.paused) fadeTo(0, () => a.pause());
+  stopAmbience();
 }
 
 /** The house screen wants music for as long as it's open. */
