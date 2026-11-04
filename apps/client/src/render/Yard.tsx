@@ -5,6 +5,7 @@ import { campLayout } from "./sceneryLayout";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
 import { pencilMaterial } from "./pencil";
+import { dirtPath } from "./Trails";
 
 /**
  * The two strips of grass beside the lot, outside the fence: a log cabin with a campfire circle on one side
@@ -60,31 +61,6 @@ const CABIN_D = 3.2;
 const WALL_H = 2.0;
 /** The cabin stands on a low stone footing. */
 const BASE = 0.22;
-
-/** A winding dirt path along points on the ground: a ribbon of slightly varying width. */
-function trailGeometry(points: [number, number][], width: number) {
-  const curve = new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0, z)));
-  const n = Math.ceil(curve.getLength() * 4);
-  const pos: number[] = [];
-  const idx: number[] = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    const p = curve.getPointAt(t);
-    const tan = curve.getTangentAt(t);
-    const half = (width / 2) * (1 + 0.18 * Math.sin(t * 23) + 0.1 * Math.sin(t * 51));
-    pos.push(p.x - tan.z * half, 0.004, p.z + tan.x * half, p.x + tan.z * half, 0.004, p.z - tan.x * half);
-    // both windings, so it shows from above whichever way the path bends
-    if (i < n) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2, i * 2, i * 2 + 2, i * 2 + 1, i * 2 + 1, i * 2 + 2, i * 2 + 3);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  // flat on the ground, facing up
-  const nrm = g.attributes.normal!;
-  for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, 0, 1, 0);
-  return { geometry: g, curve };
-}
 
 function campsite(k: Kit, d: number) {
   const { cabin, fire, trails } = campLayout(d);
@@ -199,12 +175,10 @@ function campsite(k: Kit, d: number) {
   });
 
   // ---- the trail: dirt with stepping stones, and little lanterns along it ----
-  const dirt = pencilMaterial("#c8ab7c", { rim: false });
   const flat = [pencilMaterial("#b9b4a8"), pencilMaterial("#a8a397")];
   let side = 1;
-  for (const pts of trails) {
-    const { geometry, curve } = trailGeometry(pts, 1.0);
-    k.add(geometry, dirt, [0, 0, 0], 1, { outline: false });
+  for (const [i, pts] of trails.entries()) {
+    const curve = dirtPath(k, pts, 1.0, 1 + i);
     const len = curve.getLength();
     for (let s = 0.4; s < len - 0.3; s += 0.75) {
       const p = curve.getPointAt(s / len);

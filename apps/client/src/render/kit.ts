@@ -80,12 +80,14 @@ export class Kit {
   private e = new THREE.Euler(0, 0, 0, "YXZ");
   private q = new THREE.Quaternion();
 
-  /** Everything added inside `fn` is placed relative to this offset and turn. */
-  at(pos: V3, ry: number, fn: () => void) {
+  /** Everything added inside `fn` is placed relative to this offset and turn (a turn about y, or a full rotation
+   * like a part's `rot`), and size if given. */
+  at(pos: V3, turn: number | V3, fn: () => void, scale = 1) {
     const top = this.stack[this.stack.length - 1]!;
-    this.e.set(0, ry, 0);
+    if (typeof turn === "number") this.e.set(0, turn, 0);
+    else this.e.set(turn[0], turn[1], turn[2]);
     this.q.setFromEuler(this.e);
-    this.stack.push(top.clone().multiply(new THREE.Matrix4().compose(new THREE.Vector3(...pos), this.q, new THREE.Vector3(1, 1, 1))));
+    this.stack.push(top.clone().multiply(new THREE.Matrix4().compose(new THREE.Vector3(...pos), this.q, new THREE.Vector3(scale, scale, scale))));
     fn();
     this.stack.pop();
   }
@@ -107,7 +109,7 @@ export class Kit {
   /** Merge into one mesh per material (and one outline mesh per weight). */
   build(ghost = false): BuiltMesh[] {
     const bodies = new Map<THREE.Material, THREE.BufferGeometry[]>();
-    const lines = new Map<string, { thick: number; normals: boolean; geos: THREE.BufferGeometry[] }>();
+    const lines = new Map<string, { thick: number; normals: boolean; sway: number; geos: THREE.BufferGeometry[] }>();
     const center = new THREE.Vector3();
     for (const p of this.parts) {
       const g = p.geo.index ? p.geo.toNonIndexed() : p.geo.clone();
@@ -123,13 +125,15 @@ export class Kit {
       if (!bodies.has(p.mat)) bodies.set(p.mat, []);
       bodies.get(p.mat)!.push(g);
       if (p.outline > 0) {
-        const key = `${p.outline}|${p.normals}`;
-        if (!lines.has(key)) lines.set(key, { thick: p.outline, normals: p.normals, geos: [] });
+        // a swaying part's outline sways with it
+        const sway: number = p.mat.userData.sway ?? 0;
+        const key = `${p.outline}|${p.normals}|${sway}`;
+        if (!lines.has(key)) lines.set(key, { thick: p.outline, normals: p.normals, sway, geos: [] });
         lines.get(key)!.geos.push(g);
       }
     }
     const out: BuiltMesh[] = [];
-    for (const { thick, normals, geos } of lines.values()) out.push({ geometry: mergeGeometries(geos)!, material: outlineMaterial(thick, !normals, true, ghost) });
+    for (const { thick, normals, sway, geos } of lines.values()) out.push({ geometry: mergeGeometries(geos)!, material: outlineMaterial(thick, !normals, true, ghost, sway) });
     for (const [mat, geos] of bodies) out.push({ geometry: mergeGeometries(geos)!, material: mat });
     for (const o of out) o.geometry.computeBoundingSphere();
     return out;

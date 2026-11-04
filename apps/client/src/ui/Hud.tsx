@@ -90,7 +90,7 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
         )}
         <CharacterButton compact disabled={status !== "online"} onSaved={(appearance) => useGame.setState((s) => ({ members: s.members.map((m) => m.id === s.me ? { ...m, appearance } : m) }))} />
         <ChatButton />
-        <button className="pill icon-pill" onClick={() => setMusic(!music)} title={music ? "Turn the music off" : "Turn the music on"} aria-pressed={music}>
+        <button className="pill icon-pill" onClick={() => setMusic(!music)} title={music ? "Turn the music and sounds off" : "Turn the music and sounds on"} aria-pressed={music}>
           {music ? <Icon.music /> : <Icon.musicOff />}
         </button>
         <button className="pill icon-pill" onClick={() => setHelpOpen((v) => !v)} title="Controls">

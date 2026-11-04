@@ -6,10 +6,16 @@ import type { Kit } from "./kit";
 import { FOG, pencilMaterial, SUN_DIR } from "./pencil";
 import { lakeShape } from "./sceneryLayout";
 import { Meadow } from "./Meadow";
+import { Ambient } from "./Ambient";
+import { Scenes } from "./Scenes";
+import { Shore } from "./Shore";
+import { shoreLayout } from "./shoreLayout";
+import { Trails } from "./Trails";
+import { Woods } from "./Woods";
 import { Yard } from "./Yard";
 
 /**
- * The countryside around the lot: a lake behind the house with a little jetty, woods of firs and leafy trees
+ * The countryside around the lot: a lake behind the house with a little jetty (its shore dressed in Shore), woods of firs and leafy trees
  * all round (keeping clear of the lot, the street and the water), snow-capped mountains on the horizon and a
  * sky with soft clouds. All decoration: nothing here can be clicked or built on.
  */
@@ -23,7 +29,7 @@ function rng(seed: number) {
 }
 
 /** A flat disc on a polar grid; uv.x runs from 0 at the rim to 1 in the middle, so the water knows its depth. */
-function disc(lake: ReturnType<typeof lakeShape>, grow: number, y: number) {
+function disc(lake: ReturnType<typeof lakeShape>, grow: (a: number) => number, y: number) {
   const SEG = 96;
   const RINGS = 8;
   const pos: number[] = [];
@@ -32,7 +38,7 @@ function disc(lake: ReturnType<typeof lakeShape>, grow: number, y: number) {
   for (let i = 0; i <= RINGS; i++) {
     for (let j = 0; j < SEG; j++) {
       const a = (j / SEG) * Math.PI * 2;
-      const f = (lake.reach(a) * (1 - i / RINGS)) * 1 + (i === 0 ? grow : grow * (1 - i / RINGS));
+      const f = (lake.reach(a) + grow(a)) * (1 - i / RINGS);
       pos.push(lake.cx + Math.cos(a) * lake.rx * f, y, lake.cz + Math.sin(a) * lake.rz * f);
       uv.push(i / RINGS, j / SEG);
     }
@@ -52,9 +58,6 @@ function disc(lake: ReturnType<typeof lakeShape>, grow: number, y: number) {
   g.computeVertexNormals();
   return g;
 }
-
-/** A pointed cone for fir tiers (the kit's own cone is cut off at the top). */
-const FIR = new THREE.ConeGeometry(0.5, 1, 8);
 
 /** A rugged mountain: a cone with its sides pushed in and out, drawn faceted. */
 function mountain(seed: number) {
@@ -84,18 +87,23 @@ export function Scenery({ w, d }: { w: number; d: number }) {
   return (
     <group name="scenery">
       <Sky />
-      <Lake lake={lake} />
+      <Lake lake={lake} w={w} d={d} />
+      <Shore w={w} d={d} />
+      <Scenes w={w} d={d} />
+      <Ambient w={w} d={d} />
       <Yard w={w} d={d} />
+      <Trails w={w} d={d} />
       <Meadow w={w} d={d} />
-      <KitMesh key="woods" deps={[w, d, lake]} make={(k) => woods(k, w, d, lake)} />
+      <Woods w={w} d={d} />
       <KitMesh key="mountains" deps={[w, d]} make={(k) => mountains(k, w, d)} />
     </group>
   );
 }
 
-function Lake({ lake }: { lake: ReturnType<typeof lakeShape> }) {
-  const shore = useMemo(() => disc(lake, 0.06, 0.012), [lake]);
-  const water = useMemo(() => disc(lake, 0, 0.03), [lake]);
+function Lake({ lake, w, d }: { lake: ReturnType<typeof lakeShape>; w: number; d: number }) {
+  // the sand comes and goes round the shore (see shoreLayout)
+  const shore = useMemo(() => disc(lake, shoreLayout(w, d).beachGrow, 0.012), [lake, w, d]);
+  const water = useMemo(() => disc(lake, () => 0, 0.03), [lake]);
   useEffect(
     () => () => {
       shore.dispose();
@@ -117,72 +125,10 @@ function Lake({ lake }: { lake: ReturnType<typeof lakeShape> }) {
           const post = pencilMaterial("#7a5c43", { finish: "wood" });
           k.box(boards, [x, 0.42, shoreZ - 3.2], [1.5, 0.08, 7.5], { outline: 0.012 });
           for (let z = 0; z <= 7; z += 1.75) for (const sx of [-0.68, 0.68]) k.add("cyl8", post, [x + sx, 0.3, shoreZ + 0.4 - z], [0.12, 0.7, 0.12], { outline: 0.008 });
-          // rocks and reeds along the shore
-          const r = rng(31);
-          const rock = [pencilMaterial("#9c9a92"), pencilMaterial("#b2ada2")];
-          const reed = pencilMaterial("#6f8f4a");
-          for (let i = 0; i < 40; i++) {
-            const a = r() * Math.PI * 2;
-            const f = lake.reach(a) * (0.98 + r() * 0.08);
-            const px = lake.cx + Math.cos(a) * lake.rx * f;
-            const pz = lake.cz + Math.sin(a) * lake.rz * f;
-            if (Math.abs(px - x) < 2.5 && pz > lake.cz) continue;
-            if (r() < 0.45) k.add("blob", rock[i % 2]!, [px, 0.1, pz], [0.5 + r() * 0.8, 0.35 + r() * 0.3, 0.5 + r() * 0.7], { outline: 0.012 });
-            else for (let j = 0; j < 5; j++) k.add("cyl8", reed, [px + (r() - 0.5) * 0.6, 0.4, pz + (r() - 0.5) * 0.6], [0.04, 0.8 + r() * 0.5, 0.04], { outline: false });
-          }
         }}
       />
     </group>
   );
-}
-
-function woods(k: Kit, w: number, d: number, lake: ReturnType<typeof lakeShape>) {
-  const r = rng(11);
-  const cx = w / 2;
-  const cz = d / 2;
-  const firs = ["#2f6a45", "#3b7a4c", "#477f50"].map((c) => pencilMaterial(c));
-  const leafy = ["#5f9e4f", "#6fa957", "#7aa95a"].map((c) => pencilMaterial(c));
-  const autumn = pencilMaterial("#d98c3f");
-  const trunk = pencilMaterial("#7a5c43", { finish: "wood" });
-  const farFir = [pencilMaterial("#3a7050", { rim: false, fog: 0.8 }), pencilMaterial("#2f6247", { rim: false, fog: 0.8 })];
-  const clear = (x: number, z: number, margin: number) => {
-    if (x > -16 - margin && x < w + 9 + margin && z > -8 - margin && z < d + 13 + margin) return false; // the lot, the campsite and the playground
-    if (z > d + 1.5 && z < d + 13 && x > -32 && x < w + 32) return false; // the street
-    return !lake.inside(x, z, 3 + margin);
-  };
-  // near woods: firs and leafy trees with outlines, in loose clumps
-  for (let n = 0; n < 900 && k.parts.length < 2600; n++) {
-    const a = r() * Math.PI * 2;
-    const dist = 24 + Math.pow(r(), 0.8) * 70;
-    const x = cx + Math.cos(a) * dist;
-    const z = cz + Math.sin(a) * dist;
-    // thinner nearer the house, so the lot keeps a meadow round it
-    if (r() > 0.25 + (dist - 24) / 55 || !clear(x, z, 0)) continue;
-    const s = 0.8 + r() * 0.7;
-    if (r() < 0.65) {
-      const mat = firs[Math.floor(r() * firs.length)]!;
-      k.add("cyl8", trunk, [x, 0.6 * s, z], [0.25 * s, 1.2 * s, 0.25 * s], { outline: 0.02 });
-      for (let t = 0; t < 3; t++) k.add(FIR, mat, [x, (1.3 + t * 1.25) * s, z], [(2.6 - t * 0.6) * s, 2.2 * s, (2.6 - t * 0.6) * s], { outline: 0.03 });
-    } else {
-      const mat = r() < 0.08 ? autumn : leafy[Math.floor(r() * leafy.length)]!;
-      k.add("cyl8", trunk, [x, 1.1 * s, z], [0.22 * s, 2.2 * s, 0.22 * s], { outline: 0.02 });
-      for (let i = 0; i < 4; i++) {
-        const b = r() * Math.PI * 2;
-        const rr = r() * 0.8 * s;
-        k.add("blob", mat, [x + Math.cos(b) * rr, (2.5 + r() * 1.1) * s, z + Math.sin(b) * rr], (1.3 + r() * 0.7) * s, { outline: 0.03 });
-      }
-    }
-  }
-  // the far edge of the forest: plain dark firs, packed close, fading into the haze
-  for (let n = 0; n < 700; n++) {
-    const a = r() * Math.PI * 2;
-    const dist = 94 + r() * 50;
-    const x = cx + Math.cos(a) * dist;
-    const z = cz + Math.sin(a) * dist;
-    if (!clear(x, z, 0)) continue;
-    const s = 1.4 + r() * 1.2;
-    k.add(FIR, farFir[n % 2]!, [x, 3 * s, z], [2.4 * s, 6 * s, 2.4 * s], { outline: false });
-  }
 }
 
 function mountains(k: Kit, w: number, d: number) {

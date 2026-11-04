@@ -5,6 +5,8 @@ import type { Finish } from "./pencil";
 type Mat = (tone: string, finish?: Finish, alpha?: number) => THREE.Material;
 type Builder = (k: Kit, w: number, d: number, p: Record<string, unknown>, m: Mat, seed: number) => void;
 export type FlowerKind = "daisy" | "tulip" | "lavender";
+/** How far outdoor grass and flowers sway in the breeze (see `pencilMaterial`). */
+export const SWAY = 0.25;
 const LEAF = new THREE.SphereGeometry(0.5, 6, 4);
 const STEM = new THREE.CylinderGeometry(0.5, 0.5, 1, 5);
 const PETAL = new THREE.SphereGeometry(0.5, 7, 4);
