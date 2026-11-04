@@ -52,6 +52,16 @@ export const DIRECTORY_SCHEMA = [
   )`,
   `create index if not exists members_house on members(house_id)`,
   `create unique index if not exists members_account on members(house_id, account_id)`,
+  // one row per player per calendar day of theirs: the key is what stops a day counting twice
+  `create table if not exists visits (
+    account_id text not null references accounts(id) on delete cascade,
+    day text not null,
+    coins integer not null,
+    streak integer not null,
+    house_id text not null,
+    at integer not null,
+    primary key (account_id, day)
+  )`,
 ];
 
 /** A house's own tables. On Cloudflare each house has its own database, but `house_id` keeps one file shareable. */

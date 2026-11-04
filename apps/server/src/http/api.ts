@@ -1,4 +1,4 @@
-import { AppearanceSchema, applyOp, emptyBlueprint, newId, starterHouseOp, type Blueprint, type HouseSummary, type Me } from "@cg/shared";
+import { AppearanceSchema, emptyBlueprint, newId, withStarterHouse, type Blueprint, type HouseSummary, type Me } from "@cg/shared";
 import { z } from "zod";
 import { DUMMY_HASH, hashPassword, hashToken, newInviteCode, newToken, normalizeInviteCode, verifyPassword } from "../auth/crypto";
 import { clearedSessionCookie, sessionCookie, signedIn } from "../auth/session";
@@ -52,9 +52,7 @@ class HttpError extends Error {
 
 /** A new lot with the starter house already built (it's data, so this can't fail unless the data is wrong). */
 function starterBlueprint(): Blueprint {
-  const r = applyOp(emptyBlueprint(), starterHouseOp());
-  if (!r.ok) throw new Error(`starter house doesn't fit: ${r.reason}`);
-  return r.blueprint;
+  return withStarterHouse(emptyBlueprint());
 }
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}) {
@@ -204,6 +202,8 @@ export function createApi({ directory, initHouse, dropHouse, passwordRounds, app
       }
       if (!who) throw new HttpError(401, "signed-out", "Please sign in.");
       if (route === "GET /api/me") return json(200, await me(who.account));
+      // the calendar: every day this player came by, oldest first (streaks are worked out on their own date)
+      if (route === "GET /api/visits") return json(200, { visits: await directory.visitsFor(who.account.id) });
       if (route === "GET /api/account/appearance") return json(200, { appearance: await directory.getAppearance(who.account.id) });
       if (route === "PUT /api/account/appearance") {
         if (!appearanceLimit.take(who.account.id)) throw new HttpError(429, "rate-limited", "Give your last look a moment to save, then try again.");

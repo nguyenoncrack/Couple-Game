@@ -5,8 +5,11 @@ import {
   emptyLife,
   Life,
   newId,
+  plausibleDay,
   upgradeBlueprint,
   type AppliedOp,
+  type Day,
+  type FundsOp,
   type Blueprint,
   type LifeIntent,
   type LifeReject,
@@ -14,6 +17,7 @@ import {
   type Op,
   type Presence,
   type ServerMsg,
+  type VisitResult,
 } from "@cg/shared";
 import type { HouseRow, HouseStore, MemberRow } from "../persistence/store";
 import { RateLimiter } from "../rate-limit";
@@ -58,6 +62,12 @@ type Timer = ReturnType<typeof setTimeout>;
  * so every op is checked against the latest house, written to disk, and only then broadcast with its new version.
  * Rooms share nothing, so houses can't see or affect each other.
  */
+/** What a room needs from the directory: its members, and somewhere to count their daily visits. */
+export interface RoomDirectory {
+  listMembers(): Promise<MemberRow[]>;
+  recordVisit(memberId: string, day: Day): Promise<VisitResult | null>;
+}
+
 export class HouseRoom {
   private peers = new Set<Peer>();
   /** object or opening ID → memberId currently dragging it. */
@@ -68,6 +78,8 @@ export class HouseRoom {
   private queue: Promise<unknown> = Promise.resolve();
   private members: MemberRow[] = [];
   private snapshotVersion: number;
+  /** The day each connection last asked to have counted. */
+  private asked = new WeakMap<Peer, Day>();
   private life = new Life(emptyLife());
   private lifeTimer: Timer | null = null;
   private lifeSave: Timer | null = null;
@@ -79,8 +91,8 @@ export class HouseRoom {
   private constructor(
     readonly house: HouseRow,
     private store: HouseStore,
-    /** Who's in the house, from the directory (it can change while the room is open: the partner joins). */
-    private listMembers: () => Promise<MemberRow[]>,
+    /** Who's in the house (it can change while the room is open: the partner joins), and their visits. */
+    private directory: RoomDirectory,
     private blueprint: Blueprint,
     private version: number,
   ) {
@@ -92,24 +104,25 @@ export class HouseRoom {
   }
 
   /** Load the latest snapshot and replay the log after it. */
-  static async load(house: HouseRow, store: HouseStore, listMembers: () => Promise<MemberRow[]>, idleMs = IDLE_MS): Promise<HouseRoom> {
+  static async load(house: HouseRow, store: HouseStore, directory: RoomDirectory, idleMs = IDLE_MS): Promise<HouseRoom> {
     const snap = await store.loadSnapshot(house.id);
     if (!snap) throw new Error(`house ${house.id} has no snapshot`);
-    const room = new HouseRoom(house, store, listMembers, upgradeBlueprint(snap.blueprint), snap.version);
+    const room = new HouseRoom(house, store, directory, upgradeBlueprint(snap.blueprint), snap.version);
     room.snapshotVersion = snap.version;
     room.idleMs = idleMs;
     for (;;) {
       const ops = await store.opsSince(house.id, room.version, 1000);
       for (const a of ops) {
-        const r = applyOp(room.blueprint, a.op);
-        // Logged ops were valid when accepted; if the rules changed since, skip rather than refuse to open the house.
+        // Logged ops were valid when accepted, so coins never hold them up (they predate prices, or a price changed).
+        // If other rules changed since, skip rather than refuse to open the house.
+        const r = applyOp(room.blueprint, a.op, undefined, { accepted: true });
         if (r.ok) room.blueprint = r.blueprint;
         else console.warn(`[room ${house.id}] replay skipped v${a.version}: ${r.reason}`);
         room.version = a.version;
       }
       if (ops.length < 1000) break;
     }
-    room.members = await listMembers();
+    room.members = await directory.listMembers();
     const saved = await store.loadLife(house.id);
     if (saved) {
       room.life = Life.restore(saved, room.now());
@@ -141,7 +154,7 @@ export class HouseRoom {
   refreshAppearance(accountId: string) {
     return this.enqueue(async () => {
       if (!this.members.some((m) => m.accountId === accountId)) return;
-      const latest = await this.listMembers();
+      const latest = await this.directory.listMembers();
       // Change only appearance; membership and gameplay are handled by their existing paths.
       this.members = this.members.map((m) => ({ ...m, appearance: latest.find((n) => n.id === m.id)?.appearance ?? null }));
       this.broadcast({ type: "members", members: this.memberInfo() });
@@ -165,7 +178,7 @@ export class HouseRoom {
           p.close(CLOSE.replaced, "opened somewhere else");
         }
       }
-      this.members = await this.listMembers();
+      this.members = await this.directory.listMembers();
 
       let sync: Extract<ServerMsg, { type: "welcome" }>["sync"] = { kind: "snapshot", state: this.state };
       const missed = this.version - knownVersion;
@@ -355,6 +368,40 @@ export class HouseRoom {
       this.life.syncTableGames(bp);
       this.lifeChanged();
     }
+  }
+
+  /**
+   * A player is here today (their own calendar day, sent once they've done something). The first time that day the
+   * directory counts it and the house gets its coins, logged like an edit so the funds replay with everything
+   * else; any other time they're just told it's already counted. A day is only asked about once per connection.
+   */
+  visit(peer: Peer, day: Day) {
+    if (!this.peers.has(peer) || this.asked.get(peer) === day || !plausibleDay(day, this.now())) return;
+    this.asked.set(peer, day);
+    return this.enqueue(async () => {
+      const visit = await this.directory.recordVisit(peer.memberId, day);
+      if (visit) await this.logFunds(peer.memberId, visit);
+      peer.send({ type: "visit", visit });
+    });
+  }
+
+  /** The coins a visit brings, into the house's log and to everyone. */
+  private async logFunds(memberId: string, visit: VisitResult) {
+    const op: FundsOp = { t: "funds.add", amount: visit.coins, note: `visit ${visit.day}` };
+    const r = applyOp(this.blueprint, op, undefined, { accepted: true });
+    if (!r.ok) return;
+    const applied: AppliedOp = { version: this.version + 1, op, by: memberId, clientOpId: `visit-${visit.day}` };
+    try {
+      await this.store.appendOp(this.house.id, applied);
+    } catch (e) {
+      // the day is counted but the coins didn't land; nothing else to undo
+      console.error(`[room ${this.house.id}] failed to save visit coins`, e);
+      return;
+    }
+    this.blueprint = r.blueprint;
+    this.version = applied.version;
+    this.broadcast({ type: "applied", ...applied });
+    if (this.version - this.snapshotVersion >= SNAPSHOT_EVERY) await this.snapshot();
   }
 
   /** Say something to the house: kept with it, and sent to everyone (the speaker too, so both show the same). */

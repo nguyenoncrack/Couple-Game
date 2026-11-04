@@ -1,5 +1,5 @@
 import type { AddressInfo } from "node:net";
-import { DEFAULT_APPEARANCE, CLOSE, type ClientMsg, type HouseSummary, type Op, type ServerMsg } from "@cg/shared";
+import { DAILY_COINS, DEFAULT_APPEARANCE, CLOSE, localDay, STARTING_FUNDS, type ClientMsg, type HouseSummary, type Op, type ServerMsg } from "@cg/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createApp } from "../app";
@@ -332,6 +332,51 @@ describe("disconnects and saving", () => {
     expect(welcome.sync.state.version).toBe(2);
     expect(Object.keys(welcome.sync.state.blueprint.levels[0]!.walls)).toEqual(["h:2:2", "h:3:2"]);
     expect(welcome.sync.state.blueprint.levels[0]!.objects.bed0000001).toMatchObject({ x: 4, z: 4, rot: 1 });
+    await again.disconnect();
+    await crashed.close();
+  });
+
+  it("counts each player's visit once a day, puts the coins in the house, and keeps both through a restart", async () => {
+    const { a, b, houseId } = await couple();
+    const today = localDay();
+    const wa = await a.connect();
+    if (wa.sync.kind !== "snapshot") throw new Error("expected a snapshot");
+    const start = wa.sync.state.blueprint.funds;
+    expect(start).toBe(STARTING_FUNDS);
+
+    // a date that can't be today anywhere is ignored; today counts, once
+    a.send({ type: "visit", day: "2001-01-01" });
+    a.send({ type: "visit", day: today });
+    expect((await a.next("visit")).visit).toEqual({ day: today, streak: 1, coins: DAILY_COINS, milestone: null });
+    const paid = await a.next("applied", (m) => m.op.t === "funds.add");
+    expect(paid.op).toMatchObject({ amount: DAILY_COINS });
+
+    // a refresh (a new connection) asks again: already counted, nothing more for the house
+    await a.disconnect();
+    await a.connect();
+    a.send({ type: "visit", day: today });
+    expect((await a.next("visit")).visit).toBeNull();
+
+    // the partner's visit is their own, and both land in the shared house
+    const wb = await b.connect();
+    b.send({ type: "visit", day: today });
+    expect((await b.next("visit")).visit).toMatchObject({ streak: 1 });
+    await a.next("applied", (m) => m.op.t === "funds.add" && m.by === wb.memberId);
+
+    const cal = await call("GET", "/api/visits", undefined, a.cookie);
+    expect(cal.body.visits).toEqual([{ day: today, coins: DAILY_COINS, streak: 1 }]);
+    await a.disconnect();
+    await b.disconnect();
+
+    // a new server process: the house replays its coins from the log, and the day is still counted
+    const crashed = app;
+    await startApp();
+    const again = new Player(`${base.replace("http", "ws")}/ws`, houseId, a.cookie);
+    const back = await again.connect();
+    if (back.sync.kind !== "snapshot") throw new Error("expected a snapshot");
+    expect(back.sync.state.blueprint.funds).toBe(start + 2 * DAILY_COINS);
+    again.send({ type: "visit", day: today });
+    expect((await again.next("visit")).visit).toBeNull();
     await again.disconnect();
     await crashed.close();
   });

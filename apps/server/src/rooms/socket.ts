@@ -77,6 +77,9 @@ export function serveSocket(room: HouseRoom, memberId: string, io: SocketIO) {
         case "chat":
           await room.say(peer, msg.text);
           break;
+        case "visit":
+          await room.visit(peer, msg.day);
+          break;
       }
     },
 

@@ -2,7 +2,7 @@ import type { HouseSummary } from "@cg/shared";
 import { useEffect } from "react";
 import { LoadingScreen } from "./LoadingScreen";
 import { Scene } from "../render/Scene";
-import { act, connect, disconnect, openChat, redo, setFirstPerson, setMode, setTool, undo, useGame, type Tool } from "../state/game";
+import { act, checkIn, connect, disconnect, openChat, redo, setFirstPerson, setMode, setTool, undo, useGame, type Tool } from "../state/game";
 import { wantMusic } from "../state/music";
 import { cycleWallMode, Hud, TOOL_KEYS, toggleRoof } from "../ui/Hud";
 
@@ -19,9 +19,22 @@ export function Game({ house, onLeave }: { house: HouseSummary; onLeave: () => v
 
   useEffect(() => wantMusic(), []);
 
+  // once the house is in view, the first thing I do (a click, a key) counts today's visit
+  useEffect(() => {
+    if (!ready) return;
+    window.addEventListener("pointerdown", checkIn, true);
+    window.addEventListener("keydown", checkIn, true);
+    return () => {
+      window.removeEventListener("pointerdown", checkIn, true);
+      window.removeEventListener("keydown", checkIn, true);
+    };
+  }, [ready]);
+
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLElement && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+      // Enter or Space on a focused button presses it, rather than opening the chat
+      if ((e.key === "Enter" || e.key === " ") && e.target instanceof HTMLElement && e.target.closest("button, a, select")) return;
       const k = e.key.toLowerCase();
       if (e.repeat && (k === "v" || k === "l" || k === "t" || k === "o")) return;
       if (e.metaKey || e.ctrlKey) {

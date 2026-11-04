@@ -1,6 +1,7 @@
 import { arrivalTime, blackjackScore, cardLabel, type BlackjackCommand } from "@cg/shared";
 import { useEffect, useReducer } from "react";
 import { act, serverNow, useGame } from "../state/game";
+import { Floating } from "./Floating";
 import "./table-games.css";
 
 function Cards({ cards }: { cards: number[] }) {
@@ -30,16 +31,16 @@ export function TableGamePanel() {
   if (!active || !life || !me || !tableId || !mine) return null;
   const arrived = arrivalTime(mine) <= serverNow();
   const ready = arrived && players.every((a) => arrivalTime(a) <= serverNow());
-  if (use.action === "pingpong") return <div className="card table-game-panel slim">
+  if (use.action === "pingpong") return <Floating id="table-game" title="Ping-pong" className="table-game-panel slim">
     <div className="kicker">PING-PONG</div>
     <h3>{!arrived ? "Heading to the table…" : players.length > 1 && ready ? "A rally for two" : "Serve practice"}</h3>
     <p className="hand">{players.length > 1 ? ready ? "Your partner's here. Keep the ball going together." : "Your partner is joining the other side." : "Your partner can click the table to join the other end."}</p>
     <button className="btn" onClick={() => act({ do: "stop" })}>Leave table</button>
-  </div>;
+  </Floating>;
   const round = life.blackjack?.[tableId];
   const hand = round?.hands[me];
   const send = (action: BlackjackCommand) => act({ do: "cards", objectId: tableId, roundId: round?.id ?? null, action });
-  return <div className="card table-game-panel" aria-label="Blackjack game">
+  return <Floating id="table-game" title="Blackjack" className="table-game-panel" aria-label="Blackjack game">
     <div className="kicker">AT THE CARD TABLE</div><h3>Blackjack for two</h3>
     {(!arrived || ((!round || round.phase === "finished") && !ready)) && <p className="hand">{arrived ? "Waiting for your partner to reach the table…" : "Walking to the table…"}</p>}
     {round ? <>
@@ -57,5 +58,5 @@ export function TableGamePanel() {
       <button className="btn" onClick={() => act({ do: "stop" })}>Leave table</button>
     </div>
     <p className="hint hand">Aces count as 1 or 11. Dealer draws at reveal and stands on 17.</p>
-  </div>;
+  </Floating>;
 }

@@ -5,7 +5,8 @@ import { ACTIONS } from "./catalog";
 import type { Rot } from "./grid";
 import type { LifeReject } from "./life/engine";
 import { SOCIAL, type LifeState } from "./life/state";
-import { Id, Op } from "./ops";
+import { Id, Op, type LoggedOp } from "./ops";
+import type { VisitResult } from "./visits";
 
 /** Messages over the house WebSocket. Client messages are checked on the server; server messages are trusted. */
 
@@ -64,6 +65,8 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ping") }),
   /** Say something: it shows in a bubble over your head and in the chat. */
   z.object({ type: z.literal("chat"), text: z.string().max(CHAT_MAX * 2) }),
+  /** I'm here today (my own calendar day): count it, once, and the house gets the coins. */
+  z.object({ type: z.literal("visit"), day: z.string().max(10) }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsg>;
 
@@ -89,7 +92,7 @@ export interface MemberInfo {
 
 export interface AppliedOp {
   version: number;
-  op: Op;
+  op: LoggedOp;
   by: string;
   clientOpId: string;
 }
@@ -117,6 +120,8 @@ export type ServerMsg =
       now: number;
     }
   | { type: "chat"; message: ChatMessage }
+  /** A visit counted just now, with what it brought; null if today was already counted. */
+  | { type: "visit"; visit: VisitResult | null }
   /** Everyone's characters, the meal on the go and the plates out. Sent whole whenever any of it changes. */
   | { type: "life"; life: LifeState; now: number }
   | { type: "lifeRejected"; reason: LifeReject }

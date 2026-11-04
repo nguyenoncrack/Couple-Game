@@ -1,6 +1,6 @@
 import { CharacterButton } from "../features/character/CharacterButton";
-import { catalog, cookingDone, enclosedCells, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
-import { useEffect, useState } from "react";
+import { catalog, cookingDone, costOf, enclosedCells, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { WallMode } from "../render/House";
 import { act, redo, roofVisible, serverNow, setFirstPerson, setMode, setRoofShown, setTool, submit, toast, undo, useGame, wake, type Tool } from "../state/game";
@@ -16,6 +16,8 @@ import { searchCatalog } from "./filterCatalog";
 import { useFirstPersonMouse } from "../input/firstPersonMouse";
 import { TableGamePanel } from "./TableGamePanel";
 import { NeedsPanel } from "./Needs";
+import { ClockPill, WelcomeBack } from "./Calendar";
+import { Floating } from "./Floating";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -41,6 +43,7 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       {firstPerson ? <FirstPersonHint /> : <CameraButtons />}
       {live ? <LiveBar /> : <Toolbar />}
       <ChatPanel />
+      <WelcomeBack />
       <Toasts />
       {status === "asleep" && <Asleep onLeave={onLeave} />}
       {status === "gone" && <Gone onLeave={onLeave} />}
@@ -57,9 +60,20 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const music = useMusicOn();
   const partner = members.find((m) => m.id !== me);
+  const bar = useRef<HTMLDivElement>(null);
+  // the bar wraps onto more rows on narrow screens: panels below it go by where it actually ends
+  useLayoutEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    const place = () => document.documentElement.style.setProperty("--topbar-bottom", `${Math.round(el.getBoundingClientRect().bottom)}px`);
+    place();
+    const watch = new ResizeObserver(place);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, []);
 
   return (
-    <div className="topbar">
+    <div className="topbar" ref={bar}>
       <div className="topbar-left">
         <button className="pill icon-pill" onClick={onLeave} title="Back to your houses">
           <Icon.back />
@@ -69,6 +83,7 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
           <span className="status-dot" />
           {status === "online" ? "saved" : status === "connecting" ? "connecting" : status === "reconnecting" ? "offline" : status === "asleep" ? "paused" : "closed"}
         </div>
+        <ClockPill />
       </div>
       <div className="topbar-right">
         {members.map((m) => (
@@ -289,7 +304,7 @@ function LiveBar() {
   const busy = useGame((s) => Boolean(s.me && s.life?.avatars[s.me]?.use));
   const { here, inBed, cuddling } = useGame(useShallow(together));
   return (
-    <div className="toolbar">
+    <Floating id="toolbar" title="Tools" icon={<Icon.house />} className="toolbar">
       <ModeSwitch />
       <span className="toolbar-gap" />
       {here && inBed && (
@@ -327,7 +342,7 @@ function LiveBar() {
         <Icon.stand />
         <span className="slot-label">Stand</span>
       </button>
-    </div>
+    </Floating>
   );
 }
 
@@ -336,7 +351,7 @@ function Toolbar() {
   const canUndo = useGame((s) => s.canUndo);
   const canRedo = useGame((s) => s.canRedo);
   return (
-    <div className="toolbar">
+    <Floating id="toolbar" title="Tools" icon={<Icon.house />} className="toolbar">
       <ModeSwitch />
       <span className="toolbar-gap" />
       {TOOLS.map((t) => (
@@ -358,7 +373,7 @@ function Toolbar() {
         <Icon.redo />
         <span className="slot-label">Redo</span>
       </button>
-    </div>
+    </Floating>
   );
 }
 
@@ -450,7 +465,7 @@ function RoofPanel() {
   const erase = useGame((s) => s.roofErase);
   const has = useGame((s) => Object.keys(s.view?.levels[0]?.roofs ?? {}).length > 0);
   return (
-    <div className="card tool-panel">
+    <Floating id="tools" title="Roof" className="tool-panel">
       <div className="kicker">Roof</div>
       <div className="seg">
         <button className={!erase ? "on" : ""} onClick={() => useGame.setState({ roofErase: false })}>
@@ -474,7 +489,7 @@ function RoofPanel() {
         </button>
       </div>
       <p className="hint hand">{erase ? "Drag over the roof to take that part off." : "Drag a rectangle over the rooms. The roof slopes up from whatever edge it has, so any shape works."}</p>
-    </div>
+    </Floating>
   );
 }
 
@@ -485,10 +500,11 @@ function ToolPanel() {
   const placing = useGame((s) => s.placing);
   const [category, setCategory] = useState<Category>("living");
   const [query, setQuery] = useState("");
+  const funds = useGame((s) => s.view?.funds ?? 0);
 
   if (tool === "wall")
     return (
-      <div className="card tool-panel">
+      <Floating id="tools" title="Wall style" className="tool-panel">
         <div className="kicker">Wall style</div>
         <div className="swatches">
           {[...catalog.wallStyles.values()].map((s) => (
@@ -496,11 +512,11 @@ function ToolPanel() {
           ))}
         </div>
         <p className="hint hand">Drag along the grid lines. Draw over a wall to repaint it.</p>
-      </div>
+      </Floating>
     );
   if (tool === "floor")
     return (
-      <div className="card tool-panel">
+      <Floating id="tools" title="Floor" className="tool-panel">
         <div className="kicker">Floor</div>
         <div className="swatches">
           {[...catalog.floorMaterials.values()].map((m) => (
@@ -508,14 +524,14 @@ function ToolPanel() {
           ))}
         </div>
         <p className="hint hand">Drag a rectangle of tiles.</p>
-      </div>
+      </Floating>
     );
   if (tool === "roof") return <RoofPanel />;
   if (tool === "wallErase" || tool === "floorErase")
     return (
-      <div className="card tool-panel slim">
+      <Floating id="tools" title={tool === "wallErase" ? "Knock down walls" : "Lift the floor"} className="tool-panel slim">
         <p className="hint hand">{tool === "wallErase" ? "Drag along a wall to knock it down." : "Drag over tiles to lift the floor."}</p>
-      </div>
+      </Floating>
     );
   if (tool === "buy") {
     const searching = Boolean(query.trim());
@@ -524,7 +540,7 @@ function ToolPanel() {
       : category === "openings" ? [...catalog.openings.values()] : [...catalog.furniture.values()].filter((i) => i.category === category);
     const placingOpening = placing ? catalog.openings.has(placing.catalogId) : false;
     return (
-      <div className="card tool-panel catalog">
+      <Floating id="tools" title="Buy" icon={<Icon.coin />} className="tool-panel catalog">
         <div className="tabs">
           {CATEGORIES.map((c) => (
             <button key={c.id} className={`tab ${!searching && category === c.id ? "active" : ""}`} aria-pressed={!searching && category === c.id} onClick={() => { setCategory(c.id); setQuery(""); }}>
@@ -538,12 +554,16 @@ function ToolPanel() {
           {items.map((i) => (
             <button
               key={i.id}
-              className={`item ${placing?.catalogId === i.id ? "active" : ""}`}
+              className={`item ${placing?.catalogId === i.id ? "active" : ""} ${i.price > funds ? "dear" : ""}`}
+              title={i.price > funds ? `${i.price.toLocaleString()} coins: ${(i.price - funds).toLocaleString()} more than the house has` : undefined}
               onClick={() => useGame.setState({ placing: placing?.catalogId === i.id ? null : { catalogId: i.id, rot: 0 } })}
             >
               <ItemPicture item={i} />
               <span className="item-name">{i.name}</span>
-              <span className="item-price">${i.price}</span>
+              <span className="item-price">
+                <Icon.coin />
+                {i.price.toLocaleString()}
+              </span>
             </button>
           ))}
         </div>
@@ -558,7 +578,7 @@ function ToolPanel() {
                   ? "Switch to Live mode to play. Leave space around tables for both players."
                   : "Pick something, then click on the lot."}
         </p>
-      </div>
+      </Floating>
     );
   }
   return null;
@@ -571,7 +591,7 @@ function SelectionCard() {
   const opening = catalog.openings.get(o.catalogId);
   const item = opening ?? catalog.furniture.get(o.catalogId);
   return (
-    <div className="card selection-card">
+    <Floating id="selection" title={item?.name ?? "Selected"} className="selection-card">
       <div className="sel-head">
         {item && <ItemPicture item={item} size={false} />}
         <div>
@@ -591,11 +611,11 @@ function SelectionCard() {
             </>
           )}
         </button>
-        <button className="btn danger" onClick={deleteSelected}>
-          <Icon.trash /> Remove <kbd>Del</kbd>
+        <button className="btn danger" onClick={deleteSelected} title={item ? `Gives back ${item.price.toLocaleString()} coins` : undefined}>
+          <Icon.trash /> Remove{item ? <span className="refund">+{item.price.toLocaleString()}</span> : null} <kbd>Del</kbd>
         </button>
       </div>
-    </div>
+    </Floating>
   );
 }
 
@@ -606,15 +626,20 @@ function StarterOffer() {
     return Boolean(l) && !Object.keys(l!.walls).length && !Object.keys(l!.objects).length && !Object.keys(l!.tiles).length;
   });
   const online = useGame((s) => s.status === "online");
+  const view = useGame((s) => s.view);
+  // a fixed price, whatever the fresh IDs: work it out once per empty lot
+  const cost = useMemo(() => (empty && view ? costOf(view, starterHouseOp()) : null), [empty, view]);
   if (!empty) return null;
+  const short = cost !== null && view !== null && cost > view.funds;
   return (
-    <div className="card starter-card">
+    <Floating id="starter" title="Starter house" icon={<Icon.house />} className="starter-card">
       <div className="kicker">An empty lot</div>
       <p className="hand">Build from scratch, or start with a house you can change: two bedrooms, a bathroom, an open kitchen and living room, a garage and a pool.</p>
-      <button className="btn primary" disabled={!online} onClick={() => submit(starterHouseOp())}>
-        <Icon.house /> Build the starter house
+      <button className="btn primary" disabled={!online || short} onClick={() => submit(starterHouseOp())}>
+        <Icon.house /> Build the starter house{cost !== null ? ` · ${cost.toLocaleString()} coins` : ""}
       </button>
-    </div>
+      {short && <p className="hint hand">Its furniture costs more than the house has right now.</p>}
+    </Floating>
   );
 }
 
@@ -639,7 +664,7 @@ function CookingCard() {
   const amCooking = Boolean(me && avatars[me]?.use?.station);
   const name = (id: string) => (id === me ? "You" : (members.find((m) => m.id === id)?.name ?? "Someone"));
   return (
-    <div className="card cooking-card">
+    <Floating id="cooking" title={recipe.name} icon={<Icon.pot />} className="cooking-card">
       <div className="kicker">
         <Icon.pot /> Cooking
       </div>
@@ -677,7 +702,7 @@ function CookingCard() {
           Stop cooking
         </button>
       </div>
-    </div>
+    </Floating>
   );
 }
 

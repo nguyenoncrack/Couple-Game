@@ -1,4 +1,4 @@
-import type { Appearance, AppliedOp, Blueprint, ChatMessage, LifeState } from "@cg/shared";
+import type { Appearance, AppliedOp, Blueprint, ChatMessage, Day, LifeState, Visit, VisitResult } from "@cg/shared";
 
 /**
  * Everything the server keeps goes through two interfaces, so the same rooms and routes run on Node with one SQLite
@@ -70,6 +70,14 @@ export interface Directory {
   claimMember(houseId: string, tokenHash: string, accountId: string): Promise<MemberRow | null>;
   /** Leave a house. Returns how many members are left. */
   removeMember(houseId: string, accountId: string): Promise<number>;
+
+  /**
+   * Count a member's visit on their own calendar day, with what it brings (see visits.ts), checked and written
+   * together. Null if that day is already counted, comes before their last visit, or the member has no account.
+   */
+  recordVisit(houseId: string, memberId: string, day: Day): Promise<VisitResult | null>;
+  /** Every day an account has visited, oldest first. */
+  visitsFor(accountId: string): Promise<Visit[]>;
 }
 
 export interface HouseStore {

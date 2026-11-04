@@ -1,4 +1,4 @@
-import { AppearanceSchema, type Appearance, type AppliedOp, type Blueprint, type ChatMessage, type LifeState, type Op } from "@cg/shared";
+import { AppearanceSchema, visitReward, type Appearance, type AppliedOp, type Blueprint, type ChatMessage, type Day, type LifeState, type LoggedOp, type Visit } from "@cg/shared";
 import type { Row, Sql } from "./sql";
 import type { AccountRow, AddMemberResult, Directory, HouseRow, HouseStore, MemberRow, Snapshot } from "./store";
 
@@ -148,6 +148,30 @@ export class SqlDirectory implements Directory {
       return this.sql.get<{ n: number }>("select count(*) as n from members where house_id = ?", houseId)!.n;
     });
   }
+
+  async recordVisit(houseId: string, memberId: string, day: Day) {
+    return this.sql.tx(() => {
+      const m = this.sql.get<{ account_id: string | null }>("select account_id from members where id = ? and house_id = ?", memberId, houseId);
+      if (!m?.account_id) return null;
+      const before = this.sql.all<{ day: string }>("select day from visits where account_id = ?", m.account_id).map((r) => r.day);
+      const reward = visitReward(before, day);
+      if (!reward) return null;
+      this.sql.run(
+        "insert into visits (account_id, day, coins, streak, house_id, at) values (?, ?, ?, ?, ?, ?)",
+        m.account_id,
+        day,
+        reward.coins,
+        reward.streak,
+        houseId,
+        Date.now(),
+      );
+      return { day, ...reward };
+    });
+  }
+
+  async visitsFor(accountId: string) {
+    return this.sql.all<Visit>("select day, coins, streak from visits where account_id = ? order by day", accountId);
+  }
 }
 
 export class SqlHouseStore implements HouseStore {
@@ -182,7 +206,7 @@ export class SqlHouseStore implements HouseStore {
   async opsSince(houseId: string, after: number, limit: number) {
     return this.sql
       .all("select version, member_id, client_op_id, op from ops where house_id = ? and version > ? order by version limit ?", houseId, after, limit)
-      .map((r) => ({ version: r.version as number, by: r.member_id as string, clientOpId: r.client_op_id as string, op: JSON.parse(r.op as string) as Op }));
+      .map((r) => ({ version: r.version as number, by: r.member_id as string, clientOpId: r.client_op_id as string, op: JSON.parse(r.op as string) as LoggedOp }));
   }
 
   async findClientOp(houseId: string, memberId: string, clientOpId: string) {
