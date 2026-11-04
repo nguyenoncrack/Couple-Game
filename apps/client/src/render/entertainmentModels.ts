@@ -13,10 +13,10 @@ const color = (p: Record<string, unknown>, key: string, fallback: string) => typ
 export const ENTERTAINMENT_BUILDERS: Record<string, Builder> = {
   pingpong(k, w, d, p, m) {
     const W = w - 0.2, D = d - 0.35, H = 0.76;
-    const top = m(color(p, "top", "#397d87"));
-    const frame = m("#4b5558");
+    const top = m(color(p, "top", "#397d87"), "paint");
+    const frame = m("#4b5558", "metal");
     const white = m(IVORY);
-    const rubber = m("#393b38");
+    const rubber = m("#393b38", "rubber");
     // Two leaves, a dark apron and a wheeled steel undercarriage.
     for (const s of [-1, 1]) {
       k.box(frame, [s * W / 4, H - 0.046, 0], [W / 2 - 0.008, 0.075, D]);
@@ -38,7 +38,7 @@ export const ENTERTAINMENT_BUILDERS: Record<string, Builder> = {
       k.box(frame, [0, H - 0.015, s * (D / 2 + 0.025)], [0.07, 0.05, 0.065], { outline: 0.004 });
       k.add("cyl8", frame, [0, H + 0.08, s * (D / 2 + 0.025)], [0.025, 0.2, 0.025], { outline: 0.004 });
     }
-    const thread = m("#566665");
+    const thread = m("#566665", "fabric");
     for (let i = 0; i <= 28; i++) k.box(thread, [0, H + 0.085, -D / 2 + i * D / 28], [0.003, 0.15, 0.003], { outline: false });
     for (let i = 0; i <= 4; i++) k.box(thread, [0, H + 0.01 + i * 0.0375, 0], [0.003, 0.003, D + 0.04], { outline: false });
     k.box(white, [0, H + 0.17, 0], [0.014, 0.012, D + 0.07], { outline: false });
@@ -50,15 +50,15 @@ export const ENTERTAINMENT_BUILDERS: Record<string, Builder> = {
   },
 
   gameconsole(k, _w, _d, p, m) {
-    const wood = m(color(p, "wood", WOOD), "wood");
+    const wood = m(color(p, "wood", WOOD), "timber");
     const dark = m(INK);
-    const shell = m(color(p, "body", IVORY));
+    const shell = m(color(p, "body", IVORY), "paint");
     // A small open media cabinet makes the console placeable under the existing floor-item rules.
     for (const x of [-0.33, 0.33]) for (const z of [-0.24, 0.24]) k.add("cyl8", dark, [x, 0.04, z], [0.035, 0.08, 0.035], { outline: 0.004 });
     k.box(wood, [0, 0.1, 0], [0.8, 0.04, 0.62]);
     k.box(wood, [0, 0.495, 0], [0.82, 0.03, 0.64]);
     for (const s of [-1, 1]) k.box(wood, [s * 0.38, 0.295, 0], [0.04, 0.39, 0.62]);
-    k.box(m("#665244", "wood"), [0, 0.295, -0.29], [0.72, 0.39, 0.04]);
+    k.box(m("#665244", "timber"), [0, 0.295, -0.29], [0.72, 0.39, 0.04]);
     k.box(wood, [0, 0.29, 0], [0.72, 0.025, 0.58]);
     for (let i = 0; i < 5; i++) {
       const x = -0.28 + i * 0.052;
@@ -83,11 +83,11 @@ export const ENTERTAINMENT_BUILDERS: Record<string, Builder> = {
 
   blackjack(k, w, d, p, m) {
     const W = w - 0.2, D = d - 0.16;
-    const wood = m(color(p, "wood", WOOD), "wood");
+    const wood = m(color(p, "wood", WOOD), "timber");
     const felt = m(color(p, "felt", "#568a76"), "fabric");
     const rail = m("#655047", "fabric");
-    const frame = m("#4c514a");
-    const gold = m("#d9c78f");
+    const frame = m("#4c514a", "metal");
+    const gold = m("#d9c78f", "metal");
     for (const x of [-0.58, 0.58]) for (const z of [-0.22, 0.22]) {
       k.add("cyl8", frame, [x, 0.36, z], [0.045, 0.72, 0.045]);
       k.add("cyl", m("#3d403a"), [x, 0.015, z], [0.075, 0.03, 0.075], { outline: 0.004 });
@@ -130,16 +130,16 @@ export const ENTERTAINMENT_BUILDERS: Record<string, Builder> = {
 
 export function paddle(k: Kit, m: Mat, pos: [number, number, number], turn: number, tone: string) {
   k.at(pos, turn, () => {
-    const wood = m("#d3b081", "wood");
+    const wood = m("#d3b081", "timber");
     k.add("cyl", wood, [0, 0, 0], [0.19, 0.025, 0.21], { outline: 0.003 });
-    k.add("cyl", m(tone), [0, 0.016, 0], [0.18, 0.008, 0.20], { outline: false });
+    k.add("cyl", m(tone, "rubber"), [0, 0.016, 0], [0.18, 0.008, 0.20], { outline: false });
     k.add("roundbox", wood, [0, -0.002, 0.14], [0.045, 0.024, 0.15], { outline: 0.003 });
     k.box(m("#836447"), [0, 0.012, 0.15], [0.008, 0.003, 0.12], { outline: false });
   });
 }
 export function controller(k: Kit, m: Mat, pos: [number, number, number], turn: number) {
   k.at(pos, turn, () => {
-    const white = m(IVORY), black = m(INK);
+    const white = m(IVORY, "paint"), black = m(INK, "rubber");
     k.add("soft", white, [0, 0.045, 0], [0.17, 0.065, 0.095], { outline: 0.003 });
     for (const s of [-1, 1]) k.add("soft", white, [s * 0.055, 0.024, 0.035], [0.065, 0.072, 0.1], { rot: [0, s * 0.2, s * -0.16], outline: 0.003 });
     k.add("roundbox", black, [0, 0.077, 0], [0.12, 0.013, 0.066], { outline: false });
@@ -152,16 +152,16 @@ export function controller(k: Kit, m: Mat, pos: [number, number, number], turn: 
 }
 function cardDeck(k: Kit, m: Mat, pos: [number, number, number], turn: number) {
   k.at(pos, turn, () => {
-    k.add("roundbox", m(IVORY), [0, 0.0225, 0], [0.115, 0.045, 0.165], { outline: 0.002 });
+    k.add("roundbox", m(IVORY, "paper"), [0, 0.0225, 0], [0.115, 0.045, 0.165], { outline: 0.002 });
     for (let i = 1; i < 6; i++) k.box(m("#b5afa3"), [0, i * 0.006, 0.083], [0.105, 0.001, 0.001], { outline: false });
-    k.add("roundbox", m("#ac605a"), [0, 0.046, 0], [0.108, 0.003, 0.157], { outline: false });
+    k.add("roundbox", m("#ac605a", "paper"), [0, 0.046, 0], [0.108, 0.003, 0.157], { outline: false });
     for (let x = -1; x <= 1; x++) for (let z = -2; z <= 2; z++) k.box(m("#ead9bb"), [x * 0.025, 0.048, z * 0.025], [0.011, 0.001, 0.011], { rot: [0, Math.PI / 4, 0], outline: false });
   });
 }
 function playingCard(k: Kit, m: Mat, pos: [number, number, number], turn: number, rank: "A" | "K", suit: "spade" | "heart") {
   k.at(pos, turn, () => {
     const ink = m(suit === "heart" ? "#b4544a" : "#343b3c");
-    k.add("roundbox", m("#fdf9ee"), [0, 0.003, 0], [0.112, 0.006, 0.166], { outline: 0.0015 });
+    k.add("roundbox", m("#fdf9ee", "paper"), [0, 0.003, 0], [0.112, 0.006, 0.166], { outline: 0.0015 });
     k.add(suit === "heart" ? HEART : SPADE, ink, [0, 0.0068, 0], [0.055, 1, 0.055], { outline: false });
     if (suit === "spade") k.box(ink, [0, 0.0069, 0.025], [0.011, 0.001, 0.022], { outline: false });
     for (const angle of [0, Math.PI]) k.at([0, 0, 0], angle, () => {

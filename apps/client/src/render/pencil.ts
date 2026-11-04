@@ -1,11 +1,12 @@
 import * as THREE from "three";
+import { itemFinishesGlsl, materialDetailGlsl } from "./materialDetail";
 
 /**
  * Pencil rendering, carried over from the Museum of Nguyen and tuned for interiors.
  *
  * Every surface uses `pencilMaterial`: a soft tone on warm paper, graphite crosshatching that builds up in darker
- * areas, faint paper grain, and a wobbly graphite rim on curved edges. Hatching is computed from world position
- * (triplanar), so it stays glued to surfaces while the camera moves. Finishes (boards, tile, plaster, fabric…) are
+ * areas, faint paper grain, and a wobbly graphite rim on curved edges. Hatching and item detail use object-local
+ * coordinates, so they stay glued to surfaces while the camera, furniture or characters move. Finishes (boards, tile, plaster, fabric…) are
  * drawn as pencil lines on top. Outlines are inverted hulls (`outlineMaterial`).
  */
 
@@ -80,11 +81,13 @@ const pencilVertex = /* glsl */ `
   #endif
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
-  #if defined(FINISH) && (FINISH == 11 || FINISH == 15)
+  varying vec3 vSurfacePos;
+  varying vec3 vSurfaceNormal;
+  #if defined(FINISH) && (FINISH == 11 || FINISH == 15 || FINISH == 18)
     varying vec2 vUv;
   #endif
   void main() {
-    #if defined(FINISH) && (FINISH == 11 || FINISH == 15)
+    #if defined(FINISH) && (FINISH == 11 || FINISH == 15 || FINISH == 18)
       vUv = uv;
     #endif
     #ifdef USE_INSTANCING
@@ -96,6 +99,8 @@ const pencilVertex = /* glsl */ `
     #ifdef SWAY
       world.xyz += sway(world.xyz);
     #endif
+    vSurfacePos = position;
+    vSurfaceNormal = normal;
     vWorldPos = world.xyz;
     vWorldNormal = normalize(mat3(m) * normal);
     gl_Position = projectionMatrix * viewMatrix * world;
@@ -157,11 +162,14 @@ const pencilFragment = /* glsl */ `
   uniform float uHeightOn;
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
+  varying vec3 vSurfacePos;
+  varying vec3 vSurfaceNormal;
   uniform float uFogScale;
-  #if defined(FINISH) && (FINISH == 11 || FINISH == 15)
+  #if defined(FINISH) && (FINISH == 11 || FINISH == 15 || FINISH == 18)
     varying vec2 vUv;
   #endif
   ${shared}
+  ${materialDetailGlsl}
   ${fogGlsl}
 
   // Lighting happens in linear light; the pencil work on top of it in the page's sRGB.
@@ -218,35 +226,42 @@ const pencilFragment = /* glsl */ `
 
   void main() {
     vec3 n = normalize(vWorldNormal);
+    vec3 shapeNormal = n;
     vec3 an = abs(n);
-    vec2 p = an.y > an.x && an.y > an.z ? vWorldPos.xz : (an.x > an.z ? vWorldPos.zy : vWorldPos.xy);
+    // Item-local coordinates follow furniture and walking characters, even while moved or rotated.
+    vec3 surface = vSurfacePos;
+    vec3 tn = normalize(vSurfaceNormal);
+    vec3 ta = abs(tn);
+    vec2 p = ta.y > ta.x && ta.y > ta.z ? surface.xz : (ta.x > ta.z ? surface.zy : surface.xy);
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
 
-    vec3 tone = uTone;
+    vec3 tone = uTone * (0.96 + noise(surface * 3.2) * 0.08);
     float lines = 0.0;
+    float relief = 0.0;
     // the normal the light glints off (water ripples bend it), and how glossy the surface is
     vec3 sn = n;
     float spec = uSpec;
     float shine = uShine;
     vec3 glow = vec3(0.0);
     #ifdef FINISH
-      vec2 side = normalize(vec2(-n.z, n.x) + vec2(1e-4, 0.0));
-      vec2 fp = an.y > 0.72 ? vWorldPos.xz : vec2(dot(vWorldPos.xz, side), vWorldPos.y);
+      vec2 side = normalize(vec2(-tn.z, tn.x) + vec2(1e-4, 0.0));
+      vec2 fp = ta.y > 0.72 ? surface.xz : vec2(dot(surface.xz, side), surface.y);
       float tv = 0.0;
       #if FINISH == 1
         // plaster: soft cloudy patches, the odd hairline crack
-        tv = (noise(vWorldPos * 0.6) - 0.5) * 0.06 + (noise(vWorldPos * 2.7) - 0.5) * 0.025;
+        tv = (noise(surface * 0.6) - 0.5) * 0.075 + (noise(surface * 2.7) - 0.5) * 0.045;
+        relief = noise(surface * 14.0) * 0.0007 * detailAt(fp, 14.0);
         lines = strokes(fp * vec2(0.35, 0.2), 1.1, 0.6, 0.04, vec3(4.0, 8.0, 0.0)) * step(0.86, noise(vWorldPos * 0.5 + 2.0)) * 0.3;
       #elif FINISH == 2
         // wood: boards with seams, staggered butt joints and a restrained grain
         float bw = 0.18;
         float row = floor(fp.y / bw);
-        float seam = 1.0 - smoothstep(0.0, 0.02, abs(fract(fp.y / bw) - 0.5) - 0.46);
+        float seam = fineLine(fp.y / bw, 0.018);
         float blen = 1.4 + hash(vec3(row, 3.0, 1.0)) * 0.8;
-        float butt = 1.0 - smoothstep(0.0, 0.02, abs(fract(fp.x / blen + hash(vec3(row, 9.0, 2.0))) - 0.5) - 0.485);
-        float grain2 = strokes(vec2(fp.x * 0.35, fp.y * 2.6 + noise(vec3(fp * 1.7, row)) * 0.7), 0.0, 2.6, 0.07, vec3(row, 2.0, 0.0));
-        float knot = 1.0 - smoothstep(0.015, 0.03, length(fract(vec2(fp.x / blen * 2.3, fp.y / bw) + hash(vec3(row, 1.0, 5.0))) - 0.5) * 0.4);
-        lines = max(max(seam * 0.5, butt * 0.4), max(grain2 * 0.14, knot * step(0.75, hash(vec3(row, floor(fp.x / blen), 4.0))) * 0.3));
+        float butt = fineLine(fp.x / blen + hash(vec3(row, 9.0, 2.0)), 0.007);
+        float grain2 = max(0.0, timberGrain(fp));
+        lines = max(seam * 0.5, butt * 0.4) + grain2 * 0.24;
+        relief = grain2 * 0.00025;
         tv = (hash(vec3(row, floor(fp.x / blen + hash(vec3(row, 9.0, 2.0))), 3.0)) - 0.5) * 0.1;
       #elif FINISH == 3
         // stone: ashlar courses of uneven blocks
@@ -254,8 +269,8 @@ const pencilFragment = /* glsl */ `
         float row = floor(fp.y / ch);
         float len = 0.5 + hash(vec3(row, 5.0, 1.0)) * 0.45;
         float cx = (fp.x + hash(vec3(row, 2.0, 7.0)) * 3.0) / len;
-        float mh = 1.0 - smoothstep(0.0, 0.035, abs(fract(fp.y / ch) - 0.5) - 0.44);
-        float mv = 1.0 - smoothstep(0.0, 0.06, abs(fract(cx) - 0.5) - 0.43);
+        float mh = fineLine(fp.y / ch, 0.027);
+        float mv = fineLine(cx, 0.025);
         lines = max(mh, mv) * 0.7;
         tv = (hash(vec3(row, floor(cx), 9.0)) - 0.5) * 0.12 + (noise(vWorldPos * 2.2) - 0.5) * 0.04;
       #elif FINISH == 4
@@ -263,15 +278,14 @@ const pencilFragment = /* glsl */ `
         vec2 bq = vec2(fp.x / 0.42, fp.y / 0.18);
         float br = floor(bq.y);
         bq.x += mod(br, 2.0) * 0.5;
-        float mh = 1.0 - smoothstep(0.0, 0.06, abs(fract(bq.y) - 0.5) - 0.42);
-        float mv = 1.0 - smoothstep(0.0, 0.05, abs(fract(bq.x) - 0.5) - 0.45);
+        float mh = fineLine(bq.y, 0.032);
+        float mv = fineLine(bq.x, 0.024);
         lines = max(mh, mv) * 0.55;
         tv = (hash(vec3(floor(bq), 4.0)) - 0.5) * 0.14;
       #elif FINISH == 5
         // checker tile: square tiles with grout, every other one a shade darker, a glazed sheen
         vec2 tq = fp / 0.33;
-        vec2 tf = abs(fract(tq) - 0.5);
-        float grout = 1.0 - smoothstep(0.0, 0.03, max(tf.x, tf.y) - 0.45);
+        float grout = max(fineLine(tq.x, 0.025), fineLine(tq.y, 0.025));
         lines = grout * 0.45;
         float alt = mod(floor(tq.x) + floor(tq.y), 2.0);
         tv = -alt * 0.13 + (hash(vec3(floor(tq), 3.0)) - 0.5) * 0.04;
@@ -281,8 +295,8 @@ const pencilFragment = /* glsl */ `
         vec2 bq = vec2(fp.x / 0.3, fp.y / 0.22);
         float br = floor(bq.y);
         bq.x += mod(br, 2.0) * 0.5 + hash(vec3(br, 3.0, 1.0)) * 0.2;
-        float mh = 1.0 - smoothstep(0.0, 0.08, abs(fract(bq.y) - 0.5) - 0.4);
-        float mv = 1.0 - smoothstep(0.0, 0.08, abs(fract(bq.x) - 0.5) - 0.4);
+        float mh = fineLine(bq.y, 0.04);
+        float mv = fineLine(bq.x, 0.035);
         lines = max(mh, mv) * 0.45;
         float hv = hash(vec3(floor(bq), 2.0));
         tv = (hv - 0.5) * 0.1 - step(0.93, hv) * 0.08;
@@ -294,13 +308,15 @@ const pencilFragment = /* glsl */ `
       #elif FINISH == 8
         // carpet: soft pile with short scattered strokes
         tv = (noise(vWorldPos * 3.0) - 0.5) * 0.06 + (noise(vWorldPos * 14.0) - 0.5) * 0.04;
-        lines = strokes(fp * 3.0, 0.9, 1.4, 0.05, vec3(6.0, 1.0, 0.0)) * 0.16;
+        float pile = clothWeave(fp * 0.75);
+        lines = pile * 0.32;
+        relief = pile * 0.001;
       #elif FINISH == 9
-        // fabric: a fine weave
-        float weft = strokes(fp, 0.0, 22.0, 0.18, vec3(2.0, 5.0, 0.0));
-        float warp = strokes(fp, 1.5708, 22.0, 0.18, vec3(7.0, 3.0, 0.0));
-        lines = max(weft, warp) * 0.14;
-        tv = (noise(vWorldPos * 5.0) - 0.5) * 0.05;
+        // Woven upholstery: readable yarns near the camera and a soft linen variation farther away.
+        float yarn = clothWeave(fp);
+        lines = yarn * 0.4;
+        relief = yarn * 0.00025;
+        tv = (noise(surface * 5.0) - 0.5) * 0.11 + (noise(surface * 18.0) - 0.5) * 0.025 * detailAt(fp, 18.0);
       #elif FINISH == 10
         // lawn: broad, slow drifts between deeper and fresher greens, and a scatter of short blades
         float n0 = noise(vWorldPos * 0.03 + 3.0);
@@ -341,6 +357,7 @@ const pencilFragment = /* glsl */ `
         // the sky seen in the surface, stronger at a glance
         float fres = pow(1.0 - max(dot(sn, viewDir), 0.0), 3.0);
         glow = vec3(0.86, 0.94, 1.0) * (0.12 + fres * 0.5);
+      ${itemFinishesGlsl}
       #elif FINISH == 17
         // shingles: level courses stepping down the slope, tabs staggered course to course, a little shadow
         // under each course's lower edge
@@ -364,6 +381,11 @@ const pencilFragment = /* glsl */ `
         lines = strokes(vec2(fp.x * 0.05, vWorldPos.y * 0.12), 0.25, 1.0, 0.08, vec3(5.0, 2.0, 0.0)) * (1.0 - snow) * (1.0 - trees) * 0.2;
       #endif
       tone *= 1.0 + tv;
+    #endif
+    #if defined(FINISH) && (FINISH == 1 || FINISH == 2 || FINISH == 8 || FINISH == 9 || FINISH == 18 || FINISH == 19 || FINISH == 20 || FINISH == 21 || FINISH == 23 || FINISH == 24)
+      // Compile-time choice: derivatives must also run between individual yarns/pores.
+      n = texturedNormal(n, vWorldPos, relief);
+      sn = n;
     #endif
     vec3 base = mix(uPaper, tone, 0.96);
 
@@ -403,13 +425,15 @@ const pencilFragment = /* glsl */ `
     float lfw = length(fwidth(p)) * 6.0;
     float marks = lines * (1.0 - smoothstep(0.3, 1.0, lfw));
 
-    float facing = abs(dot(n, viewDir));
+    // Microtexture affects light, not the drawn contour of the underlying shape.
+    float facing = abs(dot(shapeNormal, viewDir));
     float rimEdge = 0.22 + noise(vWorldPos * 4.0) * 0.12;
-    float curve = smoothstep(0.004, 0.03, length(fwidth(n)));
+    float curve = smoothstep(0.004, 0.03, length(fwidth(shapeNormal)));
     float rim = (1.0 - smoothstep(rimEdge, rimEdge + 0.08, facing)) * uRim * curve;
 
-    float grain = noise(vWorldPos * 38.0) * 0.01 + noise(vWorldPos * 9.0) * 0.008;
-    col -= grain;
+    float grainFade = detailAt(p, 38.0);
+    float grain = (noise(surface * 38.0) - 0.5) * 0.024 * grainFade + (noise(surface * 9.0) - 0.5) * 0.016 * detailAt(p, 9.0);
+    col += grain;
     // shading strokes take on a cool graphite, the finish's own lines a darker version of the surface
     col = mix(col, uInk * vec3(0.94, 0.98, 1.08), h * 0.12);
     col = mix(col, col * 0.62, marks * 0.55);
@@ -435,7 +459,7 @@ const pencilFragment = /* glsl */ `
   }
 `;
 
-const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10, water: 11, metal: 12, glass: 13, paint: 14, lake: 15, mountain: 16, shingle: 17 } as const;
+const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10, water: 11, metal: 12, glass: 13, paint: 14, lake: 15, mountain: 16, shingle: 17, timber: 18, ceramic: 19, mineral: 20, foliage: 21, paper: 22, rubber: 23, clay: 24 } as const;
 export type Finish = keyof typeof FINISHES;
 
 /**
@@ -444,6 +468,9 @@ export type Finish = keyof typeof FINISHES;
  */
 const GLOSS: Partial<Record<Finish | "clear", [number, number]>> = {
   wood: [0.12, 22],
+  timber: [0.13, 26],
+  ceramic: [0.32, 70],
+  mineral: [0.16, 32],
   shingle: [0.06, 16],
   checker: [0.3, 60],
   water: [1, 150],
@@ -518,6 +545,7 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
       defines: { ...(opts.finish ? { FINISH: FINISHES[opts.finish] } : {}), ...(opts.sway ? { SWAY: 1 } : {}) },
     });
     m.userData.sway = opts.sway ?? 0;
+    m.userData.finish = opts.finish;
     cache.set(key, m);
   }
   return m;

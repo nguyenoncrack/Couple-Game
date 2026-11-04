@@ -89,7 +89,7 @@ const sofaLike = (seatsOverride?: number): Builder => (k, w, d, p, m) => {
   const fabric = str(p, "fabric", "#c9785d");
   const fab = m(fabric, "fabric");
   const fabD = m(shade(fabric, 0.86), "fabric");
-  const leg = m(str(p, "legs", "#6b4c33"), "wood");
+  const leg = m(str(p, "legs", "#6b4c33"), "timber");
   const W = w - 0.12;
   const D = d - 0.14;
   const armW = 0.17;
@@ -121,8 +121,8 @@ const BUILDERS: Record<string, Builder> = {
 
   table: (k, w, d, p, m) => {
     const wood = str(p, "wood", "#b98a5a");
-    const top = m(wood, "wood");
-    const legM = m(shade(wood, 0.85), "wood");
+    const top = m(wood, "timber");
+    const legM = m(shade(wood, 0.85), "timber");
     const h = num(p, "height", 0.75);
     const inset = num(p, "inset", 0.06);
     const W = w - inset * 2;
@@ -136,8 +136,8 @@ const BUILDERS: Record<string, Builder> = {
       if (p.books) {
         const colors = ["#a6564a", "#5d7f8f", "#d9b45a"];
         colors.forEach((c, i) => k.box(m(c), [-W / 4, h + 0.02 + i * 0.035, 0], [0.28 - i * 0.03, 0.033, 0.2 - i * 0.02], { rot: [0, i * 0.25 - 0.2, 0], outline: 0.006 }));
-        k.add("cyl", m(PORCELAIN), [W / 4, h + 0.05, 0.04], [0.08, 0.1, 0.08], { outline: 0.006 });
-        k.add("torus", m(PORCELAIN), [W / 4 + 0.05, h + 0.05, 0.04], [0.04, 0.04, 0.04], { rot: [0, 0, Math.PI / 2], outline: false });
+        k.add("cyl", m(PORCELAIN, "ceramic"), [W / 4, h + 0.05, 0.04], [0.08, 0.1, 0.08], { outline: 0.006 });
+        k.add("torus", m(PORCELAIN, "ceramic"), [W / 4 + 0.05, h + 0.05, 0.04], [0.04, 0.04, 0.04], { rot: [0, 0, Math.PI / 2], outline: false });
       }
     } else {
       // dining table: a runner and a small vase
@@ -148,7 +148,7 @@ const BUILDERS: Record<string, Builder> = {
   },
 
   chair: (k, w, d, p, m) => {
-    const wood = m(str(p, "wood", "#a57a50"), "wood");
+    const wood = m(str(p, "wood", "#a57a50"), "timber");
     const seat = m(str(p, "seat", "#d9c7a7"), "fabric");
     const S = Math.min(w, d) * 0.46;
     legs(k, wood, S, S, 0.45, 0.022, 0.03, "box");
@@ -160,7 +160,7 @@ const BUILDERS: Record<string, Builder> = {
 
   tvstand: (k, w, d, p, m) => {
     const wood = str(p, "wood", "#8c6646");
-    const body = m(wood, "wood");
+    const body = m(wood, "timber");
     const W = w - 0.2;
     const D = 0.45;
     const z = -d / 2 + D / 2 + 0.04;
@@ -168,7 +168,7 @@ const BUILDERS: Record<string, Builder> = {
     k.box(body, [0, 0.33, z], [W, 0.46, D]);
     for (let i = 0; i < 3; i++) {
       const x = -W / 2 + (W / 3) * (i + 0.5);
-      k.box(m(shade(wood, 1.08), "wood"), [x, 0.33, z + D / 2 + 0.005], [W / 3 - 0.04, 0.38, 0.01], { outline: 0.006 });
+      k.box(m(shade(wood, 1.08), "timber"), [x, 0.33, z + D / 2 + 0.005], [W / 3 - 0.04, 0.38, 0.01], { outline: 0.006 });
       knob(k, m, x, 0.46, z + D / 2 + 0.02);
     }
     // the TV
@@ -177,14 +177,14 @@ const BUILDERS: Record<string, Builder> = {
     k.box(m("#3d4246"), [0, 1.08, z], [W * 0.75, 0.62, 0.05]);
     k.box(m("#56646b"), [0, 1.08, z + 0.026], [W * 0.75 - 0.05, 0.57, 0.004], { outline: false });
     // a little plant on the end
-    k.add("cyl", m("#c87f5a"), [W / 2 - 0.15, 0.63, z], [0.14, 0.14, 0.14]);
-    k.add("blob", m("#7fa36a"), [W / 2 - 0.15, 0.78, z], [0.22, 0.18, 0.22]);
+    k.add("cyl", m("#c87f5a", "clay"), [W / 2 - 0.15, 0.63, z], [0.14, 0.14, 0.14]);
+    k.add("blob", m("#7fa36a", "foliage"), [W / 2 - 0.15, 0.78, z], [0.22, 0.18, 0.22]);
   },
 
   bookshelf: (k, w, d, p, m, seed) => {
     const wood = str(p, "wood", "#a57a50");
-    const frame = m(wood, "wood");
-    const back = m(shade(wood, 0.8), "wood");
+    const frame = m(wood, "timber");
+    const back = m(shade(wood, 0.8), "timber");
     const W = w - 0.12;
     const D = 0.34;
     const H = 1.9;
@@ -207,14 +207,14 @@ const BUILDERS: Record<string, Builder> = {
           continue;
         }
         const lean = r() < 0.08 ? 0.25 : 0;
-        k.box(m(palette[Math.floor(r() * palette.length)]!), [x + bw / 2, y + 0.02 + bh / 2, z + 0.02], [bw, bh, D - 0.08], { rot: [0, 0, lean], outline: 0.005 });
+        k.box(m(palette[Math.floor(r() * palette.length)]!, "paper"), [x + bw / 2, y + 0.02 + bh / 2, z + 0.02], [bw, bh, D - 0.08], { rot: [0, 0, lean], outline: 0.005 });
         x += bw + 0.004 + (lean ? 0.05 : 0);
       }
     }
   },
 
   lamp: (k, _w, _d, p, m) => {
-    const metal = m("#6f6a60");
+    const metal = m("#6f6a60", "metal");
     k.add("cyl", metal, [0, 0.02, 0], [0.32, 0.04, 0.32]);
     k.add("cyl8", metal, [0, 0.8, 0], [0.03, 1.56, 0.03]);
     k.add("cone", m(str(p, "shade", "#f2dca8"), "fabric"), [0, 1.58, 0], [0.42, 0.34, 0.42]);
@@ -223,10 +223,10 @@ const BUILDERS: Record<string, Builder> = {
 
   plant: (k, _w, _d, p, m, seed) => {
     const pot = str(p, "pot", "#c87f5a");
-    k.add("cone", m(pot), [0, 0.2, 0], [0.42, 0.4, 0.42], { rot: [Math.PI, 0, 0] });
-    k.add("torus", m(shade(pot, 0.9)), [0, 0.4, 0], [0.42, 0.42, 0.42], { rot: [Math.PI / 2, 0, 0], outline: false });
+    k.add("cone", m(pot, "clay"), [0, 0.2, 0], [0.42, 0.4, 0.42], { rot: [Math.PI, 0, 0] });
+    k.add("torus", m(shade(pot, 0.9), "clay"), [0, 0.4, 0], [0.42, 0.42, 0.42], { rot: [Math.PI / 2, 0, 0], outline: false });
     k.add("cyl", m("#6b5141"), [0, 0.39, 0], [0.38, 0.02, 0.38], { outline: false });
-    const trunk = m("#7a5c43");
+    const trunk = m("#7a5c43", "timber");
     k.add("cyl8", trunk, [0, 0.96, 0], [0.04, 1.14, 0.04]);
     const r = rng(seed);
     const leaves = str(p, "leaves", "#7fa36a");
@@ -236,7 +236,7 @@ const BUILDERS: Record<string, Builder> = {
       const rad = 0.08 + (1 - (y - 0.7) / 0.85) * 0.18 + r() * 0.06;
       const leaf = new THREE.Vector3(Math.cos(a) * rad, y, Math.sin(a) * rad);
       rod(k, trunk, new THREE.Vector3(0, Math.min(y - 0.08, 1.5), 0), leaf, 0.012);
-      k.add("blob", m(shade(leaves, 0.85 + r() * 0.3)), leaf.toArray(), [0.2, 0.06, 0.13], { rot: [r() * 0.6 - 0.3, a, 0.4 + r() * 0.4], outline: 0.008 });
+      k.add("blob", m(shade(leaves, 0.85 + r() * 0.3), "foliage"), leaf.toArray(), [0.2, 0.06, 0.13], { rot: [r() * 0.6 - 0.3, a, 0.4 + r() * 0.4], outline: 0.008 });
     }
   },
 
@@ -255,14 +255,14 @@ const BUILDERS: Record<string, Builder> = {
 
   bed: (k, w, d, p, m) => {
     const wood = str(p, "wood", "#a57a50");
-    const frame = m(wood, "wood");
+    const frame = m(wood, "timber");
     const W = w - 0.14;
     const D = d - 0.1;
-    legs(k, m(shade(wood, 0.8), "wood"), W, D, 0.14, 0.03, 0.05, "box");
+    legs(k, m(shade(wood, 0.8), "timber"), W, D, 0.14, 0.03, 0.05, "box");
     k.box(frame, [0, 0.22, 0.03], [W, 0.16, D - 0.08]);
     // headboard with panels
     k.box(frame, [0, 0.55, -D / 2 + 0.04], [W, 1.0, 0.07]);
-    for (let i = 0; i < 3; i++) k.box(m(shade(wood, 1.08), "wood"), [-W / 3 + (i * W) / 3, 0.62, -D / 2 + 0.08], [W / 3 - 0.08, 0.5, 0.012], { outline: 0.006 });
+    for (let i = 0; i < 3; i++) k.box(m(shade(wood, 1.08), "timber"), [-W / 3 + (i * W) / 3, 0.62, -D / 2 + 0.08], [W / 3 - 0.08, 0.5, 0.012], { outline: 0.006 });
     k.box(frame, [0, 0.3, D / 2 - 0.03], [W, 0.32, 0.06]);
     k.add("soft", m("#f3eee3", "fabric"), [0, 0.37, 0.02], [W - 0.08, 0.2, D - 0.18]);
     const blanket = str(p, "blanket", "#8fa7c4");
@@ -274,12 +274,12 @@ const BUILDERS: Record<string, Builder> = {
 
   nightstand: (k, w, d, p, m) => {
     const wood = str(p, "wood", "#a57a50");
-    const body = m(wood, "wood");
+    const body = m(wood, "timber");
     const z = -d / 2 + 0.28;
     k.at([0, 0, z], 0, () => legs(k, m(shade(wood, 0.8)), 0.48, 0.42, 0.08, 0.02, 0.04));
     k.box(body, [0, 0.33, z], [0.48, 0.5, 0.42]);
     for (let i = 0; i < 2; i++) {
-      k.box(m(shade(wood, 1.08), "wood"), [0, 0.22 + i * 0.22, z + 0.215], [0.42, 0.18, 0.012], { outline: 0.006 });
+      k.box(m(shade(wood, 1.08), "timber"), [0, 0.22 + i * 0.22, z + 0.215], [0.42, 0.18, 0.012], { outline: 0.006 });
       knob(k, m, 0, 0.22 + i * 0.22, z + 0.23);
     }
     // a small lamp and a book
@@ -295,14 +295,14 @@ const BUILDERS: Record<string, Builder> = {
     const W = w;
     k.box(m(INK_DARK), [0, 0.05, z - 0.03], [W - 0.04, 0.1, D - 0.06]);
     if (p.sink) {
-      k.box(m(cab, "wood"), [0, 0.395, z - 0.01], [W, 0.59, D - 0.02]);
-      k.add(rim(W, D - 0.02, 0.5, 0.36, 0.17), m(cab, "wood"), [0, 0.775, z + 0.03], 1);
-    } else k.box(m(cab, "wood"), [0, 0.48, z - 0.01], [W, 0.76, D - 0.02]);
+      k.box(m(cab, "timber"), [0, 0.395, z - 0.01], [W, 0.59, D - 0.02]);
+      k.add(rim(W, D - 0.02, 0.5, 0.36, 0.17), m(cab, "timber"), [0, 0.775, z + 0.03], 1);
+    } else k.box(m(cab, "timber"), [0, 0.48, z - 0.01], [W, 0.76, D - 0.02]);
     for (const s of [-1, 1]) {
-      k.box(m(shade(cab, 1.07), "wood"), [s * (W / 4), 0.48, z + D / 2 - 0.01], [W / 2 - 0.04, 0.68, 0.015], { outline: 0.006 });
+      k.box(m(shade(cab, 1.07), "timber"), [s * (W / 4), 0.48, z + D / 2 - 0.01], [W / 2 - 0.04, 0.68, 0.015], { outline: 0.006 });
       k.box(m(METAL, "metal"), [s * 0.06, 0.7, z + D / 2 + 0.01], [0.015, 0.14, 0.02], { outline: 0.005 });
     }
-    const top = m(str(p, "top", "#e9e3d6"), "stone");
+    const top = m(str(p, "top", "#e9e3d6"), "mineral");
     if (p.sink) k.add(rim(W, D + 0.02, 0.5, 0.36, 0.05), top, [0, 0.885, z + 0.03], 1);
     else k.box(top, [0, 0.885, z + 0.01], [W, 0.05, D + 0.02]);
     if (p.sink) {
@@ -316,13 +316,13 @@ const BUILDERS: Record<string, Builder> = {
       k.box(steel, [0, 1.07, z - D / 2 + 0.16], [0.03, 0.03, 0.18], { outline: 0.006 });
     } else {
       // a chopping board and a jar
-      k.box(m("#d0a46e", "wood"), [-0.12, 0.92, z + 0.04], [0.36, 0.02, 0.24], { rot: [0, 0.15, 0], outline: 0.006 });
+      k.box(m("#d0a46e", "timber"), [-0.12, 0.92, z + 0.04], [0.36, 0.02, 0.24], { rot: [0, 0.15, 0], outline: 0.006 });
       k.add("cyl", m("#e8dcc4"), [0.28, 0.98, z - 0.14], [0.1, 0.16, 0.1], { outline: 0.006 });
     }
   },
 
   stove: (k, w, d, p, m) => {
-    const body = m(str(p, "body", "#ece6da"));
+    const body = m(str(p, "body", "#ece6da"), "paint");
     const D = 0.64;
     const z = -d / 2 + D / 2;
     const W = Math.min(w, 0.78);
@@ -346,7 +346,7 @@ const BUILDERS: Record<string, Builder> = {
   },
 
   fridge: (k, w, d, p, m) => {
-    const body = m(str(p, "body", "#dfe7e4"));
+    const body = m(str(p, "body", "#dfe7e4"), "paint");
     const D = 0.68;
     const z = -d / 2 + D / 2;
     const W = Math.min(w, 0.8);
@@ -356,13 +356,13 @@ const BUILDERS: Record<string, Builder> = {
     k.box(steel, [-W / 2 + 0.1, 1.55, z + D / 2 + 0.03], [0.025, 0.3, 0.03], { outline: 0.005 });
     k.box(steel, [-W / 2 + 0.1, 0.95, z + D / 2 + 0.03], [0.025, 0.42, 0.03], { outline: 0.005 });
     // magnets and a note
-    k.box(m("#fbf7ec"), [0.12, 1.05, z + D / 2 + 0.006], [0.16, 0.2, 0.004], { rot: [0, 0, 0.08], outline: 0.004 });
+    k.box(m("#fbf7ec", "paper"), [0.12, 1.05, z + D / 2 + 0.006], [0.16, 0.2, 0.004], { rot: [0, 0, 0.08], outline: 0.004 });
     k.add("sphere", m("#e07a5f"), [0.12, 1.14, z + D / 2 + 0.012], 0.03, { outline: false });
     k.add("sphere", m("#3d8fa3"), [0.2, 1.48, z + D / 2 + 0.012], 0.035, { outline: false });
   },
 
   toilet: (k, _w, d, _p, m) => {
-    const china = m(PORCELAIN);
+    const china = m(PORCELAIN, "ceramic");
     const z = -d / 2 + 0.36;
     k.add("cone", china, [0, 0.2, z + 0.1], [0.3, 0.4, 0.36], { rot: [Math.PI, 0, 0] });
     k.add(basin([[0, 0.3], [0.25, 0.3], [0.45, 0.36], [0.5, 0.43], [0.48, 0.45], [0.4, 0.44], [0.32, 0.35], [0, 0.34]]), china, [0, 0, z + 0.13], [0.4, 1, 0.5], { outline: 0.005, normals: true });
@@ -375,12 +375,12 @@ const BUILDERS: Record<string, Builder> = {
   },
 
   bathtub: (k, w, d, p, m) => {
-    const body = m(str(p, "body", "#f1ece2"));
+    const body = m(str(p, "body", "#f1ece2"), "ceramic");
     const W = w - 0.2;
     const D = d - 0.2;
     k.add(basin([[0, 0.16], [0.28, 0.16], [0.4, 0.25], [0.49, 0.58], [0.5, 0.64], [0.47, 0.68], [0.43, 0.64], [0.39, 0.52], [0.3, 0.3], [0, 0.28]]), body, [0, 0, 0], [W, 1, D], { outline: 0.008, normals: true });
     k.add("cyl", m("#bcd3dc", "water"), [0, 0.49, 0], [W * 0.74, 0.012, D * 0.74], { outline: false });
-    const feet = m(str(p, "feet", "#b8955c"));
+    const feet = m(str(p, "feet", "#b8955c"), "metal");
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add("sphere", feet, [sx * W * 0.22, 0.095, sz * D * 0.2], [0.12, 0.19, 0.12]);
     k.add("cyl", m(METAL, "metal"), [-W * 0.46, 0.75, 0], [0.04, 0.3, 0.04], { outline: 0.005 });
     k.box(m(METAL, "metal"), [-W * 0.46 + 0.08, 0.9, 0], [0.18, 0.03, 0.03], { outline: 0.005 });
@@ -392,7 +392,7 @@ const BUILDERS: Record<string, Builder> = {
   },
 
   pedsink: (k, _w, d, _p, m) => {
-    const china = m(PORCELAIN);
+    const china = m(PORCELAIN, "ceramic");
     const z = -d / 2 + 0.3;
     k.add("cone", china, [0, 0.38, z], [0.16, 0.76, 0.16], { rot: [Math.PI, 0, 0] });
     k.add(basin([[0, 0.74], [0.2, 0.74], [0.43, 0.8], [0.5, 0.88], [0.48, 0.91], [0.41, 0.89], [0.3, 0.81], [0, 0.8]]), china, [0, 0, z], [0.56, 1, 0.44], { outline: 0.005, normals: true });
@@ -405,7 +405,7 @@ const BUILDERS: Record<string, Builder> = {
   car: (k, _w, _d, p, m) => {
     const paint = str(p, "body", "#f0704c");
     const body = m(paint, "paint");
-    const dark = m("#3a3631");
+    const dark = m("#3a3631", "rubber");
     const glass = m("#a9c4cf", "glass");
     const chrome = m(METAL, "metal");
     // wheels with hub caps, turned to roll along z
@@ -438,8 +438,8 @@ const BUILDERS: Record<string, Builder> = {
 
   workbench: (k, w, d, p, m, seed) => {
     const wood = str(p, "wood", "#b98a5a");
-    const top = m(wood, "wood");
-    const frame = m(shade(wood, 0.82), "wood");
+    const top = m(wood, "timber");
+    const frame = m(shade(wood, 0.82), "timber");
     const W = w - 0.2;
     const z = -d / 2 + 0.38;
     k.at([0, 0, z], 0, () => legs(k, frame, W, 0.62, 0.88, 0.04, 0.06, "box"));
@@ -461,11 +461,11 @@ const BUILDERS: Record<string, Builder> = {
     k.box(m("#c4534a"), [-0.3, 1.0, z + 0.05], [0.42, 0.14, 0.2], { outline: 0.008 });
     k.box(metal, [-0.3, 1.1, z + 0.05], [0.24, 0.02, 0.03], { outline: 0.004 });
     const r = rng(seed);
-    for (let i = 0; i < 3; i++) k.box(m(shade(wood, 1 + r() * 0.15), "wood"), [0.2 + r() * 0.3, 0.95 + i * 0.03, z + 0.1 - r() * 0.15], [0.3 + r() * 0.2, 0.03, 0.08], { rot: [0, r() * 0.5, 0], outline: 0.005 });
+    for (let i = 0; i < 3; i++) k.box(m(shade(wood, 1 + r() * 0.15), "timber"), [0.2 + r() * 0.3, 0.95 + i * 0.03, z + 0.1 - r() * 0.15], [0.3 + r() * 0.2, 0.03, 0.08], { rot: [0, r() * 0.5, 0], outline: 0.005 });
   },
 
   pool: (k, w, d, p, m) => {
-    const coping = m(str(p, "coping", "#e4ddcf"), "stone");
+    const coping = m(str(p, "coping", "#e4ddcf"), "mineral");
     const c = 0.32;
     k.box(coping, [0, 0.07, -d / 2 + c / 2], [w, 0.1, c]);
     k.box(coping, [0, 0.07, d / 2 - c / 2], [w, 0.1, c]);
@@ -495,7 +495,7 @@ const BUILDERS: Record<string, Builder> = {
   },
 
   lounger: (k, w, d, p, m) => {
-    const frame = m(str(p, "frame", "#f4efe4"));
+    const frame = m(str(p, "frame", "#f4efe4"), "paint");
     const cushion = str(p, "cushion", "#3d8fa3");
     const W = w - 0.36;
     legs(k, frame, W, d - 0.3, 0.26, 0.025, 0.04, "box");
@@ -513,8 +513,8 @@ const BUILDERS: Record<string, Builder> = {
 
   parasol: (k, _w, _d, p, m) => {
     const canopy = str(p, "canopy", "#f5c537");
-    k.add("cyl", m("#e4ddcf", "stone"), [0, 0.05, 0], [0.5, 0.1, 0.5]);
-    k.add("cyl8", m("#8a6a4c", "wood"), [0, 1.15, 0], [0.05, 2.2, 0.05]);
+    k.add("cyl", m("#e4ddcf", "mineral"), [0, 0.05, 0], [0.5, 0.1, 0.5]);
+    k.add("cyl8", m("#8a6a4c", "timber"), [0, 1.15, 0], [0.05, 2.2, 0.05]);
     k.add(CANOPY, m(canopy, "fabric"), [0, 2.08, 0], [2.0, 0.5, 2.0], { outline: 0.014, normals: true });
     k.add("cyl8", m(shade(canopy, 0.8)), [0, 1.84, 0], [1.98, 0.06, 1.98], { outline: 0.008 });
     for (let i = 0; i < 8; i++) {
@@ -526,13 +526,13 @@ const BUILDERS: Record<string, Builder> = {
 
   shrub: (k, _w, _d, p, m, seed) => {
     const leaves = str(p, "leaves", "#88a873");
-    k.add("cyl8", m("#7a5c43", "wood"), [0, 0.18, 0], [0.09, 0.36, 0.09]);
+    k.add("cyl8", m("#7a5c43", "timber"), [0, 0.18, 0], [0.09, 0.36, 0.09]);
     const r = rng(seed);
     for (let i = 0; i < 7; i++) {
       const a = r() * Math.PI * 2;
       const rad = r() * 0.2;
       const s = 0.42 + r() * 0.2;
-      k.add("blob", m(shade(leaves, 0.82 + r() * 0.3)), [Math.cos(a) * rad, 0.28 + r() * 0.25, Math.sin(a) * rad], [s, s * 0.85, s], { outline: 0.012 });
+      k.add("blob", m(shade(leaves, 0.82 + r() * 0.3), "foliage"), [Math.cos(a) * rad, 0.28 + r() * 0.25, Math.sin(a) * rad], [s, s * 0.85, s], { outline: 0.012 });
     }
     for (let i = 0; i < 6; i++) {
       const a = r() * Math.PI * 2;
@@ -593,8 +593,8 @@ function leaf(k: Kit, m: Mat, hingeX: number, width: number, height: number, ope
   const sign = mirror ? -1 : 1;
   k.at([hingeX, 0, 0], sign * open, () => {
     const cx = sign * (width / 2);
-    const wood = m(color, "wood");
-    const panel = m(shade(color, 1.07), "wood");
+    const wood = m(color, "timber");
+    const panel = m(shade(color, 1.07), "timber");
     if (glass) {
       const glassH = height * 0.5;
       const glassY = height * 0.68;
@@ -623,7 +623,7 @@ function leaf(k: Kit, m: Mat, hingeX: number, width: number, height: number, ope
 const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
   door: (k, item, p, m, low, leaves = true) => {
     const W = item.width;
-    const frame = m(str(p, "frame", "#f4efe4"));
+    const frame = m(str(p, "frame", "#f4efe4"), "paint");
     k.box(m("#cfc6b6", "stone"), [0, 0.012, 0], [W, 0.024, T + 0.04], { outline: 0.005 });
     if (low !== null) {
       for (const sx of [-1, 1]) k.box(frame, [sx * (W / 2 - 0.03), low / 2, 0], [0.06, low, T + 0.03], { outline: 0.006 });
@@ -640,7 +640,7 @@ const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
 
   arch: (k, item, p, m, low) => {
     const W = item.width;
-    const frame = m(str(p, "frame", "#f4efe4"));
+    const frame = m(str(p, "frame", "#f4efe4"), "paint");
     if (low !== null) {
       for (const sx of [-1, 1]) k.box(frame, [sx * (W / 2 - 0.03), low / 2, 0], [0.06, low, T + 0.03], { outline: 0.006 });
       return;
@@ -706,10 +706,10 @@ const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
     // curtains tied back inside
     const curtain = m(str(p, "curtain", "#efe0c8"), "fabric");
     for (const sx of [-1, 1]) k.add("soft", curtain, [sx * (W / 2 + 0.02), sill + h / 2 + 0.06, -T / 2 - 0.07], [0.2, h + 0.12, 0.07]);
-    k.box(m("#8a6a4c", "wood"), [0, top + 0.16, -T / 2 - 0.07], [W + 0.5, 0.035, 0.035], { outline: 0.004 });
+    k.box(m("#8a6a4c", "timber"), [0, top + 0.16, -T / 2 - 0.07], [W + 0.5, 0.035, 0.035], { outline: 0.004 });
     if (p.box === true) {
       // a flower box under the outside sill
-      k.box(m("#a57a50", "wood"), [0, sill - 0.14, T / 2 + 0.14], [W - 0.1, 0.18, 0.2], { outline: 0.008 });
+      k.box(m("#a57a50", "timber"), [0, sill - 0.14, T / 2 + 0.14], [W - 0.1, 0.18, 0.2], { outline: 0.008 });
       const r = rng(item.width * 97 + Math.round(sill * 100));
       for (let i = 0; i < W * 6; i++) {
         const x = -W / 2 + 0.12 + r() * (W - 0.24);
