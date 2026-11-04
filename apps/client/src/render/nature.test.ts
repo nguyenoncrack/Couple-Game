@@ -36,6 +36,15 @@ describe("decorative waterbirds", () => {
       expect(p.y).toBeGreaterThan(0.03);
     }
   });
+  it("leaves space between the birds throughout their loop", () => {
+    for (let time = 0; time < 150; time += 0.5) {
+      const poses = Array.from({ length: WATERBIRDS }, (_, i) => waterbirdPose(24, i, time));
+      for (let i = 0; i < poses.length; i++) for (let j = i + 1; j < poses.length; j++) {
+        const a = poses[i]!, b = poses[j]!;
+        expect(Math.hypot(a.x - b.x, a.z - b.z)).toBeGreaterThan((a.scale + b.scale) * 0.3);
+      }
+    }
+  });
   it("moves smoothly without a wrap teleport and retains stable follower sizes", () => {
     const a = waterbirdPose(24, 0, 100), b = waterbirdPose(24, 0, 100.016);
     expect(Math.hypot(b.x - a.x, b.z - a.z)).toBeLessThan(0.01);
