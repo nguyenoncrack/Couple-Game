@@ -1,6 +1,7 @@
 import type { Me } from "@cg/shared";
 import { useState, type FormEvent } from "react";
 import { ApiError, signIn, signUp } from "../net/api";
+import { Cover, CoverTitle } from "./Cover";
 import { deviceClaims, forgetDeviceClaims, lastPlayerName, rememberPlayerName } from "../net/session";
 
 /** Sign in, or make an account: a name and a password. Houses this browser joined before accounts come along. */
@@ -30,18 +31,13 @@ export function SignIn({ inviteCode, onSignedIn }: { inviteCode?: string; onSign
   };
 
   return (
-    <div className="home">
-      <header className="home-head">
-        <h1 className="wordmark">
-          Home <span>for</span> Two
-        </h1>
-        <p className="hand tagline">Build a little house together, from two screens.</p>
-      </header>
+    <Cover className="signin-cover">
+      <div className="cover-content">
+        <CoverTitle />
+      {inviteCode && <div className="cover-notice">You've been invited to a house. Sign in or make an account, and you'll go straight in.</div>}
+      {hasOldHouses && <div className="cover-notice">Houses you played here before will move to your account.</div>}
 
-      {inviteCode && <div className="card notice hand">You've been invited to a house. Sign in or make an account, and you'll go straight in.</div>}
-      {hasOldHouses && <div className="card notice hand">Houses you played here before will move to your account.</div>}
-
-      <form className="card home-card auth-card" onSubmit={submit}>
+      <form className="card home-card auth-card cover-auth" onSubmit={submit}>
         <h2>{mode === "up" ? "Make an account" : "Welcome back"}</h2>
         <label className="field">
           <span className="kicker">Your name</span>
@@ -59,7 +55,7 @@ export function SignIn({ inviteCode, onSignedIn }: { inviteCode?: string; onSign
             autoFocus={Boolean(name)}
           />
         </label>
-        {error && <div className="error hand">{error}</div>}
+        {error && <div className="error hand" role="alert">{error}</div>}
         <button className="btn primary big" disabled={busy}>
           {busy ? "One moment…" : mode === "up" ? "Make my account" : "Sign in"}
         </button>
@@ -74,6 +70,8 @@ export function SignIn({ inviteCode, onSignedIn }: { inviteCode?: string; onSign
           {mode === "up" ? "Already have an account? Sign in" : "New here? Make an account"}
         </button>
       </form>
-    </div>
+      <p className="cover-footnote">Two people. One place to call home.</p>
+      </div>
+    </Cover>
   );
 }

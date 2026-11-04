@@ -1,8 +1,9 @@
 import type { HouseSummary, Me } from "@cg/shared";
-import { useEffect, useState } from "react";
+import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { ApiError, claimHouses, getMe, joinHouse } from "./net/api";
 import { deviceClaims, forgetDeviceClaims } from "./net/session";
-import { Game } from "./screens/Game";
+import { LoadingScreen } from "./screens/LoadingScreen";
+const Game = lazy(() => import("./screens/Game").then((m) => ({ default: m.Game })));
 import { Home } from "./screens/Home";
 import { SignIn } from "./screens/SignIn";
 
@@ -55,15 +56,12 @@ export function App() {
   const home = () => go("/", { page: "home" });
   const open = (houseId: string) => go(`/h/${houseId}`, { page: "house", houseId });
 
-  if (who.kind === "loading") return <div className="home loading-home hand">Finding your keys…</div>;
+  if (who.kind === "loading") return <LoadingScreen />;
   if (who.kind === "offline")
     return (
-      <div className="home">
-        <div className="card notice hand">{who.message}</div>
-        <button className="btn" onClick={() => void whoAmI().then(setWho)}>
-          Try again
-        </button>
-      </div>
+      <LoadingScreen failed message="We couldn’t find your keys" detail={who.message}>
+        <button className="btn primary" onClick={() => { setWho({ kind: "loading" }); void whoAmI().then(setWho); }}>Try again</button>
+      </LoadingScreen>
     );
   if (who.kind === "out") {
     const code = route.page === "home" ? route.code : undefined;
@@ -89,7 +87,7 @@ export function App() {
 
   if (route.page === "house") {
     const house = me.houses.find((h) => h.houseId === route.houseId);
-    if (house) return <Game house={house} onLeave={home} />;
+    if (house) return <HouseBoundary key={house.houseId} onBack={home}><Suspense fallback={<LoadingScreen message="Getting your home ready…" houseName={house.houseName} onBack={home} />}><Game house={house} onLeave={home} /></Suspense></HouseBoundary>;
     // maybe made or joined in another tab since we last asked
     return <Home key="missing" me={me} setMe={setMe} notice="You're not in that house. Ask your partner for the room code." onOpen={open} onSignedOut={() => setWho({ kind: "out" })} />;
   }
@@ -98,4 +96,15 @@ export function App() {
     open(h.houseId);
   };
   return <Home key={route.code ?? ""} me={me} setMe={setMe} initialCode={route.code} onOpen={open} onAdded={added} onSignedOut={() => setWho({ kind: "out" })} />;
+}
+
+/** A failed game-chunk download must still offer a way home or a fresh attempt. */
+class HouseBoundary extends Component<{ children: ReactNode; onBack: () => void }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    return this.state.failed ? <LoadingScreen failed message="Your home couldn’t open" detail="Check your connection, then refresh to try again." onBack={this.props.onBack}>
+      <button className="btn primary" onClick={() => location.reload()}>Refresh and try again</button>
+    </LoadingScreen> : this.props.children;
+  }
 }

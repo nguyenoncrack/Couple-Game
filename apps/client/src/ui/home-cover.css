@@ -1,156 +1,217 @@
-/* A shared illustrated cover. Account forms retain their existing markup and behavior. */
-.home {
-  padding: 38px 24px 56px;
-  gap: 28px;
-  background-image: repeating-linear-gradient(45deg, rgba(58, 54, 49, .022) 0 1px, transparent 1px 10px);
-}
-.home-head {
-  width: min(1080px, 100%);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: center;
-  align-content: center;
-  text-align: left;
-  column-gap: 20px;
-}
-.home-head::before {
-  content: "A LITTLE LIFE, BUILT TOGETHER";
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .2em;
-  color: var(--ink-soft);
-  align-self: end;
-  padding-bottom: 16px;
-}
-.home-head .wordmark { font-size: clamp(50px, 6.5vw, 78px); grid-column: 1; white-space: nowrap; }
-.home-head .tagline { grid-column: 1; align-self: start; max-width: 370px; font-size: 22px; line-height: 1.4; margin-top: 18px; }
-.home-head::after {
-  content: "";
-  display: block;
-  grid-column: 2;
-  grid-row: 1 / 4;
-  aspect-ratio: 720 / 490;
-  width: 100%;
-  background: url('/illustrations/home-for-two.svg') center / contain no-repeat;
-  pointer-events: none;
-}
-.home .home-grid { width: min(1080px, 100%); }
-.home .saved { width: min(1080px, 100%); }
-.home .notice { max-width: 1080px; }
-.home .btn.primary:hover:not(:disabled) { background: #f6d96e; }
-.home button:focus-visible, .home input:focus-visible { outline: 3px solid var(--teal); outline-offset: 4px; }
-
-/* The deployed sign-up/sign-in screen already uses .auth-card. No auth component changes are needed. */
-.home:has(.auth-card) {
-  min-height: 100dvh;
-  display: grid;
-  grid-template-columns: minmax(0, 650px) minmax(320px, 400px);
-  align-items: center;
-  align-content: center;
-  justify-content: center;
-  gap: 24px 54px;
-  padding: 52px 40px 38px;
-}
-.home:has(.auth-card) .home-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  width: 100%;
-}
-.home:has(.auth-card) .home-head::before {
-  align-self: center;
-  padding-bottom: 18px;
-}
-.home:has(.auth-card) .wordmark { font-size: clamp(60px, 6.6vw, 84px); }
-.home:has(.auth-card) .tagline { max-width: none; font-size: 21px; margin-top: 14px; }
-.home:has(.auth-card) .home-head::after { width: 100%; margin-top: 8px; }
-.home:has(.auth-card)::after {
-  content: "For the ordinary days that become your favourite ones.";
-  grid-column: 1 / -1;
-  text-align: center;
-  color: var(--ink-soft);
-  font-size: 18px;
-}
-.home .auth-card {
-  width: 100%;
+/* Shared illustrated front cover. Scenery and game HUD styles stay independent. */
+.cover {
   position: relative;
-  padding: 30px 30px 26px;
-  gap: 19px;
-  border-radius: 22px 26px 21px 24px;
-  box-shadow: 5px 6px 0 var(--ink);
-  transform: rotate(.45deg);
-  background: #fcf8ed;
+  isolation: isolate;
+  min-height: 100dvh;
+  color: #3e392f;
+  background: #f5e6cb;
+  overflow-x: clip;
 }
-.home .auth-card > * { transform: rotate(-.45deg); }
-.home .auth-card::before {
-  content: "COME ON IN";
-  align-self: flex-start;
-  background: #e4e9d4;
-  padding: 5px 10px;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: .15em;
-  border-radius: 4px;
-  transform: rotate(-2deg);
+.cover-art, .cover-shade { position: fixed; inset: 0; z-index: -2; pointer-events: none; }
+.cover-art { background: #f5e6cb url('/illustrations/shared-desk.webp') center / cover no-repeat; }
+.cover-shade {
+  z-index: -1;
+  background: linear-gradient(90deg, rgba(252,244,223,.96) 0%, rgba(252,244,223,.90) 23%, rgba(252,244,223,.62) 34%, rgba(252,244,223,.06) 50%, transparent 68%);
 }
-.home .auth-card h2 { font-size: 38px; line-height: 1.1; margin: 0 0 4px; }
-.home .auth-card .field { gap: 9px; }
-.home .auth-card input { font-size: 19px; padding: 12px 14px; }
-.home .auth-card .btn.big { padding: 11px 18px; font-size: 21px; }
-.home .auth-card .text-btn {
-  border: 0;
-  padding: 3px 0;
-  background: none;
-  color: var(--ink-soft);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  font-size: 17px;
+.cover-content { width: min(500px, 44%); padding: clamp(32px, 6vh, 72px) 0 30px clamp(28px, 5vw, 100px); }
+.cover-head { margin-bottom: 29px; }
+.cover-head .kicker { margin: 0 0 18px; font-size: 9px; letter-spacing: .19em; color: #71654f; }
+.cover-head .wordmark { white-space: nowrap; font-size: clamp(44px, 4.9vw, 76px); -webkit-text-stroke-width: 2px; text-shadow: 3px 4px 0 var(--ink); }
+.cover-head .tagline { font-size: 21px; line-height: 1.3; margin-top: 20px; color: #655944; }
+.cover-greeting { margin: 0 0 17px; font-size: 19px; }
+.cover-greeting b { font-weight: 400; }
+.cover-menu { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+.cover-continue {
+  display: flex; align-items: center; justify-content: space-between; gap: 15px;
+  padding: 15px 19px; width: 100%; text-align: left;
+  background: #f4d25e; border: 2px solid #4b4439; border-radius: 13px 17px 14px 15px;
+  box-shadow: 3px 4px 0 #4b4439; margin: 0 0 17px;
 }
-@media (max-width: 960px) {
-  .home:has(.auth-card) { grid-template-columns: minmax(0, 520px) minmax(300px, 370px); gap: 28px; padding: 36px 26px; }
-  .home:has(.auth-card) .wordmark { font-size: clamp(45px, 6.7vw, 66px); }
-  .home:has(.auth-card) .tagline { max-width: 300px; font-size: 19px; }
-  .home .auth-card { padding: 26px 24px; }
+.cover-continue strong { display: block; font-size: 29px; font-weight: 400; line-height: 1.1; }
+.cover-continue small { display: block; font-size: 16px; margin-top: 5px; max-width: 250px; overflow-wrap: anywhere; color: #655236; }
+.menu-arrow { font-family: var(--serif); font-size: 35px; }
+.cover-menu-item, .cover-character > button {
+  display: flex; justify-content: space-between; align-items: center; width: 100%;
+  padding: 12px 2px; font: 31px/1.15 var(--serif); text-align: left;
+  background: transparent; border: 0; border-bottom: 1px solid #75654638; border-radius: 0; box-shadow: none;
 }
-@media (max-width: 700px) {
-  .home { padding: 30px 18px 40px; gap: 24px; }
-  .home-head { display: flex; flex-direction: column; align-items: center; text-align: center; }
-  .home-head::before { align-self: center; padding-bottom: 12px; font-size: 9px; letter-spacing: .13em; }
-  .home-head .wordmark { font-size: clamp(44px, 10vw, 64px); }
-  .home-head .tagline { font-size: 19px; margin-top: 13px; }
-  .home-head::after { width: min(450px, 100%); max-height: 270px; }
-  .home:has(.auth-card) { display: flex; padding: 30px 20px 36px; gap: 18px; }
-  .home:has(.auth-card) .home-head { flex: none; }
-  .home:has(.auth-card) .wordmark { font-size: clamp(44px, 10.5vw, 64px); }
-  .home:has(.auth-card) .tagline { max-width: 330px; font-size: 19px; }
-  .home:has(.auth-card) .home-head::after { width: min(410px, 100%); max-height: 150px; margin-top: 0; }
-  .home .auth-card { max-width: 430px; padding: 24px; gap: 17px; transform: none; }
-  .home .auth-card > * { transform: none; }
-  .home .auth-card h2 { font-size: 34px; }
-  .home:has(.auth-card)::after { max-width: 290px; margin-top: 12px; font-size: 17px; }
+.cover-menu-item > span:not(.menu-count) { font-family: var(--hand); font-size: 21px; color: #8a7756; }
+.menu-count { font-family: var(--mono); font-size: 12px; min-width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid #8a775666; border-radius: 50%; }
+.cover-character > button { font-size: 27px; padding-top: 16px; border: 0; }
+.cover-footer { display: flex; align-items: center; gap: 13px; margin-top: 25px; }
+.cover .text-btn { font-size: 17px; color: #655944; text-decoration-thickness: 1px; }
+.cover .text-btn:disabled { opacity: .6; cursor: wait; }
+.cover-footnote { font-size: 14px; color: #89785d; margin: 21px 0 0; }
+.cover-note {
+  position: fixed; right: 34px; bottom: 25px; margin: 0; padding: 7px 14px;
+  font-size: 18px; color: #fdf6e6; background: #544730a8; border-radius: 4px; transform: rotate(-2deg);
 }
-@media (prefers-reduced-motion: no-preference) {
-  .home-head::after { animation: cover-arrive .65s ease-out both; }
-  .home .auth-card { animation: card-arrive .55s ease-out both; }
-  @keyframes cover-arrive { from { opacity: 0; translate: 0 9px; } to { opacity: 1; translate: 0 0; } }
-  @keyframes card-arrive { from { opacity: 0; translate: 0 7px; } to { opacity: 1; translate: 0 0; } }
+.cover-notice { font-size: 17px; line-height: 1.35; border-left: 3px solid #a68547; padding: 8px 12px; background: #fff8e4cc; margin: 0 0 20px; }
+.cover .error { font-size: 17px; line-height: 1.35; margin: 0; }
+.cover-content > .error { margin-top: 16px; }
+.cover button:focus-visible, .cover input:focus-visible { outline: 3px solid var(--teal); outline-offset: 4px; }
+.cover-continue:hover { background: #f9db77; }
+.cover-menu-item:hover, .cover-character > button:hover { color: #ae593e; background: #fff5dc55; }
+.cover button:active:not(:disabled) { translate: 0 1px; }
+
+/* Forms are kept in a focused sheet rather than covering the front page with boxes. */
+.home-panel {
+  width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 48px);
+  border: 2px solid var(--ink); border-radius: 16px 22px 17px 20px;
+  padding: 27px; background: #fbf6e8; color: var(--ink); box-shadow: 5px 6px 0 #3a36315c;
+  margin: auto max(32px, 12vw) auto auto; overflow-y: auto;
 }
-@media (min-width: 701px) and (max-height: 780px) {
-  .home:has(.auth-card) { padding-top: 30px; padding-bottom: 26px; gap: 14px 54px; }
-  .home:has(.auth-card) .home-head::after { max-height: 370px; }
-  .home:has(.auth-card) .home-head::before { padding-bottom: 12px; }
+.home-panel::backdrop { background: #4d412b4d; backdrop-filter: blur(3px); }
+.home-panel-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
+.home-panel h2 { font: 38px/1.05 var(--serif); margin: 0; }
+.panel-close { width: 30px; height: 30px; flex: 0 0 auto; border: 1px solid #82755b77; border-radius: 50%; background: transparent; font-size: 25px; line-height: 1; }
+.panel-intro { font-size: 18px; color: #7b6b51; margin: 0 0 6px; line-height: 1.4; }
+.cover-form { display: flex; flex-direction: column; gap: 20px; }
+.cover-form .lot-choice { margin: 0; }
+.cover-form .btn { font-size: 21px; }
+.home-panel .field input, .cover-auth .field input { border-width: 1.5px; border-radius: 9px; font-size: 19px; padding: 11px 12px; }
+.home-panel .choice { padding: 13px 12px; }
+.home-panel .choice b { font-size: 19px; font-weight: 400; }
+.home-panel .choice span { font-size: 16px; line-height: 1.25; }
+.cover-house-list { display: flex; flex-direction: column; gap: 12px; margin: 19px 0; }
+.cover-house { display: flex; border: 1px solid #b8a78b; border-radius: 10px; overflow: hidden; }
+.cover-house .saved-open { flex: 1; min-width: 0; padding: 13px 15px; gap: 4px; text-align: left; }
+.cover-house .saved-name { font-size: 27px; overflow-wrap: anywhere; }
+.cover-house .saved-who { flex-wrap: wrap; gap: 10px; }
+.cover-house .saved-member { font-size: 17px; }
+.cover-house .saved-forget { border-left: 1px solid #b8a78b; }
+.home-panel .auth-card { border: 0; box-shadow: none; padding: 0; background: none; width: 100%; }
+.home-panel .auth-card > h2 { display: none; }
+
+.signin-cover .cover-content { width: min(505px, 44%); }
+.signin-cover .cover-head { margin-bottom: 25px; }
+.cover-auth { border: 1.5px solid #8d7856; border-radius: 14px 18px 15px 17px; background: #fff9eae8; box-shadow: 3px 4px 0 #6b573e40; gap: 16px; padding: 24px; width: 100%; }
+.cover-auth h2 { font-size: 33px; }
+.cover-auth .text-btn { font-size: 16px; }
+.cover-auth .btn.big { font-size: 20px; padding: 10px; }
+.cover-auth .kicker { font-size: 9px; }
+
+/* A calm, honest loading state, using the same cover instead of a blank screen. */
+.loading-cover .cover-content { width: min(500px, 44%); padding-top: max(35px, 12vh); }
+.arrival-card { margin-top: 46px; }
+.arrival-key { transform-origin: 18px 20px; animation: key-sway 2.4s ease-in-out infinite; margin-bottom: 17px; }
+.arrival-key.still { animation: none; }
+.arrival-house { margin: 0 0 9px; overflow-wrap: anywhere; }
+.arrival-card h2 { font: 35px/1.15 var(--serif); margin: 0; }
+.arrival-detail { font-size: 19px; line-height: 1.4; color: #77664a; margin: 12px 0 20px; }
+.arrival-track { width: 150px; height: 4px; background: #89785633; overflow: hidden; border-radius: 4px; margin: 23px 0 29px; }
+.arrival-track span { display: block; height: 100%; width: 42%; background: #c28b4c; border-radius: inherit; animation: arriving 1.7s ease-in-out infinite alternate; }
+.arrival-card > .btn { display: block; margin: 0 0 20px; }
+@keyframes arriving { from { translate: -10% 0; } to { translate: 150% 0; } }
+@keyframes key-sway { 0%, 100% { rotate: -7deg; } 50% { rotate: 7deg; } }
+
+@media (min-width: 1600px) {
+  .cover-content { width: 540px; }
+  .signin-cover .cover-content, .loading-cover .cover-content { width: 540px; }
+  .cover-head .wordmark { font-size: 76px; }
 }
-/* Keep the pre-account home screen compact while the account rollout is in progress. */
-.home .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.home .home-grid > .home-card:has(input[placeholder="e.g. Sam"]) {
-  grid-column: 1 / -1;
-  width: min(400px, 100%);
-  padding: 0;
-  border: 0;
-  box-shadow: none;
-  background: none;
+@media (max-width: 1000px) {
+  .cover-content, .signin-cover .cover-content, .loading-cover .cover-content { width: 43%; padding-left: 30px; }
+  .cover-head .wordmark { font-size: 48px; }
+  .cover-shade { background: linear-gradient(90deg, #fcf4dff5, #fcf4dfdb 29%, #fcf4df44 52%, transparent 75%); }
+  .cover-note { right: 20px; font-size: 16px; }
+  .home-panel { margin-right: 32px; }
 }
-@media (max-width: 700px) {
-  .home .home-grid { grid-template-columns: 1fr; }
+@media (max-width: 640px) {
+  .cover { background: #f8eed9; }
+  .cover-art { position: absolute; inset: 0 0 auto; height: 390px; background-position: 68% center; }
+  .cover-shade { position: absolute; inset: 0; background: linear-gradient(180deg, #fbf0d9aa, transparent 160px, #f8eed9 370px); }
+  .cover-content, .signin-cover .cover-content, .loading-cover .cover-content { width: min(440px, 100%); padding: 25px 25px 30px; margin: 0 auto; }
+  .cover-head { margin-bottom: 185px; }
+  .cover-head .kicker { font-size: 8px; margin-bottom: 11px; }
+  .cover-head .wordmark { font-size: clamp(40px, 11.7vw, 56px); }
+  .cover-head .tagline { font-size: 17px; margin-top: 14px; }
+  .cover-head .tagline br { display: none; }
+  .cover-menu-item { font-size: 29px; }
+  .cover-note { display: none; }
+  .signin-cover .cover-head, .loading-cover .cover-head { margin-bottom: 180px; }
+  .cover-auth { background: #fff9ec; }
+  .cover-footer { margin-top: 20px; }
+  .home-panel { margin: auto; padding: 23px; max-height: calc(100dvh - 32px); }
+  .home-panel h2 { font-size: 34px; }
+  .arrival-card { margin-top: 0; }
+  .arrival-key { margin-bottom: 12px; }
+  .arrival-card h2 { font-size: 31px; }
 }
+@media (min-width: 641px) and (max-height: 720px) {
+  .cover-content, .signin-cover .cover-content, .loading-cover .cover-content { padding-top: 28px; }
+  .cover-head { margin-bottom: 20px; }
+  .cover-head .kicker { margin-bottom: 12px; }
+  .cover-head .tagline { margin-top: 12px; font-size: 19px; }
+  .cover-menu-item { padding-top: 9px; padding-bottom: 9px; }
+  .cover-footer { margin-top: 15px; }
+  .arrival-card { margin-top: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arrival-key, .arrival-track span { animation: none; }
+}
+
+/* Sketchbook treatment: quiet typography over the illustration, with open paper sheets for details. */
+.cover-continue {
+  border: 0; border-radius: 0; box-shadow: none; background: transparent;
+  padding: 5px 0 17px; margin-bottom: 4px; justify-content: flex-start; gap: 16px;
+}
+.cover-continue strong { font: 39px/1.1 var(--serif); }
+.cover-continue small { color: #8a7050; font-size: 17px; margin-top: 7px; }
+.cover-continue .menu-arrow { font-size: 24px; color: #9f7547; align-self: flex-start; padding-top: 6px; }
+.cover-continue:hover { background: transparent; color: #a55e3d; }
+.cover-menu-item, .cover-character > button { border: 0; justify-content: flex-start; gap: 18px; padding: 10px 0; }
+.cover-menu-item > span:not(.menu-count) { display: none; }
+.menu-count { border: 0; min-width: auto; height: auto; font: 18px var(--hand); color: #a38a63; }
+.menu-count::before { content: '('; }
+.menu-count::after { content: ')'; }
+.cover-menu-item:hover, .cover-character > button:hover { background: transparent; text-decoration: underline; text-decoration-color: #b89465; text-decoration-thickness: 1px; text-underline-offset: 7px; }
+.cover-character > button { padding-top: 15px; }
+.cover-continue:hover strong { text-decoration: underline; text-decoration-color: #b89465; text-decoration-thickness: 1px; text-underline-offset: 7px; }
+.home-panel {
+  border: 0; border-radius: 2px; padding: 31px 30px 30px 43px;
+  background-color: #fbf5e5;
+  background-image: linear-gradient(90deg, transparent 24px, #d3a48c55 24px, #d3a48c55 25px, transparent 25px), repeating-linear-gradient(0deg, transparent 0 30px, #b8a48716 30px 31px);
+  box-shadow: 0 17px 55px #4d382b33, 3px 3px 0 #e2d1b3, 5px 5px 0 #f5edda;
+}
+.home-panel::backdrop { background: #4d412b24; backdrop-filter: none; }
+.home-panel h2 { color: #6a4d36; }
+.panel-close { border: 0; border-radius: 0; color: #927a5e; font-size: 28px; }
+.cover-house-list { gap: 0; }
+.cover-house { border: 0; border-radius: 0; border-bottom: 1px dashed #ad947559; padding: 8px 0; }
+.cover-house:last-child { border-bottom: 0; }
+.cover-house .saved-open { padding: 9px 0; }
+.cover-house .saved-forget { border: 0; padding: 0 7px; color: #a58f71; }
+.cover-house .saved-open:hover .saved-name { text-decoration: underline; text-decoration-color: #b89465; text-underline-offset: 6px; text-decoration-thickness: 1px; }
+.cover-house .saved-name { color: #674f3c; }
+.cover-house .saved-member { font-weight: 400; }
+.cover-auth { border: 0; border-radius: 0; padding: 0; box-shadow: none; background: transparent; }
+.cover-auth h2 { color: #6a4d36; }
+.home-panel .field input, .cover-auth .field input {
+  background: #fffaf62e; border: 0; border-bottom: 1px solid #aa8d68; border-radius: 0;
+  padding: 9px 2px; box-shadow: none;
+}
+.home-panel .btn, .cover-auth .btn {
+  border: 0; background: transparent; border-radius: 0; box-shadow: none;
+  padding: 9px 0; text-align: left; color: #9e5a3d; font-size: 23px;
+}
+.home-panel .btn:hover:not(:disabled), .cover-auth .btn:hover:not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 7px; text-decoration-thickness: 1px; }
+.home-panel .btn.primary::after, .cover-auth .btn.primary::after { content: ' ↗'; padding-left: 7px; }
+.home-panel .btn:disabled, .cover-auth .btn:disabled { color: #a39786; opacity: .6; }
+.home-panel .choice { border: 0; border-radius: 0; background: transparent; padding: 10px 3px; box-shadow: none; border-bottom: 1px dashed #aa8d6855; }
+.home-panel .choice.on { background: transparent; border-bottom: 2px solid #a7834f; }
+.home-panel .choice.on b::after { content: ' ✓'; color: #7b8c5d; }
+.home-panel .auth-card .row { align-items: center; gap: 25px; }
+@media (max-width: 640px) {
+  .home-panel { padding: 26px 24px 26px 37px; }
+  .cover-auth { background: transparent; }
+  .cover-continue strong { font-size: 36px; }
+}
+.menu-count { display: inline; white-space: nowrap; }
+@media (min-width: 641px) and (max-width: 850px) {
+  .cover-art { background-position: 63% center; }
+}
+.cover-note { background: transparent; color: #54432f; text-shadow: 0 1px 1px #fff3dba1; }
+.arrival-card > .btn { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 8px 0; color: #9e5a3d; font-size: 23px; }
+.arrival-card > .btn::after { content: ' ↗'; padding-left: 7px; }
+.arrival-card > .btn:hover { background: transparent; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 7px; }
