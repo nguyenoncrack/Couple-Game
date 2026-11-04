@@ -1,5 +1,6 @@
 import type { Action, Recipe, Station } from "../catalog";
 import type { Rot } from "../grid";
+import type { Auto } from "./autonomy";
 import type { BlackjackRound } from "./blackjack";
 import type { Needs } from "./needs";
 
@@ -60,6 +61,8 @@ export interface Avatar {
   use: Use | null;
   /** Hunger, energy and the rest as last written down (see needs.ts). Missing on old saves. */
   needs?: Needs;
+  /** Set while they're doing something of their own accord (free will), rather than what their player asked. */
+  auto?: Auto;
 }
 
 export interface Cooking {

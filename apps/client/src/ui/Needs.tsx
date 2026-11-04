@@ -58,6 +58,17 @@ const NEED_TIP: Record<Need, string> = {
   social: "Hug, kiss or cuddle your partner.",
 };
 
+/** What someone acting on their own is up to, for the panel. */
+const ON_THEIR_OWN: Record<Need | "rest", string> = {
+  hunger: "getting something to eat",
+  energy: "having a rest",
+  hygiene: "freshening up",
+  bladder: "popping to the loo",
+  fun: "having some fun",
+  social: "looking for company",
+  rest: "taking a breather",
+};
+
 const NUDGE: Record<Need, string> = {
   hunger: "You're getting hungry",
   energy: "You're worn out",
@@ -119,6 +130,7 @@ export function NeedsPanel() {
   if (!v) return null;
   const mood = moodOf(v);
   const who = showing === me ? "You" : (partner?.name ?? "Partner");
+  const auto = showing ? avatars?.[showing]?.auto : undefined;
   return (
     <Floating
       id="needs"
@@ -143,6 +155,11 @@ export function NeedsPanel() {
           <span className="needs-mood-name">{moodName(mood)}</span>
         </span>
       </div>
+      {auto && (
+        <p className="needs-auto" title={showing === me ? "Doing things by yourself while you leave them be. Tell them anything and they're yours again." : undefined}>
+          On {showing === me ? "your" : "their"} own: {ON_THEIR_OWN[auto.need ?? "rest"]}
+        </p>
+      )}
       {partner && avatars?.[partner.id] && (
         <div className="seg needs-who">
           <button className={whose === "me" ? "on" : ""} onClick={() => setWhose("me")}>

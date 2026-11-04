@@ -381,17 +381,22 @@ describe("disconnects and saving", () => {
     await crashed.close();
   });
 
-  it("runs each player's needs only while they're in, and says so in the welcome", async () => {
+  it("keeps an away player's character living while their partner's in, and says so in the welcome", async () => {
     const { a, b } = await couple();
     const wa = await a.connect();
     expect(wa.life.avatars[wa.memberId]!.needs).toMatchObject({ live: true });
     const wb = await b.connect();
     await b.disconnect();
-    await a.next("life", (m) => m.life.avatars[wb.memberId]!.needs?.live === false);
-    // back again: their own welcome already has them running
+    await a.next("members", (m) => !m.members.find((x) => x.id === wb.memberId)!.online);
+    // Ben's gone, but his character is still in the house with Ana: his needs keep running
+    a.send({ type: "life", intent: { do: "stop" } });
+    const now = await a.next("life");
+    expect(now.life.avatars[wb.memberId]!.needs).toMatchObject({ live: true });
+    await a.disconnect();
+    // back again: his own welcome has him running, and Ana's character with him
     const again = await b.connect();
     expect(again.life.avatars[wb.memberId]!.needs).toMatchObject({ live: true });
-    await a.disconnect();
+    expect(again.life.avatars[wa.memberId]!.needs).toMatchObject({ live: true });
     await b.disconnect();
   });
 
@@ -477,8 +482,9 @@ describe("living together", () => {
     expect((await b.next("lifeRejected")).reason).toBe("not-in-bed");
     await a.disconnect();
     await b.next("members", (m) => !m.members.find((x) => x.id === wa.memberId)!.online);
+    // her character's still in the house while he is: a kiss still lands
     b.send({ type: "life", intent: { do: "social", action: "kiss" } });
-    expect((await b.next("lifeRejected")).reason).toBe("partner-away");
+    await b.next("life", (m) => m.life.avatars[wa.memberId]?.use?.action === "kiss");
     await b.disconnect();
 
     // coming back, the chat is still there, oldest first

@@ -6,6 +6,7 @@ import { footprintOf } from "../rules";
 import { canSee, screenOf, seatsFacing, slotsFor, slotsOf, stationSlots, tvFacing, type PlacedSlot } from "./interactions";
 import { gamingSpots } from "./gaming";
 import { dealBlackjack, finishBlackjack, playBlackjack, type BlackjackCommand } from "./blackjack";
+import { FreeWill } from "./autonomy";
 import { needsAt, START_NEEDS } from "./needs";
 import { buildNav, canStep, findPath, nearestWalkable, roomAt, slide, walkable, type Cell, type Nav } from "./nav";
 import {
@@ -89,8 +90,15 @@ function rotToward(dx: number, dz: number): Rot {
 }
 
 export class Life {
-  /** Members connected right now; only they get any cooking done (so a meal waits for someone who dropped out). */
+  /**
+   * Members connected right now. Without free will only they're in the house (a meal waits for someone who dropped
+   * out); with it, everyone's character carries on while anyone's here.
+   */
   online: Set<string> | null = null;
+  /** Characters looking after themselves (autonomy.ts); off until the server turns it on. */
+  freeWill: FreeWill | null = null;
+  /** Whose order is being carried out: characters acting on their own give way to them. */
+  private yieldFor: string | null = null;
 
   constructor(
     public state: LifeState,
@@ -98,6 +106,71 @@ export class Life {
     private makeId: () => string = newId,
     private random: () => number = Math.random,
   ) {}
+
+  /** Let characters look after themselves when their player is away or leaves them be. */
+  enableFreeWill(): this {
+    this.freeWill ??= new FreeWill(this, this.cat, this.random);
+    return this;
+  }
+
+  /**
+   * Is this member's character in the house right now: needs running, able to cook, there to be hugged? Everyone
+   * who's connected, and with free will everyone at all while anyone's here; nobody when the house is empty.
+   */
+  present(memberId: string): boolean {
+    if (!this.online) return true;
+    return this.freeWill ? this.online.size > 0 : this.online.has(memberId);
+  }
+
+  /**
+   * A player tells their character to do something. It's theirs again straight away: free will steps back, and
+   * anyone acting on their own who's in the way (in the seat, at the console, on the last of the plate) gets up.
+   */
+  command(memberId: string, bp: Blueprint, now: number, order: () => LifeReject | null): LifeReject | null {
+    this.freeWill?.noteInput(memberId, now);
+    this.yieldFor = memberId;
+    let r: LifeReject | null;
+    try {
+      r = order();
+    } finally {
+      this.yieldFor = null;
+    }
+    const a = this.state.avatars[memberId];
+    if (r === null && a) {
+      delete a.auto;
+      this.makeWay(a, bp, now);
+    }
+    return r;
+  }
+
+  /** Does `o` (acting on their own) step aside for whoever's giving an order? */
+  private givesWay(o: Avatar, to: string) {
+    return this.yieldFor === to && o.memberId !== to && Boolean(o.auto);
+  }
+
+  /** Characters acting on their own get out of the way of what `a` was just told to do. */
+  private makeWay(a: Avatar, bp: Blueprint, now: number) {
+    const u = a.use;
+    if (!u) return;
+    const others = Object.values(this.state.avatars).filter((o) => o !== a && o.use);
+    const dish = u.dishId ? this.state.dishes.find((d) => d.id === u.dishId) : undefined;
+    const eaters = others.filter((o) => o.use!.dishId === u.dishId).length + 1;
+    const console = u.consoleId ? this.level(bp).objects[u.consoleId] : undefined;
+    const controllers = console ? slotsOf(console, "play", this.cat).length : 0;
+    let gaming = others.filter((o) => o.use!.consoleId === u.consoleId).length + 1;
+    for (const o of others) {
+      if (!o.auto) continue;
+      const ou = o.use!;
+      const seat = u.objectId !== null && ou.objectId === u.objectId && ou.slot === u.slot;
+      const plate = Boolean(dish) && ou.dishId === u.dishId && eaters > dish!.portions;
+      const pad = Boolean(console) && ou.consoleId === u.consoleId && gaming > controllers;
+      if (!seat && !plate && !pad) continue;
+      if (pad) gaming--;
+      this.stop(o.memberId, now);
+      delete o.auto;
+      this.freeWill?.later(o.memberId, now + 1500);
+    }
+  }
 
   private level(bp: Blueprint): Level {
     return bp.levels[0]!;
@@ -122,7 +195,7 @@ export class Life {
   settle(now: number): boolean {
     let changed = false;
     for (const a of Object.values(this.state.avatars)) {
-      const live = this.online?.has(a.memberId) ?? true;
+      const live = this.present(a.memberId);
       if (a.needs?.live !== live) changed = true;
       const v = needsAt(a, now);
       for (const k in v) v[k as keyof typeof v] = Math.round(v[k as keyof typeof v] * 100) / 100;
@@ -174,7 +247,9 @@ export class Life {
 
   /** Is this slot used (or about to be) by someone else? */
   private taken(s: Pick<PlacedSlot, "objectId" | "slot">, memberId: string) {
-    return Object.values(this.state.avatars).some((o) => o.memberId !== memberId && o.use?.objectId === s.objectId && o.use.slot === s.slot);
+    return Object.values(this.state.avatars).some(
+      (o) => o.memberId !== memberId && !this.givesWay(o, memberId) && o.use?.objectId === s.objectId && o.use.slot === s.slot,
+    );
   }
 
   /** Send a character to the free slot (of several) that's quickest to reach. */
@@ -277,7 +352,9 @@ export class Life {
     const console = level.objects[objectId]!;
     const controllers = slotsOf(console, "play", this.cat).length;
     if (!controllers) return "nothing-to-do";
-    const used = Object.values(this.state.avatars).filter((other) => other.memberId !== a.memberId && other.use?.consoleId === console.id).length;
+    const used = Object.values(this.state.avatars).filter(
+      (other) => other.memberId !== a.memberId && !this.givesWay(other, a.memberId) && other.use?.consoleId === console.id,
+    ).length;
     if (used >= controllers) return "taken";
     const nav = buildNav(bp, 0, this.cat);
     const spots = gamingSpots(level, console, nav, this.cat);
@@ -358,7 +435,7 @@ export class Life {
   // --- together ---
 
   private isHere(memberId: string) {
-    return !this.online || this.online.has(memberId);
+    return this.present(memberId);
   }
 
   /** Hug or kiss your partner (you go to them), or cuddle up when you're both in the same bed. */
@@ -378,8 +455,8 @@ export class Life {
       return null;
     }
 
-    // a sitter gets up for a hug; someone cooking, eating or asleep is busy
-    if (p.use && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge" && p.use.action !== "watch" && p.use.action !== "play") return "partner-busy";
+    // a sitter gets up for a hug; someone cooking, eating or asleep is busy, unless they're only at it of their own accord
+    if (p.use && !this.givesWay(p, memberId) && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge" && p.use.action !== "watch" && p.use.action !== "play") return "partner-busy";
     const nav = buildNav(bp, 0, this.cat);
     // they stop where they are (the cell they're stepping into); you go beside them, with no wall in between
     const [px, pz] = this.origin(p, now).cell;
@@ -461,7 +538,7 @@ export class Life {
 
   /** Who's at a station and working right now (arrived, not still walking over). */
   private workers(now: number) {
-    return Object.values(this.state.avatars).filter((a) => a.use?.station && now >= arrivalTime(a) && (!this.online || this.online.has(a.memberId)));
+    return Object.values(this.state.avatars).filter((a) => a.use?.station && now >= arrivalTime(a) && this.present(a.memberId));
   }
 
   // --- eating ---
@@ -470,7 +547,7 @@ export class Life {
     const a = this.state.avatars[memberId];
     const dish = this.state.dishes.find((d) => d.id === dishId);
     if (!a || !dish) return "no-dish";
-    const eating = Object.values(this.state.avatars).filter((o) => o.memberId !== memberId && o.use?.dishId === dishId).length;
+    const eating = Object.values(this.state.avatars).filter((o) => o.memberId !== memberId && !this.givesWay(o, memberId) && o.use?.dishId === dishId).length;
     if (eating >= dish.portions) return "taken";
     const level = this.level(bp);
     const nav = buildNav(bp, 0, this.cat);
@@ -528,8 +605,16 @@ export class Life {
 
   // --- time passing ---
 
-  /** Move time forward: finish meals and plates, and keep the cooking speed right. True if anything changed. */
+  /**
+   * Move time forward: finish meals and plates, keep the cooking speed right, and let anyone left to themselves
+   * decide what to do. True if anything changed.
+   */
   tick(bp: Blueprint, now: number): boolean {
+    const passed = this.passTime(bp, now);
+    return (this.freeWill?.think(bp, now) ?? false) || passed;
+  }
+
+  private passTime(bp: Blueprint, now: number): boolean {
     let changed = this.syncTableGames(bp);
     for (const a of Object.values(this.state.avatars)) {
       const u = a.use;
@@ -609,6 +694,7 @@ export class Life {
     const c = this.state.cooking;
     const step = c && this.cat.recipes.get(c.recipeId)?.steps[c.step];
     if (c && step && c.rate > 0) next = Math.min(next, c.updatedAt + ((step.seconds - c.done) / c.rate) * 1000);
+    next = Math.min(next, this.freeWill?.nextAt(now) ?? Infinity);
     return next === Infinity ? null : Math.max(next, now);
   }
 
@@ -700,7 +786,14 @@ export class Life {
           : together(a.use) || brief(a.use)
             ? null
             : a.use;
-      state.avatars[a.memberId] = { ...a, path: [end], startedAt: now, use, ...(a.needs ? { needs: { ...a.needs, at: now } } : {}) };
+      state.avatars[a.memberId] = {
+        ...a,
+        path: [end],
+        startedAt: now,
+        use,
+        ...(a.needs ? { needs: { ...a.needs, at: now } } : {}),
+        ...(a.auto ? { auto: { need: a.auto.need, since: now } } : {}),
+      };
     }
     if (saved.cooking) state.cooking = { ...saved.cooking, rate: 0, updatedAt: now };
     return new Life(state, cat);
@@ -718,6 +811,7 @@ export class Life {
         startedAt: 0,
         use: together(a.use) || brief(a.use) ? null : settled || a.use?.action !== "eat" ? a.use : null,
         ...(a.needs ? { needs: { v: needsAt(a, now), at: 0, live: false } } : {}),
+        ...(a.auto ? { auto: { need: a.auto.need, since: 0 } } : {}),
       };
     }
     const c = this.state.cooking;

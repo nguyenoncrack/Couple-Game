@@ -80,7 +80,8 @@ export class HouseRoom {
   private snapshotVersion: number;
   /** The day each connection last asked to have counted. */
   private asked = new WeakMap<Peer, Day>();
-  private life = new Life(emptyLife());
+  /** Life in the house, with free will: characters look after themselves while their player's away or idle. */
+  private life = new Life(emptyLife()).enableFreeWill();
   private lifeTimer: Timer | null = null;
   private lifeSave: Timer | null = null;
   private lastActive = 0;
@@ -125,7 +126,7 @@ export class HouseRoom {
     room.members = await directory.listMembers();
     const saved = await store.loadLife(house.id);
     if (saved) {
-      room.life = Life.restore(saved, room.now());
+      room.life = Life.restore(saved, room.now()).enableFreeWill();
       room.life.onBlueprint(room.blueprint, room.now());
     }
     return room;
@@ -190,6 +191,8 @@ export class HouseRoom {
       const chat = await this.store.recentChat(this.house.id, CHAT_HISTORY);
       this.peers.add(peer);
       const now = this.now();
+      // back: their character is theirs again (whatever it's doing carries on until they say otherwise)
+      this.life.freeWill?.noteInput(peer.memberId, now);
       const arrived = this.life.ensureAvatar(peer.memberId, this.blueprint, now);
       // back online: a meal they were cooking picks up again, and their needs run again (before the welcome, so
       // they're told as much)
@@ -221,8 +224,9 @@ export class HouseRoom {
     if (released) this.broadcast({ type: "holds", holds: this.holdsObject() });
     if (this.presence.delete(peer.memberId)) this.broadcast({ type: "presence", memberId: peer.memberId, cursor: null, tool: "", drag: null });
     this.broadcast({ type: "members", members: this.memberInfo() });
-    // a meal they were cooking waits for them
+    // their character carries on by itself while anyone's here (with nobody left, everything waits)
     if (this.lifeOnline()) this.lifeChanged();
+    else this.scheduleLife();
     if (this.peers.size === 0) this.stopLife();
   }
 
@@ -234,6 +238,7 @@ export class HouseRoom {
         peer.send({ type: "duplicate", clientOpId });
         return;
       }
+      this.life.freeWill?.noteInput(peer.memberId, this.now());
       const r = applyOp(this.blueprint, op);
       if (!r.ok) {
         peer.send({ type: "rejected", clientOpId, reason: r.reason });
@@ -328,41 +333,37 @@ export class HouseRoom {
     const now = this.now();
     const bp = this.blueprint;
     const id = peer.memberId;
-    let r: LifeReject | null;
-    switch (intent.do) {
-      case "walk":
-        r = this.life.walk(id, bp, [intent.x, intent.z], now);
-        break;
-      case "use":
-        r = this.life.use(id, bp, intent.objectId, intent.action, now);
-        break;
-      case "stop":
-        r = this.life.stop(id, now);
-        break;
-      case "cards":
-        r = this.life.cards(id, bp, intent.objectId, intent.roundId, intent.action, now);
-        break;
-      case "move":
-        // walking into a wall isn't worth a message; you just don't go anywhere
-        if (this.life.move(id, bp, [intent.x, intent.z], now)) return;
-        r = null;
-        break;
-      case "cook":
-        r = this.life.cook(id, bp, intent.recipeId, intent.objectId, now);
-        break;
-      case "help":
-        r = this.life.help(id, bp, now);
-        break;
-      case "cancel":
-        r = this.life.cancelCooking();
-        break;
-      case "eat":
-        r = this.life.eat(id, bp, intent.dishId, now);
-        break;
-      case "social":
-        r = this.life.social(id, bp, intent.action, now);
-        break;
-    }
+    // walking into a wall in first person isn't worth a message; you just don't go anywhere
+    let quiet = false;
+    // an order: the character is the player's again, and anyone acting on their own makes way
+    const r: LifeReject | null = this.life.command(id, bp, now, () => {
+      switch (intent.do) {
+        case "walk":
+          return this.life.walk(id, bp, [intent.x, intent.z], now);
+        case "use":
+          return this.life.use(id, bp, intent.objectId, intent.action, now);
+        case "stop":
+          return this.life.stop(id, now);
+        case "cards":
+          return this.life.cards(id, bp, intent.objectId, intent.roundId, intent.action, now);
+        case "move": {
+          const m = this.life.move(id, bp, [intent.x, intent.z], now);
+          quiet = m !== null;
+          return m;
+        }
+        case "cook":
+          return this.life.cook(id, bp, intent.recipeId, intent.objectId, now);
+        case "help":
+          return this.life.help(id, bp, now);
+        case "cancel":
+          return this.life.cancelCooking();
+        case "eat":
+          return this.life.eat(id, bp, intent.dishId, now);
+        case "social":
+          return this.life.social(id, bp, intent.action, now);
+      }
+    });
+    if (quiet) return;
     if (r) peer.send({ type: "lifeRejected", reason: r });
     else {
       this.life.syncTableGames(bp);
@@ -414,6 +415,7 @@ export class HouseRoom {
       return;
     }
     this.touch();
+    this.life.freeWill?.noteInput(peer.memberId, this.now());
     const message = { id: newId(12), by: peer.memberId, text: clean, at: this.now() };
     return this.enqueue(async () => {
       await this.store.appendChat(this.house.id, message, CHAT_KEEP);

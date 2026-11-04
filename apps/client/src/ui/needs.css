@@ -49,6 +49,12 @@
   font-size: 21px;
 }
 
+.needs-auto {
+  margin: -2px 0 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
 .needs-who button {
   display: inline-flex;
   align-items: center;
