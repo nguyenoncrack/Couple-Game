@@ -115,7 +115,10 @@ export function trees(k: Kit, list: Tree[], w: number, d: number) {
     const a = r() * Math.PI * 2;
     const dist = 94 + r() * 50;
     const s = 1.4 + r() * 1.2;
-    k.add(FIR, farFir[n % 2]!, [cx + Math.cos(a) * dist, 3 * s, cz + Math.sin(a) * dist], [2.4 * s, 6 * s, 2.4 * s], { outline: false });
+    const [x, z] = [cx + Math.cos(a) * dist, cz + Math.sin(a) * dist];
+    // the street runs on out through them into the haze
+    if (z > d + 0.5 - 1.2 * s && z < d + 12 + 1.2 * s) continue;
+    k.add(FIR, farFir[n % 2]!, [x, 3 * s, z], [2.4 * s, 6 * s, 2.4 * s], { outline: false });
   }
 }
 

@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { KitMesh } from "./KitMesh";
 import { shade } from "./models";
 import { pencilMaterial } from "./pencil";
+import { ROAD_TOP, STREET_REACH, streetZ } from "./sceneryLayout";
 
 /**
  * The world around the house: lawn, a picket fence along the back and sides, a pavement and a quiet street out
@@ -47,14 +48,17 @@ export function Lot({ w, d }: { w: number; d: number }) {
           fence(-o, d + 0.2, -o, -o);
           fence(w + o, -o, w + o, d + 0.2);
 
-          // pavement and street along the front
+          // pavement and street along the front, running on out of sight both ways
+          const run = STREET_REACH * 2;
+          const sz = streetZ(d);
           const pave = pencilMaterial("#d4cfc4", { finish: "setts", rim: false });
           const road = pencilMaterial("#8d8a84", { finish: "concrete", rim: false });
           const kerb = pencilMaterial("#cfc9bd");
-          k.box(pave, [w / 2, 0.02, d + 2], [w + 60, 0.04, 2.4], { outline: false });
-          k.box(kerb, [w / 2, 0.06, d + 3.25], [w + 60, 0.12, 0.2], { outline: 0.008 });
-          k.box(road, [w / 2, -0.005, d + 7.4], [w + 60, 0.01, 8], { outline: false });
-          for (let x = -26; x < w + 30; x += 4) k.box(pencilMaterial("#f2ead2"), [x, 0.002, d + 7.4], [2, 0.006, 0.18], { outline: false });
+          k.box(pave, [w / 2, 0.02, d + 2], [run, 0.04, 2.4], { outline: false });
+          k.box(kerb, [w / 2, 0.06, d + 3.25], [run, 0.12, 0.2], { outline: 0.008 });
+          // the road's top stands a few centimetres over the lawn, or far down the street the two would flicker
+          k.box(road, [w / 2, ROAD_TOP / 2, sz], [run, ROAD_TOP, 8], { outline: false });
+          for (let x = w / 2 - STREET_REACH + 2; x < w / 2 + STREET_REACH; x += 4) k.box(pencilMaterial("#f2ead2"), [x, ROAD_TOP + 0.003, sz], [2, 0.006, 0.18], { outline: false });
 
           // trees and hedges, scattered the same way every time
           const r = rng(7);

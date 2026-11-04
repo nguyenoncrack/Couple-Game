@@ -1,6 +1,6 @@
 import { catalog, cellKey, edgeKey, footprintOf, parseCell, parseEdge, type Level } from "@cg/shared";
 import * as THREE from "three";
-import { campLayout, lakeShape } from "./sceneryLayout";
+import { campLayout, lakeShape, STREET_REACH } from "./sceneryLayout";
 import { scenesLayout } from "./scenesLayout";
 import { shoreLayout } from "./shoreLayout";
 import { nearTrail, trailNetwork } from "./trailLayout";
@@ -52,7 +52,7 @@ export function meadowClearance(w: number, d: number, level: Level) {
   return (x: number, z: number) => {
     if (lake.inside(x, z, 1.5)) return false;
     // Pavement/street, playground bark and slide exit, cabin/porch and campfire circle.
-    if (z > d + 0.5 && z < d + 12 && x > -31 && x < w + 31) return false;
+    if (z > d + 0.5 && z < d + 12 && Math.abs(x - w / 2) < STREET_REACH) return false;
     if (Math.abs(x - (w + 5)) < 4.1 && Math.abs(z - (d / 2 + 0.5)) < 4.8) return false;
     if (Math.abs(x - camp.cabin.x) < 3.7 && Math.abs(z - camp.cabin.z) < 3) return false;
     if (Math.hypot(x - camp.fire[0], z - camp.fire[2]) < 3.85) return false;

@@ -56,3 +56,11 @@ export const SWING_RATE = 1.7;
 export const SWING_ARC = 0.16;
 /** From the top bar down to the seat. */
 export const SWING_DROP = 1.78;
+
+/** The street runs this far either side of the lot's middle, out into the haze, so its ends are never seen. */
+export const STREET_REACH = 200;
+/** Its middle line, and the two lanes either side of it (+x traffic keeps to the far lane, -x to the near). */
+export const streetZ = (d: number) => d + 7.4;
+export const LANE = 2;
+/** Height of the road's surface (the lawn is just under 0, the pavement 0.04). */
+export const ROAD_TOP = 0.03;

@@ -1,4 +1,4 @@
-import { campLayout, lakeShape } from "./sceneryLayout";
+import { campLayout, lakeShape, STREET_REACH } from "./sceneryLayout";
 import { scenesLayout } from "./scenesLayout";
 import { shoreLayout } from "./shoreLayout";
 import { nearTrail, trailNetwork } from "./trailLayout";
@@ -85,7 +85,7 @@ function makeWoods(w: number, d: number): Woods {
   /** Is there room here for something `m` metres across (trees ask for more room than ferns)? */
   const free = (x: number, z: number, m: number) => {
     if (x > -2 - m && x < w + 2 + m && z > -2.5 - m && z < d + 1 + m) return false; // the lot, fence and hedge
-    if (z > d + 0.5 - m && z < d + 13 + m && x > -32 && x < w + 32) return false; // pavement and street
+    if (z > d + 0.5 - m && z < d + 13 + m && Math.abs(x - w / 2) < STREET_REACH) return false; // pavement and street
     if (Math.abs(x - camp.cabin.x) < 3.6 + m && Math.abs(z - camp.cabin.z) < 3.6 + m) return false;
     if (Math.hypot(x - camp.fire[0], z - camp.fire[2]) < 4.5 + m) return false;
     if (x > w + 1 - m && x < w + 9.5 + m && Math.abs(z - (d / 2 + 0.5)) < 4.6 + m) return false; // the playground

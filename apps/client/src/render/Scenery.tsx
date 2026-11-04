@@ -8,6 +8,7 @@ import { lakeShape } from "./sceneryLayout";
 import { Meadow } from "./Meadow";
 import { Ambient } from "./Ambient";
 import { Folk } from "./Folk";
+import { Traffic } from "./Traffic";
 import { Scenes } from "./Scenes";
 import { Shore } from "./Shore";
 import { shoreLayout } from "./shoreLayout";
@@ -94,6 +95,7 @@ export function Scenery({ w, d }: { w: number; d: number }) {
       <Ambient w={w} d={d} />
       <Yard w={w} d={d} />
       <Folk w={w} d={d} />
+      <Traffic w={w} d={d} />
       <Trails w={w} d={d} />
       <Meadow w={w} d={d} />
       <Woods w={w} d={d} />
