@@ -90,4 +90,27 @@ export const itemFinishesGlsl = /* glsl */ `
         tv = (noise(surface * 5.0) - 0.5) * 0.12 + (noise(surface * 42.0) - 0.5) * 0.09 * detailAt(fp, 42.0);
         relief = tv * 0.006;
         lines = fineLine(fp.y * 85.0 + sin(fp.x * 4.0) * 0.2, 0.035) * 0.055;
+      #elif FINISH == 25
+        // Bark has vertical fissures, broad age variation and small lichen patches.
+        float furrow = fineLine(fp.x * 25.0 + noise(surface * vec3(4.0, 0.8, 4.0)) * 1.7, 0.13);
+        float lichen = smoothstep(0.66, 0.8, noise(surface * 9.0));
+        lines = furrow * 0.65;
+        relief = furrow * 0.002;
+        tv = (noise(surface * vec3(12.0, 1.5, 12.0)) - 0.5) * 0.22;
+        tone = mix(tone, vec3(0.51, 0.56, 0.37), lichen * 0.22);
+      #elif FINISH == 26
+        // Irregular leaf clusters break up the crown; fine glints fade before they shimmer.
+        float lobes = noise(surface * 7.0);
+        float leaflets = noise(surface * 26.0);
+        tv = (lobes - 0.5) * 0.35 + (leaflets - 0.5) * 0.2 * detailAt(fp, 26.0);
+        relief = lobes * 0.0015;
+        lines = smoothstep(0.63, 0.78, lobes) * 0.3;
+      #elif FINISH == 27
+        // Blade roots stay shaded, tips catch the light. No opaque texture-card rectangles.
+        tv = (noise(surface * 19.0) - 0.5) * 0.12;
+        tone *= mix(vec3(0.62, 0.72, 0.51), vec3(1.12, 1.08, 0.86), smoothstep(0.0, 0.25, surface.y));
+      #elif FINISH == 28
+        // Fine sand and worn earth: no masonry or marble veins.
+        tv = (noise(surface * 2.7) - 0.5) * 0.14 + (noise(surface * 46.0) - 0.5) * 0.16 * detailAt(fp, 46.0);
+        lines = smoothstep(0.72, 0.85, noise(surface * 17.0)) * 0.16 * detailAt(fp, 17.0);
 `;

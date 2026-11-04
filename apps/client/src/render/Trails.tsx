@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { flower, grassTuft, SWAY } from "./botanicalModels";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
-import { pencilMaterial, type Finish } from "./pencil";
+import type { Finish } from "./pencil";
+import { natureMaterial } from "./nature";
 import { trailCurve, trailNetwork, type Clearing, type FlowerPatch, type Signpost } from "./trailLayout";
 
 /**
@@ -78,8 +79,8 @@ function flatGeometry(pos: number[], idx: number[]) {
 /** A dirt path with its trampled verge: the verge a little wider and lower, so the dirt sits on it. */
 export function dirtPath(k: Kit, points: [number, number][], width: number, seed: number) {
   const curve = trailCurve(points);
-  k.add(ribbon(curve, width * 1.75, -0.004, seed + 5), pencilMaterial(VERGE, { rim: false }), [0, 0, 0], 1, { outline: false });
-  k.add(ribbon(curve, width, 0.004, seed), pencilMaterial(DIRT, { rim: false }), [0, 0, 0], 1, { outline: false });
+  k.add(ribbon(curve, width * 1.75, -0.004, seed + 5), natureMaterial(VERGE, { finish: "earth" }), [0, 0, 0], 1, { outline: false });
+  k.add(ribbon(curve, width, 0.004, seed), natureMaterial(DIRT, { finish: "earth" }), [0, 0, 0], 1, { outline: false });
   return curve;
 }
 
@@ -89,7 +90,7 @@ export function Trails({ w, d }: { w: number; d: number }) {
 
 function trails(k: Kit, w: number, d: number) {
   const net = trailNetwork(w, d);
-  const stone = STONES.map((c) => pencilMaterial(c));
+  const stone = STONES.map((c) => natureMaterial(c, { finish: "mineral" }));
   net.trails.forEach((t, ti) => {
     const curve = dirtPath(k, t.points, t.width, 3 + ti * 7);
     const len = curve.getLength();
@@ -103,15 +104,15 @@ function trails(k: Kit, w: number, d: number) {
       }
     }
   });
-  net.bare.forEach((c, i) => k.add(blot(c, 0.0, 11 + i * 3), pencilMaterial(DIRT, { rim: false }), [0, 0, 0], 1, { outline: false }));
+  net.bare.forEach((c, i) => k.add(blot(c, 0.0, 11 + i * 3), natureMaterial(DIRT, { finish: "earth" }), [0, 0, 0], 1, { outline: false }));
   for (const s of net.signs) signpost(k, s);
   for (const p of net.patches) flowerPatch(k, p);
 }
 
 /** A weathered post with an arrow-shaped board for each way, its tip painted the destination's colour. */
 function signpost(k: Kit, s: Signpost) {
-  const post = pencilMaterial("#7a5c43", { finish: "wood" });
-  const board = pencilMaterial("#e6d7b8", { finish: "wood" });
+  const post = natureMaterial("#7a5c43", { finish: "timber" });
+  const board = natureMaterial("#e6d7b8", { finish: "timber" });
   k.box(post, [s.x, 0.72, s.z], [0.11, 1.45, 0.11], { outline: 0.008 });
   k.add(new THREE.ConeGeometry(0.1, 0.12, 4).rotateY(Math.PI / 4), post, [s.x, 1.5, s.z], 1, { outline: 0.006 });
   s.arms.forEach((arm, i) => {
@@ -119,7 +120,7 @@ function signpost(k: Kit, s: Signpost) {
     // arms step down the post, each tipped a touch so they look nailed up by hand
     k.at([s.x, 1.26 - i * 0.2, s.z], ry, () => {
       k.add(ARROW, board, [0.06, 0, 0], 1, { rot: [0, 0, (i % 2 ? -1 : 1) * 0.04], outline: 0.006 });
-      k.add(TIP, pencilMaterial(arm.tip, { finish: "paint" }), [0.06, 0, 0], 1, { rot: [0, 0, (i % 2 ? -1 : 1) * 0.04], outline: false });
+      k.add(TIP, natureMaterial(arm.tip, { finish: "paint" }), [0.06, 0, 0], 1, { rot: [0, 0, (i % 2 ? -1 : 1) * 0.04], outline: false });
     });
   });
 }
@@ -149,8 +150,8 @@ function arrow(from: number, to: number, depth: number) {
 /** A clump of one flower, thick in the middle and thinning out, on a low cushion of leaves with grass round it. */
 function flowerPatch(k: Kit, p: FlowerPatch) {
   const r = rng(p.seed);
-  const m = (tone: string, finish?: Finish) => pencilMaterial(tone, { finish, rim: false, sway: SWAY });
-  const leaves = pencilMaterial("#6c9e57", { rim: false });
+  const m = (tone: string, finish?: Finish) => natureMaterial(tone, { finish, rim: false, sway: SWAY });
+  const leaves = natureMaterial("#6c9e57", { rim: false });
   for (let i = 0; i < 3; i++) {
     const a = i * 2.1 + r();
     const rr = p.radius * 0.35 * r();
