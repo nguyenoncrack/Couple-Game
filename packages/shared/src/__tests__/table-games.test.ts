@@ -84,6 +84,11 @@ describe("table interactions", () => {
     const bp = room(); const life = two(bp); join(life, bp);
     life.cards("amy", bp, "table00001", null, "deal", 60_000);
     life.online = new Set();
+    const table = structuredClone(life.state.blackjack);
+    // nothing moves on at the table; the only news is everyone's needs pausing
+    expect(life.tick(bp, 60_001)).toBe(true);
+    expect(life.state.blackjack).toEqual(table);
+    expect(Object.values(life.state.avatars).every((a) => a.needs?.live === false)).toBe(true);
     expect(life.tick(bp, 60_001)).toBe(false);
     life.online = new Set(["amy"]);
     expect(life.tick(bp, 60_002)).toBe(true);

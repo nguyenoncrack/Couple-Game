@@ -10,6 +10,7 @@ export * from "./starter";
 export * from "./life/nav";
 export * from "./life/interactions";
 export * from "./life/state";
+export * from "./life/needs";
 export * from "./life/engine";
 export * from "./life/blackjack";
 export * from "./life/pingpong";

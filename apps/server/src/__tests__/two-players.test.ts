@@ -336,6 +336,20 @@ describe("disconnects and saving", () => {
     await crashed.close();
   });
 
+  it("runs each player's needs only while they're in, and says so in the welcome", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    expect(wa.life.avatars[wa.memberId]!.needs).toMatchObject({ live: true });
+    const wb = await b.connect();
+    await b.disconnect();
+    await a.next("life", (m) => m.life.avatars[wb.memberId]!.needs?.live === false);
+    // back again: their own welcome already has them running
+    const again = await b.connect();
+    expect(again.life.avatars[wb.memberId]!.needs).toMatchObject({ live: true });
+    await a.disconnect();
+    await b.disconnect();
+  });
+
   it("lets a second tab of the same player take over from the first", async () => {
     const { a, houseId } = await couple();
     await a.connect();

@@ -1,0 +1,208 @@
+/* How you're doing: a mood and a bar for each need, top left in live mode. */
+
+.needs-panel {
+  position: absolute;
+  left: 16px;
+  top: 80px;
+  width: 232px;
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.needs-panel.folded {
+  width: auto;
+  padding-bottom: 8px;
+}
+
+.needs-mood {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+}
+
+.needs-face {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+.needs-face.ok {
+  background: #cfe3bf;
+}
+
+.needs-face.mid {
+  background: #f6e3a1;
+}
+
+.needs-face.low {
+  background: #f0b7a8;
+}
+
+.needs-mood-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.needs-mood-name {
+  font-family: var(--hand);
+  font-size: 21px;
+}
+
+.needs-chevron {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.needs-who button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 1px 8px;
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.needs-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+}
+
+.needs-bars {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 12px;
+}
+
+.needs-bars li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.needs-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--hand);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.needs-label svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.needs-bar {
+  height: 10px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: #fffdf7;
+  overflow: hidden;
+}
+
+/* pencil-shaded fill: a colour with hatching over it */
+.needs-bar span {
+  display: block;
+  height: 100%;
+  border-right: 1.5px solid var(--ink);
+  background:
+    repeating-linear-gradient(-55deg, rgb(58 54 49 / 0.16) 0 1.5px, transparent 1.5px 4.5px),
+    var(--green);
+  transition: width 0.9s linear;
+}
+
+.needs-bars li.mid .needs-bar span {
+  background-color: var(--yellow);
+}
+
+.needs-bars li.low .needs-bar span {
+  background-color: var(--red);
+}
+
+.needs-bars li.low .needs-label {
+  color: var(--red);
+}
+
+.needs-bars li.low .needs-label svg {
+  animation: needs-nag 1.4s ease-in-out infinite;
+}
+
+@keyframes needs-nag {
+  50% {
+    transform: scale(1.25) rotate(-8deg);
+  }
+}
+
+/* in a name tag over someone's head */
+.need-thought {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: -4px;
+  color: var(--card);
+  background: var(--red);
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  animation: needs-nag 1.4s ease-in-out infinite;
+}
+
+.need-thought svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .needs-bars li.low .needs-label svg,
+  .need-thought {
+    animation: none;
+  }
+
+  .needs-bar span {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* under the topbar's second row of buttons */
+  .needs-panel {
+    top: 178px;
+    width: 200px;
+    padding: 6px 10px 10px;
+  }
+
+  .needs-bars {
+    gap: 5px 10px;
+  }
+
+  .needs-label {
+    font-size: 14px;
+  }
+}

@@ -1,6 +1,7 @@
 import type { Action, Recipe, Station } from "../catalog";
 import type { Rot } from "../grid";
 import type { BlackjackRound } from "./blackjack";
+import type { Needs } from "./needs";
 
 /**
  * Life in the house: where each character is, what they're doing, the meal on the go and the food waiting on the
@@ -57,6 +58,8 @@ export interface Avatar {
   /** Facing once they've stopped (when not posed by a `use`). */
   face: Rot;
   use: Use | null;
+  /** Hunger, energy and the rest as last written down (see needs.ts). Missing on old saves. */
+  needs?: Needs;
 }
 
 export interface Cooking {

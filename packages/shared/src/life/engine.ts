@@ -6,6 +6,7 @@ import { footprintOf } from "../rules";
 import { canSee, screenOf, seatsFacing, slotsFor, slotsOf, stationSlots, tvFacing, type PlacedSlot } from "./interactions";
 import { gamingSpots } from "./gaming";
 import { dealBlackjack, finishBlackjack, playBlackjack, type BlackjackCommand } from "./blackjack";
+import { needsAt, START_NEEDS } from "./needs";
 import { buildNav, canStep, findPath, nearestWalkable, roomAt, slide, walkable, type Cell, type Nav } from "./nav";
 import {
   activityAt,
@@ -110,8 +111,24 @@ export class Life {
     let spot = nearestWalkable(nav, [Math.floor(bp.lot.w / 2), bp.lot.d - 1]) ?? [0, 0];
     if (others.has(spot.join(":")))
       spot = nearestWalkable({ ...nav, blocked: Uint8Array.from(nav.blocked, (b, i) => (i === spot[1] * nav.w + spot[0] ? 1 : b)) }, spot) ?? spot;
-    this.state.avatars[memberId] = { memberId, path: [center(spot)], startedAt: now, face: 2, use: null };
+    this.state.avatars[memberId] = { memberId, path: [center(spot)], startedAt: now, face: 2, use: null, needs: { v: { ...START_NEEDS }, at: now, live: true } };
     return true;
+  }
+
+  /**
+   * Write down everyone's needs as they stand now, before anything changes what they're doing (and so how their
+   * needs go from here): see `CHANGES` below. True if anyone's started or stopped running down (they came or went).
+   */
+  settle(now: number): boolean {
+    let changed = false;
+    for (const a of Object.values(this.state.avatars)) {
+      const live = this.online?.has(a.memberId) ?? true;
+      if (a.needs?.live !== live) changed = true;
+      const v = needsAt(a, now);
+      for (const k in v) v[k as keyof typeof v] = Math.round(v[k as keyof typeof v] * 100) / 100;
+      a.needs = { v, at: now, live };
+    }
+    return changed;
   }
 
   /** Where a character can start a new walk from without jumping: the cell they're stepping into. */
@@ -683,7 +700,7 @@ export class Life {
           : together(a.use) || brief(a.use)
             ? null
             : a.use;
-      state.avatars[a.memberId] = { ...a, path: [end], startedAt: now, use };
+      state.avatars[a.memberId] = { ...a, path: [end], startedAt: now, use, ...(a.needs ? { needs: { ...a.needs, at: now } } : {}) };
     }
     if (saved.cooking) state.cooking = { ...saved.cooking, rate: 0, updatedAt: now };
     return new Life(state, cat);
@@ -695,7 +712,13 @@ export class Life {
     for (const a of Object.values(this.state.avatars)) {
       const end = a.path[a.path.length - 1]!;
       const settled = activityAt(a, now) !== "walk";
-      avatars[a.memberId] = { ...a, path: [end], startedAt: 0, use: together(a.use) || brief(a.use) ? null : settled || a.use?.action !== "eat" ? a.use : null };
+      avatars[a.memberId] = {
+        ...a,
+        path: [end],
+        startedAt: 0,
+        use: together(a.use) || brief(a.use) ? null : settled || a.use?.action !== "eat" ? a.use : null,
+        ...(a.needs ? { needs: { v: needsAt(a, now), at: 0, live: false } } : {}),
+      };
     }
     const c = this.state.cooking;
     const recipe = c && this.cat.recipes.get(c.recipeId);
@@ -706,4 +729,24 @@ export class Life {
       ...(this.state.blackjack ? { blackjack: structuredClone(this.state.blackjack) } : {}),
     };
   }
+}
+
+/**
+ * Everything that can change what someone's doing (each takes the time last) first writes down everyone's needs as
+ * they stood, since from then on they go differently. One that's turned down, or finds nothing to do, puts them
+ * back, so it leaves the state just as it was, like everything else it does.
+ */
+const CHANGES = ["walk", "use", "cards", "move", "stop", "social", "cook", "help", "eat", "tick", "onBlueprint"] as const;
+for (const name of CHANGES) {
+  const change = Life.prototype[name] as (this: Life, ...args: unknown[]) => LifeReject | boolean | null;
+  Object.defineProperty(Life.prototype, name, {
+    value(this: Life, ...args: unknown[]) {
+      const before = Object.values(this.state.avatars).map((a) => [a, a.needs] as const);
+      const cameOrWent = this.settle(args[args.length - 1] as number);
+      const r = change.apply(this, args);
+      if (cameOrWent) return r === false ? true : r;
+      if (r !== null && r !== true) for (const [a, needs] of before) a.needs = needs;
+      return r;
+    },
+  });
 }

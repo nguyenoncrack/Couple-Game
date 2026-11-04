@@ -10,6 +10,7 @@ import { HIP, THIGH, TORSO, SHOULDER, ARM, torso, arm, thigh, shin, looksFor, cu
 import { KitMesh } from "./KitMesh";
 import { controller, paddle } from "./entertainmentModels";
 import { pencilMaterial } from "./pencil";
+import { NeedThought } from "../ui/Needs";
 
 /**
  * The two of you, drawn in pencil like the furniture. Each character is a few jointed parts (body, arms, thighs,
@@ -423,6 +424,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
                 <span>♥</span>
               </div>
               <span className="pin-dot" style={{ background: member.color }} />
+              {live && member.online && <NeedThought avatar={avatar} />}
               {mine ? "You" : member.name}
               {!member.online && <span className="pin-tool"> · away</span>}
               <span ref={zzz} className="zzz">

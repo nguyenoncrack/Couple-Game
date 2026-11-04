@@ -178,6 +178,9 @@ export class HouseRoom {
       this.peers.add(peer);
       const now = this.now();
       const arrived = this.life.ensureAvatar(peer.memberId, this.blueprint, now);
+      // back online: a meal they were cooking picks up again, and their needs run again (before the welcome, so
+      // they're told as much)
+      const changed = this.lifeOnline() || arrived;
       this.touch();
       peer.send({
         type: "welcome",
@@ -192,8 +195,7 @@ export class HouseRoom {
       });
       for (const pr of this.presence.values()) if (pr.memberId !== peer.memberId) peer.send({ type: "presence", ...pr });
       this.broadcast({ type: "members", members: this.memberInfo() }, peer);
-      // back online: a meal they were cooking picks up again
-      if (this.lifeOnline() || arrived) this.lifeChanged(peer);
+      if (changed) this.lifeChanged(peer);
       else this.scheduleLife();
     });
   }

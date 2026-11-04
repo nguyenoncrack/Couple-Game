@@ -15,6 +15,7 @@ import { CatalogSearch } from "./CatalogSearch";
 import { searchCatalog } from "./filterCatalog";
 import { useFirstPersonMouse } from "../input/firstPersonMouse";
 import { TableGamePanel } from "./TableGamePanel";
+import { NeedsPanel } from "./Needs";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -34,6 +35,7 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       {!live && <ToolPanel />}
       {!live && <SelectionCard />}
       {!live && <StarterOffer />}
+      {live && !firstPerson && <NeedsPanel />}
       <CookingCard />
       {live && <TableGamePanel />}
       {firstPerson ? <FirstPersonHint /> : <CameraButtons />}
