@@ -1,7 +1,8 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { campLayout } from "./sceneryLayout";
+import { useReducedMotion } from "./Ambient";
+import { campLayout, playLayout, SWING_ARC, SWING_DROP, SWING_RATE } from "./sceneryLayout";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
 import { pencilMaterial } from "./pencil";
@@ -41,7 +42,7 @@ function gable(w: number, h: number, t: number) {
 
 export function Yard({ w, d }: { w: number; d: number }) {
   const camp = campLayout(d);
-  const swings: V3 = [w + 6.6, 0, d / 2 + 0.5];
+  const play = playLayout(w, d);
   return (
     <group>
       <KitMesh deps={[d]} make={(k) => campsite(k, d)} />
@@ -49,8 +50,8 @@ export function Yard({ w, d }: { w: number; d: number }) {
       {/* smoke from the cabin's chimney (its top, turned with the cabin) */}
       <Smoke at={[camp.cabin.x - 0.65, 3.95 + BASE, camp.cabin.z - (CABIN_W / 2 - 0.6)]} />
       <KitMesh deps={[w, d]} make={(k) => playground(k, w, d)} />
-      {[-0.6, 0.6].map((z, i) => (
-        <Swing key={i} at={[swings[0], 2.3, swings[2] + z]} phase={i * 2.1} />
+      {play.swings.map((s, i) => (
+        <Swing key={i} at={[s.x, s.y, s.z]} phase={s.phase} />
       ))}
     </group>
   );
@@ -371,8 +372,7 @@ function Campfire({ at }: { at: V3 }) {
 }
 
 function playground(k: Kit, w: number, d: number) {
-  const cx = w + 5;
-  const cz = d / 2 + 0.5;
+  const { cx, cz, swings, slide, sandbox } = playLayout(w, d);
   const red = pencilMaterial("#e8613f", { finish: "paint" });
   const yellow = pencilMaterial("#f5c537", { finish: "paint" });
   const blue = pencilMaterial("#4f9fd6", { finish: "paint" });
@@ -388,13 +388,12 @@ function playground(k: Kit, w: number, d: number) {
   }
 
   // swing frame (the swings themselves move, see Swing)
-  const sx = cx + 1.6;
+  const sx = swings[0]!.x;
   for (const z of [-1.5, 1.5]) for (const s of [-1, 1]) rod(k, red, [sx + s * 0.85, 0, cz + z], [sx, 2.3, cz + z], 0.1);
   k.add("cyl8", red, [sx, 2.3, cz], [0.1, 3.3, 0.1], { rot: [Math.PI / 2, 0, 0], outline: 0.008 });
 
   // a slide: a platform with a pointed roof, a ladder up one side and a blue chute down the other
-  const px = cx - 1.7;
-  const pz = cz + 1.6;
+  const { x: px, z: pz } = slide;
   for (const ox of [-0.45, 0.45]) for (const oz of [-0.45, 0.45]) k.box(yellow, [px + ox, 1.25, pz + oz], [0.1, 2.5, 0.1], { outline: 0.008 });
   k.box(timber, [px, 1.4, pz], [1.0, 0.08, 1.0], { outline: 0.01 });
   k.add(new THREE.ConeGeometry(0.85, 0.7, 4).rotateY(Math.PI / 4), red, [px, 2.85, pz], 1, { outline: 0.012 });
@@ -413,8 +412,7 @@ function playground(k: Kit, w: number, d: number) {
   k.box(blue, [px, 0.12, pz + 0.5 + run + 0.25], [0.6, 0.05, 0.5], { outline: 0.006 });
 
   // a sandbox with a bucket and spade
-  const bx = cx - 1.6;
-  const bz = cz - 1.9;
+  const { x: bx, z: bz } = sandbox;
   k.box(pencilMaterial("#ead39a", { finish: "setts", rim: false }), [bx, 0.1, bz], [1.6, 0.18, 1.6], { outline: false });
   for (const s of [-1, 1]) {
     k.box(timber, [bx, 0.13, bz + s * 0.85], [1.84, 0.26, 0.12], { outline: 0.008 });
@@ -436,8 +434,10 @@ function playground(k: Kit, w: number, d: number) {
 /** A swing hanging from the frame's top bar, rocking gently. */
 function Swing({ at, phase }: { at: V3; phase: number }) {
   const ref = useRef<THREE.Group>(null);
+  // held still with reduced motion, as the child on it is (see Folk)
+  const quiet = useReducedMotion();
   useFrame(({ clock }) => {
-    if (ref.current) ref.current.rotation.z = Math.sin(clock.elapsedTime * 1.7 + phase) * 0.16;
+    if (ref.current) ref.current.rotation.z = quiet ? 0 : Math.sin(clock.elapsedTime * SWING_RATE + phase) * SWING_ARC;
   });
   return (
     <group ref={ref} position={at}>
@@ -445,8 +445,8 @@ function Swing({ at, phase }: { at: V3; phase: number }) {
         deps={[]}
         make={(k) => {
           const chain = pencilMaterial("#9aa3a3", { finish: "metal" });
-          for (const z of [-0.2, 0.2]) k.add("cyl8", chain, [0, -0.88, z], [0.025, 1.76, 0.025], { outline: 0.003 });
-          k.box(pencilMaterial("#f5c537", { finish: "paint" }), [0, -1.78, 0], [0.26, 0.05, 0.5], { outline: 0.006 });
+          for (const z of [-0.2, 0.2]) k.add("cyl8", chain, [0, -SWING_DROP / 2 + 0.01, z], [0.025, SWING_DROP - 0.02, 0.025], { outline: 0.003 });
+          k.box(pencilMaterial("#f5c537", { finish: "paint" }), [0, -SWING_DROP, 0], [0.26, 0.05, 0.5], { outline: 0.006 });
         }}
       />
     </group>

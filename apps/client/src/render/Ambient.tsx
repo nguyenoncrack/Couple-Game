@@ -14,7 +14,7 @@ import { lighting, pencilMaterial, WIND } from "./pencil";
 
 type XZ = [number, number];
 
-function useReducedMotion() {
+export function useReducedMotion() {
   return useSyncExternalStore(
     (l) => {
       const q = window.matchMedia("(prefers-reduced-motion: reduce)");

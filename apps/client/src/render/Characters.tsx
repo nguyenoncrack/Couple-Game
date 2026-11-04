@@ -19,7 +19,7 @@ import { pencilMaterial } from "./pencil";
  */
 
 /** Joint angles (radians, about x; negative swings forward) and how the whole body sits. */
-interface Pose {
+export interface Pose {
   /** Height of the hips, and how far the body leans back (lying down is π/2). */
   hip: number;
   lean: number;
@@ -37,7 +37,7 @@ const ease = (from: number, to: number, k: number) => from + (to - from) * k;
 const EYE = new THREE.Vector3(0, TORSO + 0.24, 0.05);
 const eyeAt = new THREE.Vector3();
 
-function poseFor(activity: string, seatY: number | null, t: number, standingTarget: boolean): Pose {
+export function poseFor(activity: string, seatY: number | null, t: number, standingTarget: boolean): Pose {
   const s = t / 1000;
   switch (activity) {
     case "walk": {
@@ -226,7 +226,7 @@ function lap(since: number) {
 }
 
 /** Shortest way round from one angle to another. */
-function turnToward(from: number, to: number, k: number) {
+export function turnToward(from: number, to: number, k: number) {
   let d = (to - from) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;

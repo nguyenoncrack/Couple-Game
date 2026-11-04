@@ -37,3 +37,22 @@ export function campLayout(d: number) {
   return { cabin, fire, trails: [toFire, toCabin] };
 }
 
+
+/** Where the playground's pieces sit, beside the lot on the x > w side. */
+export function playLayout(w: number, d: number) {
+  const cx = w + 5;
+  const cz = d / 2 + 0.5;
+  return {
+    cx,
+    cz,
+    /** The swings hang from the frame's top bar, this high, each rocking `sin(t·SWING_RATE + phase)·SWING_ARC`. */
+    swings: [-0.6, 0.6].map((dz, i) => ({ x: cx + 1.6, y: 2.3, z: cz + dz, phase: i * 2.1 })),
+    /** The slide's platform (its ladder runs up from -z, its chute down toward +z). */
+    slide: { x: cx - 1.7, z: cz + 1.6 },
+    sandbox: { x: cx - 1.6, z: cz - 1.9 },
+  };
+}
+export const SWING_RATE = 1.7;
+export const SWING_ARC = 0.16;
+/** From the top bar down to the seat. */
+export const SWING_DROP = 1.78;
