@@ -47,7 +47,7 @@ export function torso(k: Kit, l: Looks) {
   const sweater = pencilMaterial(l.sweater, { finish: "fabric" });
   const cuff = pencilMaterial(shade(l.sweater, 0.82), { finish: "fabric" });
   const skin = pencilMaterial(l.skin);
-  const hair = pencilMaterial(l.hair, { finish: "fabric" });
+  const hair = pencilMaterial(l.hair);
   const ink = pencilMaterial("#3a3631");
   // hips and sweater
   k.add("soft", pencilMaterial(l.trousers, { finish: "fabric" }), [0, 0.02, 0], [0.34, 0.16, 0.22]);
@@ -100,7 +100,7 @@ export function thigh(k: Kit, l: Looks, side: -1 | 1) {
 
 export function shin(k: Kit, l: Looks) {
   k.add("soft", pencilMaterial(l.appearance && l.appearance.outfit !== "long-pants" ? l.skin : l.trousers, { finish: l.appearance && l.appearance.outfit !== "long-pants" ? undefined : "fabric" }), [0, -SHIN / 2 + 0.02, 0], [0.12, SHIN, 0.13]);
-  k.add("soft", pencilMaterial("#3d3833", { finish: "stone" }), [0, -SHIN + 0.03, 0.05], [0.13, 0.08, 0.24]);
+  k.add("soft", pencilMaterial("#3d3833", { finish: "rubber" }), [0, -SHIN + 0.03, 0.05], [0.13, 0.08, 0.24]);
 }
 
 /** Neutral preview built from the exact same body-part builders as the animated game character. */

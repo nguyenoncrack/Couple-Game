@@ -74,6 +74,28 @@ export interface BuiltMesh {
   material: THREE.Material;
 }
 
+/** Metre-sized wood UVs follow each component's longest axis, including rotated table legs and rails.
+ * Reuse the existing UV channel; water and all other finishes keep their original UVs. */
+export function timberUvs(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) {
+  geometry.computeBoundingBox();
+  const e = matrix.elements;
+  const scale = [Math.hypot(e[0]!, e[1]!, e[2]!), Math.hypot(e[4]!, e[5]!, e[6]!), Math.hypot(e[8]!, e[9]!, e[10]!)];
+  const size = geometry.boundingBox!.getSize(new THREE.Vector3()).toArray().map((s, i) => s * scale[i]!);
+  const axes = [0, 1, 2].sort((a, b) => size[b]! - size[a]!);
+  const pos = geometry.getAttribute("position"), normal = geometry.getAttribute("normal");
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const n = [Math.abs(normal.getX(i)), Math.abs(normal.getY(i)), Math.abs(normal.getZ(i))];
+    const face = n[0]! > n[1]! ? (n[0]! > n[2]! ? 0 : 2) : (n[1]! > n[2]! ? 1 : 2);
+    const along = axes.find((a) => a !== face)!;
+    const across = axes.find((a) => a !== along && a !== face)!;
+    const p = [pos.getX(i), pos.getY(i), pos.getZ(i)];
+    uv[i * 2] = p[along]! * scale[along]!;
+    uv[i * 2 + 1] = p[across]! * scale[across]!;
+  }
+  geometry.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+}
+
 export class Kit {
   parts: Part[] = [];
   private stack: THREE.Matrix4[] = [new THREE.Matrix4()];
@@ -116,6 +138,7 @@ export class Kit {
       for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal" && k !== "uv") g.deleteAttribute(k);
       // every part needs the same attributes to merge; uv lets a surface (pool water) know where its edges are
       if (!g.attributes.uv) g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(g.attributes.position!.count * 2), 2));
+      if (p.mat.userData.finish === "timber") timberUvs(g, p.m);
       g.applyMatrix4(p.m);
       center.setFromMatrixPosition(p.m);
       const n = g.attributes.position!.count;

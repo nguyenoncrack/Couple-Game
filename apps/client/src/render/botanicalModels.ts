@@ -38,7 +38,7 @@ export function grassTuft(k: Kit, m: Mat) {
 
 /** One low-poly flower with a proper stem, paired leaves and shaped petals. Ground is y=0. */
 export function flower(k: Kit, m: Mat, kind: FlowerKind, tone: string, height = 0.46) {
-  const green = m("#597c48"), leaf = m("#7c9c61");
+  const green = m("#597c48", "foliage"), leaf = m("#7c9c61", "foliage");
   k.add(STEM, green, [0, height / 2, 0], [0.018, height, 0.018], { outline: false });
   for (const s of [-1, 1]) {
     k.add(LEAF, leaf, [s * 0.055, height * (s > 0 ? 0.35 : 0.54), 0], [0.16, 0.035, 0.068], { rot: [0, s * 0.4, s * 0.42], outline: false });
@@ -68,9 +68,9 @@ export function flower(k: Kit, m: Mat, kind: FlowerKind, tone: string, height = 
 export const BOTANICAL_BUILDERS: Record<string, Builder> = {
   flowers(k, w, d, p, m) {
     const kind: FlowerKind = p.flower === "tulip" || p.flower === "lavender" ? p.flower : "daisy";
-    const pot = m(typeof p.pot === "string" ? p.pot : "#c98764");
+    const pot = m(typeof p.pot === "string" ? p.pot : "#c98764", w > 1 ? "timber" : "clay");
     const petals = typeof p.petals === "string" ? p.petals : "#f5efdb";
-    const soil = m("#655343");
+    const soil = m("#655343", "mineral");
     const box = w > 1;
     if (box) {
       k.box(pot, [0, 0.14, 0], [w - 0.2, 0.28, d - 0.3], { outline: 0.007 });
@@ -81,7 +81,7 @@ export const BOTANICAL_BUILDERS: Record<string, Builder> = {
       k.add("cone", pot, [0, 0.12, 0], [0.48, 0.24, 0.48], { rot: [Math.PI, 0, 0], outline: 0.006 });
       k.add("cyl", pot, [0, 0.23, 0], [0.5, 0.07, 0.5], { outline: 0.004 });
       k.add("cyl", soil, [0, 0.268, 0], [0.43, 0.008, 0.43], { outline: false });
-      k.add("torus", m("#e8c7a2"), [0, 0.2, 0], 0.46, { rot: [Math.PI / 2, 0, 0], outline: false });
+      k.add("torus", m("#e8c7a2", "clay"), [0, 0.2, 0], 0.46, { rot: [Math.PI / 2, 0, 0], outline: false });
     }
     const count = box ? 9 : 7;
     for (let i = 0; i < count; i++) {

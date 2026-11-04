@@ -28,7 +28,7 @@ function topOf(level: Level, surfaceId: string | null) {
 }
 
 function plate(k: Kit, recipeId: string, portions: number, serves: number) {
-  k.add("cyl", pencilMaterial(PORCELAIN), [0, 0.01, 0], [0.3, 0.02, 0.3], {
+  k.add("cyl", pencilMaterial(PORCELAIN, { finish: "ceramic" }), [0, 0.01, 0], [0.3, 0.02, 0.3], {
     outline: 0.006,
   });
   const left = serves ? portions / serves : 1;
@@ -69,16 +69,16 @@ function DishProp({ dish, level }: { dish: Dish; level: Level }) {
 
 /** What's on the worktop for each step of cooking. */
 function kitchenware(k: Kit, what: string) {
-  const metal = pencilMaterial(METAL, { finish: "stone" });
-  const handle = pencilMaterial("#3d3833");
+  const metal = pencilMaterial(METAL, { finish: "metal" });
+  const handle = pencilMaterial("#3d3833", { finish: "rubber" });
   switch (what) {
     case "mix":
-      k.add("cone", pencilMaterial("#e7dccb"), [0, 0.07, 0], [0.32, 0.14, 0.32], { rot: [Math.PI, 0, 0], outline: 0.006 });
+      k.add("cone", pencilMaterial("#e7dccb", { finish: "ceramic" }), [0, 0.07, 0], [0.32, 0.14, 0.32], { rot: [Math.PI, 0, 0], outline: 0.006 });
       k.add("cyl", pencilMaterial("#f2e4c4"), [0, 0.142, 0], [0.28, 0.01, 0.28], { outline: false });
-      k.add("cyl", pencilMaterial("#b98a5a", { finish: "wood" }), [0.06, 0.2, 0], [0.025, 0.24, 0.025], { rot: [0, 0, -0.5] });
+      k.add("cyl", pencilMaterial("#b98a5a", { finish: "timber" }), [0.06, 0.2, 0], [0.025, 0.24, 0.025], { rot: [0, 0, -0.5] });
       break;
     case "chop":
-      k.box(pencilMaterial("#c79a63", { finish: "wood" }), [0, 0.015, 0], [0.42, 0.03, 0.26], { outline: 0.006 });
+      k.box(pencilMaterial("#c79a63", { finish: "timber" }), [0, 0.015, 0], [0.42, 0.03, 0.26], { outline: 0.006 });
       for (let i = 0; i < 3; i++) k.add("sphere", pencilMaterial("#c24b33"), [-0.1 + i * 0.07, 0.05, 0.03], 0.055, { outline: 0.004 });
       k.box(metal, [0.12, 0.04, -0.04], [0.16, 0.008, 0.04], {
         outline: 0.004,

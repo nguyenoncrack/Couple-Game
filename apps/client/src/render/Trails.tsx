@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { flower, grassTuft, SWAY } from "./botanicalModels";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
-import { pencilMaterial } from "./pencil";
+import { pencilMaterial, type Finish } from "./pencil";
 import { trailCurve, trailNetwork, type Clearing, type FlowerPatch, type Signpost } from "./trailLayout";
 
 /**
@@ -149,7 +149,7 @@ function arrow(from: number, to: number, depth: number) {
 /** A clump of one flower, thick in the middle and thinning out, on a low cushion of leaves with grass round it. */
 function flowerPatch(k: Kit, p: FlowerPatch) {
   const r = rng(p.seed);
-  const m = (tone: string) => pencilMaterial(tone, { rim: false, sway: SWAY });
+  const m = (tone: string, finish?: Finish) => pencilMaterial(tone, { finish, rim: false, sway: SWAY });
   const leaves = pencilMaterial("#6c9e57", { rim: false });
   for (let i = 0; i < 3; i++) {
     const a = i * 2.1 + r();
