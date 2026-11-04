@@ -120,7 +120,7 @@ export class Kit {
     this.q.setFromEuler(this.e);
     const local = new THREE.Matrix4().compose(new THREE.Vector3(...pos), this.q, new THREE.Vector3(s[0], s[1], s[2]));
     const m = this.stack[this.stack.length - 1]!.clone().multiply(local);
-    this.parts.push({ geo: typeof shape === "string" ? SHAPES[shape] : shape, mat, m, outline: opts.outline === false ? 0 : (opts.outline ?? 0.012), normals: Boolean(opts.normals) });
+    this.parts.push({ geo: typeof shape === "string" ? SHAPES[shape] : shape, mat, m, outline: mat.userData.natural || opts.outline === false ? 0 : (opts.outline ?? 0.012), normals: Boolean(opts.normals) });
     return this;
   }
 

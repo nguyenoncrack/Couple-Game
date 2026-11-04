@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { grassTuft, SWAY } from "./botanicalModels";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
-import { pencilMaterial } from "./pencil";
+import { natureMaterial } from "./nature";
 import { shoreLayout, type ReedBed, type ShoreLayout, type Spot } from "./shoreLayout";
 import { blot } from "./Trails";
 
@@ -52,9 +52,9 @@ export function shore(k: Kit, s: ShoreLayout) {
 function reedBed(k: Kit, s: ShoreLayout, bed: ReedBed) {
   const r = rng(bed.seed);
   // tall, so a little sway goes a long way at their tips
-  const greens = ["#6f8f4a", "#7f9a52", "#5d7f40"].map((c) => pencilMaterial(c, { rim: false, sway: 0.06 }));
-  const stem = pencilMaterial("#6b7d45", { rim: false, sway: 0.06 });
-  const head = pencilMaterial("#7a4f2e", { sway: 0.06 });
+  const greens = ["#6f8f4a", "#7f9a52", "#5d7f40"].map((c) => natureMaterial(c, { rim: false, sway: 0.06 }));
+  const stem = natureMaterial("#6b7d45", { rim: false, sway: 0.06 });
+  const head = natureMaterial("#7a4f2e", { sway: 0.06 });
   for (let i = 0; i < bed.count; i++) {
     // gathered toward the middle of the bed: the sum of two randoms leans to the centre
     const a = bed.a + (r() + r() - 1) * bed.spread;
@@ -77,31 +77,31 @@ function reedBed(k: Kit, s: ShoreLayout, bed: ReedBed) {
   for (let i = 0; i < 5; i++) {
     const a = bed.a + (r() - 0.5) * bed.spread * 1.6;
     const [x, z] = s.edge(a, 0.6 + r() * 0.8);
-    k.at([x, 0, z], r() * 6, () => grassTuft(k, (tone) => pencilMaterial(tone, { rim: false, sway: SWAY })), 1.4 + r() * 0.6);
+    k.at([x, 0, z], r() * 6, () => grassTuft(k, (tone) => natureMaterial(tone, { rim: false, sway: SWAY })), 1.4 + r() * 0.6);
   }
 }
 
 /** One big rock with a few smaller ones huddled round it, all sunk a little into the ground; big ones get moss. */
 function rockGroup(k: Kit, g: Spot) {
   const r = rng(g.seed);
-  const moss = pencilMaterial("#7f9a5a", { rim: false });
+  const moss = natureMaterial("#7f9a5a", { rim: false });
   const big = g.r;
-  k.add("blob", pencilMaterial(ROCK[0]!), [g.x, big * 0.18, g.z], [big, big * 0.62, big * 0.82], { rot: [0, r() * 6, 0], outline: 0.014 });
+  k.add("blob", natureMaterial(ROCK[0]!, { finish: "mineral" }), [g.x, big * 0.18, g.z], [big, big * 0.62, big * 0.82], { rot: [0, r() * 6, 0], outline: 0.014 });
   if (big > 1.1) k.add("blob", moss, [g.x - big * 0.08, big * 0.44, g.z + big * 0.05], [big * 0.55, big * 0.16, big * 0.45], { rot: [0, r() * 6, 0], outline: false });
   const n = 3 + Math.floor(r() * 3);
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + r();
     const dist = big * (0.6 + r() * 0.45);
     const size = big * (0.22 + r() * 0.3);
-    k.add("blob", pencilMaterial(ROCK[1 + (i % 2)]!), [g.x + Math.cos(a) * dist, size * 0.15, g.z + Math.sin(a) * dist], [size, size * 0.6, size * 0.85], { rot: [0, r() * 6, 0], outline: 0.008 });
+    k.add("blob", natureMaterial(ROCK[1 + (i % 2)]!, { finish: "mineral" }), [g.x + Math.cos(a) * dist, size * 0.15, g.z + Math.sin(a) * dist], [size, size * 0.6, size * 0.85], { rot: [0, r() * 6, 0], outline: 0.008 });
   }
 }
 
 /** A drift of pebbles on a patch of coarser, greyer sand. */
 function pebblePatch(k: Kit, p: Spot) {
   const r = rng(p.seed);
-  k.add(blot({ x: p.x, z: p.z, r: p.r }, 0.016, p.seed), pencilMaterial("#c2b9a0", { rim: false }), [0, 0, 0], 1, { outline: false });
-  const tones = [...ROCK, "#c9c2b2"].map((c) => pencilMaterial(c));
+  k.add(blot({ x: p.x, z: p.z, r: p.r }, 0.016, p.seed), natureMaterial("#c2b9a0", { rim: false }), [0, 0, 0], 1, { outline: false });
+  const tones = [...ROCK, "#c9c2b2"].map((c) => natureMaterial(c, { finish: "mineral" }));
   for (let i = 0; i < 24; i++) {
     const a = r() * Math.PI * 2;
     const dist = Math.sqrt(r()) * p.r * 0.95;
@@ -113,7 +113,7 @@ function pebblePatch(k: Kit, p: Spot) {
 /** Lily pads floating in a loose cluster, a few of them flowering. */
 function lilyPatch(k: Kit, l: Spot) {
   const r = rng(l.seed);
-  const pads = ["#6f9a52", "#82ab5f"].map((c) => pencilMaterial(c, { rim: false }));
+  const pads = ["#6f9a52", "#82ab5f"].map((c) => natureMaterial(c, { rim: false }));
   const n = Math.round(4 + l.r * 4);
   for (let i = 0; i < n; i++) {
     const a = r() * Math.PI * 2;
@@ -123,12 +123,12 @@ function lilyPatch(k: Kit, l: Spot) {
     const size = 0.32 + r() * 0.28;
     k.add(PAD, pads[i % 2]!, [x, 0.042 + i * 0.0005, z], [size, 1, size], { rot: [0, r() * 6, 0], outline: false });
     if (i % 3 === 0) {
-      const petals = pencilMaterial(i % 2 ? "#f7f1e3" : "#f2b8c6", { rim: false });
+      const petals = natureMaterial(i % 2 ? "#f7f1e3" : "#f2b8c6", { rim: false });
       for (let p = 0; p < 7; p++) {
         const pa = (p / 7) * Math.PI * 2;
         k.add(PETAL, petals, [x + Math.cos(pa) * 0.05, 0.07, z + Math.sin(pa) * 0.05], [0.09, 0.04, 0.045], { rot: [0, -pa, 0.35], outline: false });
       }
-      k.add(PETAL, pencilMaterial("#f2cc72", { rim: false }), [x, 0.08, z], 0.045, { outline: false });
+      k.add(PETAL, natureMaterial("#f2cc72", { rim: false }), [x, 0.08, z], 0.045, { outline: false });
     }
   }
 }
@@ -136,17 +136,17 @@ function lilyPatch(k: Kit, l: Spot) {
 /** Two painted chairs angled toward each other, a stump between them with a mug on it, stones in from the trail. */
 function seating(k: Kit, s: ShoreLayout) {
   const { x, z, facing, stones } = s.seat;
-  k.add(blot({ x, z, r: 1.35 }, 0.014, 5), pencilMaterial("#d3c294", { rim: false }), [0, 0, 0], 1, { outline: false });
-  const stone = STONES.map((c) => pencilMaterial(c));
+  k.add(blot({ x, z, r: 1.35 }, 0.014, 5), natureMaterial("#d3c294", { rim: false }), [0, 0, 0], 1, { outline: false });
+  const stone = STONES.map((c) => natureMaterial(c));
   stones.forEach(([sx, sz], i) => k.add("blob", stone[i % 2]!, [sx, 0.03, sz], [0.46 + (i % 3) * 0.06, 0.07, 0.36], { rot: [0, i * 2.3, 0], outline: 0.005 }));
   // turn so local +z looks along `facing`
   k.at([x, 0, z], Math.PI / 2 - facing, () => {
     chair(k, [-0.62, 0, 0], 0.22, "#8fb3a6");
     chair(k, [0.62, 0, 0], -0.22, "#e3b866");
-    const logs = pencilMaterial("#a8743f", { finish: "wood" });
+    const logs = natureMaterial("#a8743f", { finish: "timber" });
     k.add("cyl8", logs, [0, 0.2, 0.18], [0.42, 0.4, 0.42], { outline: 0.008 });
-    k.add("cyl8", pencilMaterial("#d9b07a"), [0, 0.405, 0.18], [0.38, 0.01, 0.38], { outline: false });
-    const mug = pencilMaterial("#e9e2d2", { finish: "paint" });
+    k.add("cyl8", natureMaterial("#d9b07a"), [0, 0.405, 0.18], [0.38, 0.01, 0.38], { outline: false });
+    const mug = natureMaterial("#e9e2d2", { finish: "paint" });
     k.add("cyl8", mug, [0.06, 0.46, 0.14], [0.08, 0.1, 0.08], { outline: 0.003 });
     k.add("torus", mug, [0.11, 0.46, 0.14], [0.05, 0.05, 0.05], { outline: false });
   });
@@ -154,7 +154,7 @@ function seating(k: Kit, s: ShoreLayout) {
 
 /** A low wooden lounging chair, its seat sloping back and its back fanned, facing local +z. */
 function chair(k: Kit, at: V3, turn: number, tone: string) {
-  const paint = pencilMaterial(tone, { finish: "paint" });
+  const paint = natureMaterial(tone, { finish: "paint" });
   k.at(at, turn, () => {
     for (const sx of [-0.3, 0.3]) {
       k.box(paint, [sx, 0.2, 0.02], [0.05, 0.12, 0.8], { rot: [0.25, 0, 0], outline: 0.004 });
@@ -187,14 +187,14 @@ const postZ = (s: ShoreLayout, i: number) => s.dock.shoreZ + 0.4 - i * 1.75;
 
 function dockDetails(k: Kit, s: ShoreLayout) {
   const { x } = s.dock;
-  const ropeMat = pencilMaterial(ROPE);
-  const post = pencilMaterial("#7a5c43", { finish: "wood" });
+  const ropeMat = natureMaterial(ROPE);
+  const post = natureMaterial("#7a5c43", { finish: "timber" });
   // a life ring hung on its own post at the foot of the jetty, facing the path
   const lx = x - 0.98;
   const lz = s.dock.shoreZ + 0.75;
   k.add("cyl8", post, [lx, 0.62, lz], [0.12, 1.24, 0.12], { outline: 0.008 });
   k.box(post, [lx, 1.06, lz + 0.07], [0.04, 0.04, 0.1], { outline: 0.003 });
-  const tones = ["#e05a43", "#f4efe4"].map((c) => pencilMaterial(c, { finish: "paint" }));
+  const tones = ["#e05a43", "#f4efe4"].map((c) => natureMaterial(c, { finish: "paint" }));
   for (let q = 0; q < 4; q++) k.add(RING_QUARTER, tones[q % 2]!, [lx, 0.82, lz + 0.11], 1, { rot: [0, 0, (q * Math.PI) / 2 + Math.PI / 4], outline: 0.005 });
   // a coil of rope on the boards near the end, and a turn of rope round the far post
   for (let i = 0; i < 2; i++) k.add("torus", ropeMat, [x + 0.3, 0.475 + i * 0.03, postZ(s, 4) + 0.6], [0.32 - i * 0.06, 0.32 - i * 0.06, 0.5], { rot: [Math.PI / 2, 0, 0], outline: 0.004 });
@@ -206,10 +206,10 @@ function rowboat(k: Kit, s: ShoreLayout) {
   const { x, z, ry } = s.boat;
   const L = 2.7;
   const D = 0.36;
-  const hullPaint = pencilMaterial("#f1e9da", { finish: "paint" });
-  const rail = pencilMaterial("#c9493c", { finish: "paint" });
-  const wood = pencilMaterial("#b98a5a", { finish: "wood" });
-  const dark = pencilMaterial("#7a5c43", { finish: "wood" });
+  const hullPaint = natureMaterial("#f1e9da", { finish: "paint" });
+  const rail = natureMaterial("#c9493c", { finish: "paint" });
+  const wood = natureMaterial("#b98a5a", { finish: "timber" });
+  const dark = natureMaterial("#7a5c43", { finish: "timber" });
   k.at([x, -0.05, z], ry, () => {
     k.add(HULL, hullPaint, [0, 0, 0], 1, { outline: 0.008, normals: true });
     // floorboards, two thwarts, a gunwale rail along each side
@@ -236,8 +236,8 @@ function rowboat(k: Kit, s: ShoreLayout) {
   // the bow line, from the stem to the jetty's nearest post
   const bow = new THREE.Vector3(0, D + 0.08, L / 2).applyAxisAngle(new THREE.Vector3(0, 1, 0), ry).add(new THREE.Vector3(x, -0.05, z));
   const tie: V3 = [s.dock.x + 0.68, 0.6, postZ(s, 1)];
-  rope(k, pencilMaterial(ROPE), [bow.x, bow.y, bow.z], tie, 0.18);
-  k.add("torus", pencilMaterial(ROPE), tie, [0.13, 0.13, 0.25], { rot: [Math.PI / 2, 0, 0], outline: false });
+  rope(k, natureMaterial(ROPE), [bow.x, bow.y, bow.z], tie, 0.18);
+  k.add("torus", natureMaterial(ROPE), tie, [0.13, 0.13, 0.25], { rot: [Math.PI / 2, 0, 0], outline: false });
 }
 
 /** Half the boat's width at the top, along its length (z from the stern at -L/2 to the bow at +L/2). */

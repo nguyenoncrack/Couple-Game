@@ -5,7 +5,7 @@ import { useReducedMotion } from "./Ambient";
 import { campLayout, playLayout, SWING_ARC, SWING_DROP, SWING_RATE } from "./sceneryLayout";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
-import { pencilMaterial } from "./pencil";
+import { natureMaterial } from "./nature";
 import { dirtPath } from "./Trails";
 
 /**
@@ -65,16 +65,16 @@ const BASE = 0.22;
 
 function campsite(k: Kit, d: number) {
   const { cabin, fire, trails } = campLayout(d);
-  const logs = pencilMaterial("#a8743f", { finish: "wood" });
-  const logEnds = pencilMaterial("#d9b07a");
-  const roof = pencilMaterial("#8c4a36", { finish: "wood" });
-  const shingle = pencilMaterial("#6e3829");
-  const dark = pencilMaterial("#5e3d2a", { finish: "wood" });
-  const stone = pencilMaterial("#a29e95", { finish: "stone" });
-  const glow = pencilMaterial("#ffe3a3");
-  const deck = pencilMaterial("#b98a5a", { finish: "wood" });
-  const shutter = pencilMaterial("#5f8f5a", { finish: "paint" });
-  const iron = pencilMaterial("#4a4642", { finish: "metal" });
+  const logs = natureMaterial("#a8743f", { finish: "timber" });
+  const logEnds = natureMaterial("#d9b07a");
+  const roof = natureMaterial("#8c4a36", { finish: "timber" });
+  const shingle = natureMaterial("#6e3829");
+  const dark = natureMaterial("#5e3d2a", { finish: "timber" });
+  const stone = natureMaterial("#a29e95", { finish: "stone" });
+  const glow = natureMaterial("#ffe3a3");
+  const deck = natureMaterial("#b98a5a", { finish: "timber" });
+  const shutter = natureMaterial("#5f8f5a", { finish: "paint" });
+  const iron = natureMaterial("#4a4642", { finish: "metal" });
   const W = CABIN_W;
   const D = CABIN_D;
   const H = WALL_H + BASE;
@@ -123,7 +123,7 @@ function campsite(k: Kit, d: number) {
     for (const y of [0.5, 1.3]) k.box(logs, [0.6, BASE + y, DZ + 0.035], [0.55, 0.55, 0.02], { outline: 0.004 });
     k.box(logEnds, [0.6, BASE + 1.85, DZ + 0.02], [1.05, 0.1, 0.1], { outline: 0.006 });
     for (const x of [0.12, 1.08]) k.box(logEnds, [x, BASE + 0.92, DZ + 0.02], [0.09, 1.8, 0.1], { outline: 0.006 });
-    k.add("sphere", pencilMaterial("#d8b45a", { finish: "metal" }), [0.92, BASE + 0.92, DZ + 0.06], 0.055, { outline: 0.004 });
+    k.add("sphere", natureMaterial("#d8b45a", { finish: "metal" }), [0.92, BASE + 0.92, DZ + 0.06], 0.055, { outline: 0.004 });
 
     // a warm lit window with shutters and a box of flowers under it
     const window = (x: number, z: number, ry: number) =>
@@ -138,8 +138,8 @@ function campsite(k: Kit, d: number) {
         k.box(dark, [0, y - 0.47, 0.2], [0.8, 0.18, 0.2], { outline: 0.006 });
         const petals = ["#e5604a", "#f5c537", "#ef8fb4", "#e5604a", "#f5c537"];
         for (let i = 0; i < 5; i++) {
-          k.add("sphere", pencilMaterial("#5e9a4a"), [-0.3 + i * 0.15, y - 0.33, 0.2], 0.08, { outline: false });
-          k.add("sphere", pencilMaterial(petals[i]!), [-0.3 + i * 0.15, y - 0.27, 0.24], 0.055, { outline: 0.003 });
+          k.add("sphere", natureMaterial("#5e9a4a"), [-0.3 + i * 0.15, y - 0.33, 0.2], 0.08, { outline: false });
+          k.add("sphere", natureMaterial(petals[i]!), [-0.3 + i * 0.15, y - 0.27, 0.24], 0.055, { outline: 0.003 });
         }
       });
     window(-0.85, D / 2 + 0.08, 0);
@@ -162,9 +162,9 @@ function campsite(k: Kit, d: number) {
     }
     k.box(deck, [-0.9, BASE + 0.42, D / 2 + 0.35], [1.1, 0.07, 0.36], { outline: 0.006 });
     for (const x of [-1.35, -0.45]) k.box(dark, [x, BASE + 0.2, D / 2 + 0.35], [0.07, 0.4, 0.3], { outline: 0.004 });
-    k.box(pencilMaterial("#b8503e", { finish: "carpet" }), [0.6, BASE + 0.03, D / 2 + 0.55], [0.8, 0.02, 0.5], { outline: false });
-    k.add("cone", pencilMaterial("#c87f5a"), [1.45, BASE + 0.2, PZ + 0.25], [0.32, 0.36, 0.32], { rot: [Math.PI, 0, 0], outline: 0.006 });
-    k.add("blob", pencilMaterial("#5e9a4a"), [1.45, BASE + 0.5, PZ + 0.25], 0.36, { outline: 0.006 });
+    k.box(natureMaterial("#b8503e", { finish: "carpet" }), [0.6, BASE + 0.03, D / 2 + 0.55], [0.8, 0.02, 0.5], { outline: false });
+    k.add("cone", natureMaterial("#c87f5a"), [1.45, BASE + 0.2, PZ + 0.25], [0.32, 0.36, 0.32], { rot: [Math.PI, 0, 0], outline: 0.006 });
+    k.add("blob", natureMaterial("#5e9a4a"), [1.45, BASE + 0.5, PZ + 0.25], 0.36, { outline: 0.006 });
 
     // firewood stacked against the side, a chopping block with an axe in it
     for (let row = 0; row < 4; row++)
@@ -176,7 +176,7 @@ function campsite(k: Kit, d: number) {
   });
 
   // ---- the trail: dirt with stepping stones, and little lanterns along it ----
-  const flat = [pencilMaterial("#b9b4a8"), pencilMaterial("#a8a397")];
+  const flat = [natureMaterial("#b9b4a8"), natureMaterial("#a8a397")];
   let side = 1;
   for (const [i, pts] of trails.entries()) {
     const curve = dirtPath(k, pts, 1.0, 1 + i);
@@ -200,8 +200,8 @@ function campsite(k: Kit, d: number) {
 
   // ---- the fire circle ----
   const [fx, , fz] = fire;
-  k.add(PATCH, pencilMaterial("#d6c095", { rim: false }), [fx, 0.006, fz], [3.3, 3.3, 1], { rot: [-Math.PI / 2, 0, 0], outline: false });
-  k.add(PATCH, pencilMaterial("#5b5550", { rim: false }), [fx, 0.012, fz], [0.55, 0.55, 1], { rot: [-Math.PI / 2, 0, 0], outline: false });
+  k.add(PATCH, natureMaterial("#d6c095", { rim: false }), [fx, 0.006, fz], [3.3, 3.3, 1], { rot: [-Math.PI / 2, 0, 0], outline: false });
+  k.add(PATCH, natureMaterial("#5b5550", { rim: false }), [fx, 0.012, fz], [0.55, 0.55, 1], { rot: [-Math.PI / 2, 0, 0], outline: false });
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2;
     k.add("blob", stone, [fx + Math.cos(a) * 0.68, 0.1, fz + Math.sin(a) * 0.68], [0.32, 0.24, 0.28], { rot: [0, a, 0], outline: 0.008 });
@@ -236,29 +236,29 @@ function campsite(k: Kit, d: number) {
 
   // a blanket thrown over one bench
   k.at([cx2, 0, cz2], -5.1, () => {
-    k.add("soft", pencilMaterial("#c9493c", { finish: "fabric" }), [0.0, 0.52, -0.2], [0.5, 0.1, 0.8], { outline: 0.006 });
-    k.box(pencilMaterial("#f2e4c4", { finish: "fabric" }), [0.0, 0.58, -0.2], [0.52, 0.02, 0.06], { outline: false });
+    k.add("soft", natureMaterial("#c9493c", { finish: "fabric" }), [0.0, 0.52, -0.2], [0.5, 0.1, 0.8], { outline: 0.006 });
+    k.box(natureMaterial("#f2e4c4", { finish: "fabric" }), [0.0, 0.58, -0.2], [0.52, 0.02, 0.06], { outline: false });
   });
   // a guitar leaning on another, and a cooler beside it
   k.at([gx, 0, gz], -2.75 + Math.PI, () => {
     k.at([0.38, 0, 0.3], 0, () => {
       // standing up against the log, face out
-      const wood = pencilMaterial("#d9a066", { finish: "wood" });
+      const wood = natureMaterial("#d9a066", { finish: "timber" });
       k.add("sphere", wood, [0, 0.24, 0], [0.42, 0.42, 0.13], { outline: 0.006 });
       k.add("sphere", wood, [0, 0.5, 0], [0.32, 0.32, 0.12], { outline: 0.006 });
       k.add("cyl8", dark, [0, 0.3, 0.065], [0.11, 0.01, 0.11], { rot: [Math.PI / 2, 0, 0], outline: false });
       k.box(dark, [0, 0.9, 0], [0.07, 0.62, 0.04], { outline: 0.004 });
       k.box(dark, [0, 1.27, 0], [0.1, 0.14, 0.05], { outline: 0.004 });
     });
-    k.box(pencilMaterial("#3d8fa3", { finish: "paint" }), [-0.2, 0.2, 0.75], [0.55, 0.38, 0.38], { outline: 0.008 });
-    k.box(pencilMaterial("#f4efe4", { finish: "paint" }), [-0.2, 0.41, 0.75], [0.58, 0.06, 0.41], { outline: 0.006 });
+    k.box(natureMaterial("#3d8fa3", { finish: "paint" }), [-0.2, 0.2, 0.75], [0.55, 0.38, 0.38], { outline: 0.008 });
+    k.box(natureMaterial("#f4efe4", { finish: "paint" }), [-0.2, 0.41, 0.75], [0.58, 0.06, 0.41], { outline: 0.006 });
   });
   // marshmallow sticks leaning in from the stumps
   for (const a of [0.85, 3.35]) {
     const from: V3 = [fx + Math.cos(a) * 1.75, 0.45, fz + Math.sin(a) * 1.75];
     const tip: V3 = [fx + Math.cos(a) * 0.75, 0.75, fz + Math.sin(a) * 0.75];
     rod(k, dark, from, tip, 0.025, 0.003);
-    k.add("cyl8", pencilMaterial("#fbf3e4"), tip, [0.07, 0.09, 0.07], { outline: 0.003 });
+    k.add("cyl8", natureMaterial("#fbf3e4"), tip, [0.07, 0.09, 0.07], { outline: 0.003 });
   }
   // a lantern on the third stump
   const [lx, lz] = [fx + Math.cos(4.6) * 1.95, fz + Math.sin(4.6) * 1.95];
@@ -373,15 +373,15 @@ function Campfire({ at }: { at: V3 }) {
 
 function playground(k: Kit, w: number, d: number) {
   const { cx, cz, swings, slide, sandbox } = playLayout(w, d);
-  const red = pencilMaterial("#e8613f", { finish: "paint" });
-  const yellow = pencilMaterial("#f5c537", { finish: "paint" });
-  const blue = pencilMaterial("#4f9fd6", { finish: "paint" });
-  const green = pencilMaterial("#6fb05a", { finish: "paint" });
-  const timber = pencilMaterial("#b98a5a", { finish: "wood" });
-  const metal = pencilMaterial("#b9b6ae", { finish: "metal" });
+  const red = natureMaterial("#e8613f", { finish: "paint" });
+  const yellow = natureMaterial("#f5c537", { finish: "paint" });
+  const blue = natureMaterial("#4f9fd6", { finish: "paint" });
+  const green = natureMaterial("#6fb05a", { finish: "paint" });
+  const timber = natureMaterial("#b98a5a", { finish: "timber" });
+  const metal = natureMaterial("#b9b6ae", { finish: "metal" });
 
   // soft bark under it all, edged with timber
-  k.box(pencilMaterial("#c49a6c", { finish: "carpet", rim: false }), [cx, 0.01, cz], [7, 0.02, 7.4], { outline: false });
+  k.box(natureMaterial("#c49a6c", { finish: "carpet", rim: false }), [cx, 0.01, cz], [7, 0.02, 7.4], { outline: false });
   for (const s of [-1, 1]) {
     k.box(timber, [cx, 0.06, cz + s * 3.7], [7.2, 0.12, 0.14], { outline: 0.008 });
     k.box(timber, [cx + s * 3.5, 0.06, cz], [0.14, 0.12, 7.4], { outline: 0.008 });
@@ -413,7 +413,7 @@ function playground(k: Kit, w: number, d: number) {
 
   // a sandbox with a bucket and spade
   const { x: bx, z: bz } = sandbox;
-  k.box(pencilMaterial("#ead39a", { finish: "setts", rim: false }), [bx, 0.1, bz], [1.6, 0.18, 1.6], { outline: false });
+  k.box(natureMaterial("#ead39a", { finish: "setts", rim: false }), [bx, 0.1, bz], [1.6, 0.18, 1.6], { outline: false });
   for (const s of [-1, 1]) {
     k.box(timber, [bx, 0.13, bz + s * 0.85], [1.84, 0.26, 0.12], { outline: 0.008 });
     k.box(timber, [bx + s * 0.85, 0.13, bz], [0.12, 0.26, 1.6], { outline: 0.008 });
@@ -444,9 +444,9 @@ function Swing({ at, phase }: { at: V3; phase: number }) {
       <KitMesh
         deps={[]}
         make={(k) => {
-          const chain = pencilMaterial("#9aa3a3", { finish: "metal" });
+          const chain = natureMaterial("#9aa3a3", { finish: "metal" });
           for (const z of [-0.2, 0.2]) k.add("cyl8", chain, [0, -SWING_DROP / 2 + 0.01, z], [0.025, SWING_DROP - 0.02, 0.025], { outline: 0.003 });
-          k.box(pencilMaterial("#f5c537", { finish: "paint" }), [0, -SWING_DROP, 0], [0.26, 0.05, 0.5], { outline: 0.006 });
+          k.box(natureMaterial("#f5c537", { finish: "paint" }), [0, -SWING_DROP, 0], [0.26, 0.05, 0.5], { outline: 0.006 });
         }}
       />
     </group>

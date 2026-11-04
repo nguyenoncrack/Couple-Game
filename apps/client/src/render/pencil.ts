@@ -95,7 +95,12 @@ const pencilVertex = /* glsl */ `
     #else
       mat4 m = modelMatrix;
     #endif
-    vec4 world = m * vec4(position, 1.0);
+    vec3 local = position;
+    #if defined(FINISH) && FINISH == 27
+      vec3 anchor = (m * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+      local *= 1.0 - smoothstep(32.0, 55.0, distance(cameraPosition, anchor));
+    #endif
+    vec4 world = m * vec4(local, 1.0);
     #ifdef SWAY
       world.xyz += sway(world.xyz);
     #endif
@@ -318,6 +323,12 @@ const pencilFragment = /* glsl */ `
         relief = yarn * 0.00025;
         tv = (noise(surface * 5.0) - 0.5) * 0.11 + (noise(surface * 18.0) - 0.5) * 0.025 * detailAt(fp, 18.0);
       #elif FINISH == 10
+        #ifdef NATURAL
+          float field = noise(surface * 0.13);
+          float turf = noise(surface * 1.8);
+          tone = mix(uTone * vec3(0.75, 0.83, 0.67), uTone * vec3(1.08, 1.04, 0.84), field);
+          tv = (turf - 0.5) * 0.14 + (noise(surface * 24.0) - 0.5) * 0.09 * detailAt(fp, 24.0);
+        #else
         // lawn: broad, slow drifts between deeper and fresher greens, and a scatter of short blades
         float n0 = noise(vWorldPos * 0.03 + 3.0);
         float n1 = noise(vWorldPos * 0.12);
@@ -327,6 +338,7 @@ const pencilFragment = /* glsl */ `
         tone = grass * (0.95 + 0.08 * n2);
         float blades = strokes(p * vec2(1.0, 1.6), 1.2 + (n1 - 0.5) * 0.9, 3.1, 0.06, vec3(2.0, 6.0, 0.0));
         lines = blades * smoothstep(0.45, 0.75, noise(vWorldPos * 0.35 + 7.0)) * 0.16;
+        #endif
       #elif FINISH == 11 || FINISH == 15
         // water: deeper and bluer toward the middle, ripples drifting across, the sky and sun caught on top
         vec2 q = vWorldPos.xz;
@@ -357,6 +369,12 @@ const pencilFragment = /* glsl */ `
         // the sky seen in the surface, stronger at a glance
         float fres = pow(1.0 - max(dot(sn, viewDir), 0.0), 3.0);
         glow = vec3(0.86, 0.94, 1.0) * (0.12 + fres * 0.5);
+        #if defined(NATURAL) && FINISH == 15
+          // Restrained wind-rippled lake, a sky tint at grazing angles and clear shallows.
+          tv *= 0.22;
+          tone = mix(tone, vec3(0.55, 0.68, 0.76), 0.12 + fres * 0.48);
+          glow *= 0.65;
+        #endif
       ${itemFinishesGlsl}
       #elif FINISH == 17
         // shingles: level courses stepping down the slope, tabs staggered course to course, a little shadow
@@ -382,12 +400,16 @@ const pencilFragment = /* glsl */ `
       #endif
       tone *= 1.0 + tv;
     #endif
-    #if defined(FINISH) && (FINISH == 1 || FINISH == 2 || FINISH == 8 || FINISH == 9 || FINISH == 18 || FINISH == 19 || FINISH == 20 || FINISH == 21 || FINISH == 23 || FINISH == 24)
+    #if defined(FINISH) && (FINISH == 1 || FINISH == 2 || FINISH == 8 || FINISH == 9 || FINISH == 18 || FINISH == 19 || FINISH == 20 || FINISH == 21 || FINISH == 23 || FINISH == 24 || FINISH == 25 || FINISH == 26)
       // Compile-time choice: derivatives must also run between individual yarns/pores.
       n = texturedNormal(n, vWorldPos, relief);
       sn = n;
     #endif
-    vec3 base = mix(uPaper, tone, 0.96);
+    #ifdef NATURAL
+      vec3 base = tone;
+    #else
+      vec3 base = mix(uPaper, tone, 0.96);
+    #endif
 
     // Light: a warm sun with soft shadows over a cool sky, a little warm bounce from below, and contact shade.
     float ndl = dot(n, uLightDir);
@@ -398,6 +420,10 @@ const pencilFragment = /* glsl */ `
     vec3 fill = mix(BOUNCE, SKY, 0.5 + 0.5 * n.y) * (1.0 - occ * 0.55);
     // uFill: soft light from the room itself, for surfaces only ever seen from inside (ceilings)
     vec3 irradiance = fill + SUN * sun * (1.0 - occ * 0.35) + vec3(1.0, 0.95, 0.88) * uFill;
+    #if defined(FINISH) && FINISH == 26
+      // Light transmitted through the thin leaves softens the dark side of a crown.
+      irradiance += SUN * max(-ndl, 0.0) * 0.12;
+    #endif
     vec3 lit = toLinear(base) * irradiance;
     // Gloss: a tight glint for polished things plus a broad soft lobe around it, which is all the bloom there is.
     vec3 halfway = normalize(uLightDir + viewDir);
@@ -410,6 +436,7 @@ const pencilFragment = /* glsl */ `
     vec3 col = toSrgb(lit);
 
     // Pencil: crosshatching builds up only in real shade, strokes of the finish, a graphite rim on curves.
+    #ifndef NATURAL
     float lum = dot(irradiance, vec3(0.3, 0.59, 0.11));
     float dark = clamp(1.0 - lum, 0.0, 1.0) * 0.45 + occ * 0.12;
     float density = uDensity;
@@ -438,6 +465,10 @@ const pencilFragment = /* glsl */ `
     col = mix(col, uInk * vec3(0.94, 0.98, 1.08), h * 0.12);
     col = mix(col, col * 0.62, marks * 0.55);
     col = mix(col, uInk, rim * 0.7);
+    #else
+      // Surface marks are material relief, with no graphite contours or crosshatching.
+      col *= 1.0 - lines * 0.16;
+    #endif
 
     // Grading: lift the softer colours (not the already-bold ones), keep shadows slightly cool, and let
     // everything beyond the lot settle back so the house stays the focus.
@@ -447,6 +478,11 @@ const pencilFragment = /* glsl */ `
     #if defined(FINISH) && FINISH == 16
       // mountains keep some colour, or they'd fade to grey cardboard
       away *= 0.4;
+    #endif
+    #ifdef NATURAL
+      // Keep the lively outdoor palette even beyond the house; haze alone establishes depth.
+      away *= 0.2;
+      col = mix(vec3(luma), col, 1.1);
     #endif
     col = mix(vec3(luma), col, 1.0 + uVibrance * (1.0 - chroma * 1.6) * (1.0 - away));
     col += vec3(-0.012, 0.0, 0.02) * (1.0 - smoothstep(0.05, 0.5, luma));
@@ -459,7 +495,7 @@ const pencilFragment = /* glsl */ `
   }
 `;
 
-const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10, water: 11, metal: 12, glass: 13, paint: 14, lake: 15, mountain: 16, shingle: 17, timber: 18, ceramic: 19, mineral: 20, foliage: 21, paper: 22, rubber: 23, clay: 24 } as const;
+const FINISHES = { plaster: 1, wood: 2, stone: 3, brick: 4, checker: 5, setts: 6, concrete: 7, carpet: 8, fabric: 9, lawn: 10, water: 11, metal: 12, glass: 13, paint: 14, lake: 15, mountain: 16, shingle: 17, timber: 18, ceramic: 19, mineral: 20, foliage: 21, paper: 22, rubber: 23, clay: 24, bark: 25, canopy: 26, groundcover: 27, earth: 28 } as const;
 export type Finish = keyof typeof FINISHES;
 
 /**
@@ -482,6 +518,8 @@ const GLOSS: Partial<Record<Finish | "clear", [number, number]>> = {
 };
 
 export interface PencilOptions {
+  /** Continuous outdoor shading, without drawn contours or crosshatching. */
+  natural?: boolean;
   density?: number;
   rim?: boolean;
   finish?: Finish;
@@ -502,7 +540,7 @@ const cache = new Map<string, THREE.ShaderMaterial>();
 
 /** Shared pencil material. Calls with the same arguments return the same instance. */
 export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
-  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}|${opts.fill ?? 0}|${opts.sway ?? 0}`;
+  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}|${opts.fill ?? 0}|${opts.sway ?? 0}|${opts.natural ? 1 : 0}`;
   let m = cache.get(key);
   if (!m) {
     const ghost = opts.ghost;
@@ -518,7 +556,7 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
         uDensity: { value: opts.density ?? 6 },
         uRim: { value: opts.rim === false ? 0 : 1 },
         uFill: { value: opts.fill ?? 0 },
-        uSpec: { value: spec },
+        uSpec: { value: opts.natural && opts.finish === "lake" ? spec * 0.65 : spec },
         uShine: { value: shine },
         uHighlight: { value: srgb(ghost === "bad" ? "#e0675a" : "#9ccf8a") },
         uHighlightAmt: { value: ghost ? 0.3 : 0 },
@@ -542,10 +580,11 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
       },
       transparent: Boolean(ghost) || (opts.alpha ?? 1) < 1,
       depthWrite: !ghost && (opts.alpha ?? 1) >= 1,
-      defines: { ...(opts.finish ? { FINISH: FINISHES[opts.finish] } : {}), ...(opts.sway ? { SWAY: 1 } : {}) },
+      defines: { ...(opts.natural ? { NATURAL: 1 } : {}), ...(opts.finish ? { FINISH: FINISHES[opts.finish] } : {}), ...(opts.sway ? { SWAY: 1 } : {}) },
     });
     m.userData.sway = opts.sway ?? 0;
     m.userData.finish = opts.finish;
+    m.userData.natural = Boolean(opts.natural);
     cache.set(key, m);
   }
   return m;

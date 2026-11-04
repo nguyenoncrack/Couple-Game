@@ -3,8 +3,11 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
-import { FOG, pencilMaterial, SUN_DIR } from "./pencil";
+import { FOG, SUN_DIR } from "./pencil";
+import { natureMaterial } from "./nature";
 import { lakeShape } from "./sceneryLayout";
+import { Waterbirds } from "./Waterbirds";
+import { Groundcover } from "./Groundcover";
 import { Meadow } from "./Meadow";
 import { Ambient } from "./Ambient";
 import { Folk } from "./Folk";
@@ -64,7 +67,7 @@ function disc(lake: ReturnType<typeof lakeShape>, grow: (a: number) => number, y
 /** A rugged mountain: a cone with its sides pushed in and out, drawn faceted. */
 function mountain(seed: number) {
   const r = rng(seed);
-  const g = new THREE.ConeGeometry(0.5, 1, 11, 5);
+  const g = new THREE.ConeGeometry(0.5, 1, 24, 12);
   const p = g.attributes.position!;
   const bumps = [r() * 6, r() * 6, r() * 6];
   for (let i = 0; i < p.count; i++) {
@@ -78,10 +81,8 @@ function mountain(seed: number) {
     p.setXYZ(i, x * push, y + (t > 0.05 && t < 0.99 ? 0.05 * Math.sin(5 * a + bumps[1]!) : 0), z * push);
   }
   g.translate(0, 0.5, 0);
-  const flat = g.toNonIndexed();
-  flat.computeVertexNormals();
-  g.dispose();
-  return flat;
+  g.computeVertexNormals();
+  return g;
 }
 
 export function Scenery({ w, d }: { w: number; d: number }) {
@@ -91,6 +92,7 @@ export function Scenery({ w, d }: { w: number; d: number }) {
       <Sky />
       <Lake lake={lake} w={w} d={d} />
       <Shore w={w} d={d} />
+      <Waterbirds w={w} />
       <Scenes w={w} d={d} />
       <Ambient w={w} d={d} />
       <Yard w={w} d={d} />
@@ -98,6 +100,7 @@ export function Scenery({ w, d }: { w: number; d: number }) {
       <Traffic w={w} d={d} />
       <Trails w={w} d={d} />
       <Meadow w={w} d={d} />
+      <Groundcover w={w} d={d} />
       <Woods w={w} d={d} />
       <KitMesh key="mountains" deps={[w, d]} make={(k) => mountains(k, w, d)} />
     </group>
@@ -107,26 +110,29 @@ export function Scenery({ w, d }: { w: number; d: number }) {
 function Lake({ lake, w, d }: { lake: ReturnType<typeof lakeShape>; w: number; d: number }) {
   // the sand comes and goes round the shore (see shoreLayout)
   const shore = useMemo(() => disc(lake, shoreLayout(w, d).beachGrow, 0.012), [lake, w, d]);
+  const wet = useMemo(() => disc(lake, (a) => shoreLayout(w, d).beachGrow(a) * 0.24, 0.021), [lake, w, d]);
   const water = useMemo(() => disc(lake, () => 0, 0.03), [lake]);
   useEffect(
     () => () => {
       shore.dispose();
+      wet.dispose();
       water.dispose();
     },
-    [shore, water],
+    [shore, wet, water],
   );
   return (
     <group>
-      <mesh geometry={shore} material={pencilMaterial("#cdbb8e", { rim: false })} raycast={() => null} />
-      <mesh geometry={water} material={pencilMaterial("#3a8fb0", { finish: "lake", rim: false })} raycast={() => null} />
+      <mesh geometry={shore} material={natureMaterial("#c7b485", { finish: "earth" })} raycast={() => null} />
+      <mesh geometry={wet} material={natureMaterial("#8b9571", { finish: "earth" })} raycast={() => null} />
+      <mesh geometry={water} material={natureMaterial("#258c9d", { finish: "lake", rim: false })} raycast={() => null} />
       <KitMesh
         deps={[lake]}
         make={(k) => {
           // a little wooden jetty out from the near shore
           const x = lake.cx + 3;
           const shoreZ = lake.cz + lake.rz * lake.reach(Math.PI / 2);
-          const boards = pencilMaterial("#b98a5a", { finish: "wood" });
-          const post = pencilMaterial("#7a5c43", { finish: "wood" });
+          const boards = natureMaterial("#b98a5a", { finish: "wood" });
+          const post = natureMaterial("#7a5c43", { finish: "wood" });
           k.box(boards, [x, 0.42, shoreZ - 3.2], [1.5, 0.08, 7.5], { outline: 0.012 });
           for (let z = 0; z <= 7; z += 1.75) for (const sx of [-0.68, 0.68]) k.add("cyl8", post, [x + sx, 0.3, shoreZ + 0.4 - z], [0.12, 0.7, 0.12], { outline: 0.008 });
         }}
@@ -139,7 +145,7 @@ function mountains(k: Kit, w: number, d: number) {
   const r = rng(5);
   const cx = w / 2;
   const cz = d / 2;
-  const rock = [pencilMaterial("#6a819c", { finish: "mountain", rim: false, fog: 0.35 }), pencilMaterial("#7889a0", { finish: "mountain", rim: false, fog: 0.35 })];
+  const rock = [natureMaterial("#6a819c", { finish: "mountain", rim: false, fog: 0.35 }), natureMaterial("#7889a0", { finish: "mountain", rim: false, fog: 0.35 })];
   const COUNT = 18;
   for (let i = 0; i < COUNT; i++) {
     // a full ring of ranges, the tallest behind the lake; each a main peak with a shoulder or two
@@ -197,7 +203,7 @@ const skyFragment = /* glsl */ `
     vec2 toSun = normalize(uSunDir.xz);
     float s = max(dot(normalize(d.xz + 1e-4), toSun), 0.0);
     col = mix(col, vec3(1.0, 0.87, 0.7), pow(s, 5.0) * (1.0 - smoothstep(0.0, 0.4, h)) * 0.5);
-    // soft clouds, lit warm on top and lavender-grey beneath, with a faint pencilled edge
+    // Soft layered clouds: volume from a light-facing sample, without drawn contour lines.
     if (h > 0.0) {
       vec2 uv = d.xz / (h + 0.18) * 1.6 + vec2(uTime * 0.004, uTime * 0.002);
       float n = fbm(uv);
@@ -205,8 +211,8 @@ const skyFragment = /* glsl */ `
       vec3 cloud = mix(vec3(0.8, 0.79, 0.86), vec3(1.0, 0.97, 0.92), smoothstep(0.55, 0.85, fbm(uv + vec2(0.06, 0.09))));
       cloud = mix(cloud, vec3(1.0, 0.85, 0.72), pow(s, 4.0) * 0.35);
       col = mix(col, cloud, c * 0.92);
-      float edge = 1.0 - smoothstep(0.0, 0.012, abs(n - 0.535));
-      col = mix(col, vec3(0.35, 0.34, 0.38), edge * smoothstep(0.02, 0.14, h) * 0.18);
+      float wisps = smoothstep(0.63, 0.83, fbm(uv * 2.1 + 12.0)) * smoothstep(0.16, 0.5, h);
+      col = mix(col, vec3(0.94, 0.96, 0.98), wisps * 0.16);
     }
     gl_FragColor = vec4(col, 1.0);
   }

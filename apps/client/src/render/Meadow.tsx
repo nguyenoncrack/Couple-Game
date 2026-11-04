@@ -4,20 +4,21 @@ import { useGame } from "../state/game";
 import { flower, grassTuft, SWAY } from "./botanicalModels";
 import { Kit, type BuiltMesh } from "./kit";
 import { meadowLayout, type Sprig } from "./meadowLayout";
-import { pencilMaterial, type Finish } from "./pencil";
+import type { Finish } from "./pencil";
+import { natureMaterial } from "./nature";
 
-/** Instanced pencil plants: a handful of shared meshes, no per-plant React nodes, network events or raycasts. */
+/** Instanced meadow plants: a handful of shared meshes, no per-plant React nodes, network events or raycasts. */
 export function Meadow({ w, d }: { w: number; d: number }) {
   const level = useGame((s) => s.view?.levels[0]);
   const layout = useMemo(() => level ? meadowLayout(w, d, level) : null, [w, d, level]);
   const models = useMemo(() => {
     const make = (fn: (k: Kit) => void) => { const k = new Kit(); fn(k); return k.build(); };
-    const m = (tone: string, finish?: Finish) => pencilMaterial(tone, { finish, rim: false, sway: SWAY });
+    const m = (tone: string, finish?: Finish) => natureMaterial(tone, { finish, rim: false, sway: SWAY });
     return [
       make((k) => grassTuft(k, m)),
       make((k) => flower(k, m, "daisy", "#f5eed9")),
-      make((k) => flower(k, m, "daisy", "#dc9c9b", 0.4)),
-      make((k) => flower(k, m, "lavender", "#9a8cb4", 0.49)),
+      make((k) => flower(k, m, "daisy", "#ec809e", 0.4)),
+      make((k) => flower(k, m, "lavender", "#a07cc9", 0.49)),
     ];
   }, []);
   useEffect(() => () => models.flat().forEach((b) => b.geometry.dispose()), [models]);
