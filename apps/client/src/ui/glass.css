@@ -18,13 +18,15 @@
   --border: 1px solid var(--glass-line);
   --shadow: 0 12px 32px rgb(16 28 40 / 0.2), 0 2px 6px rgb(16 28 40 / 0.1), inset 0 1px 0 var(--glass-hi), inset 0 -1px 1px rgb(255 255 255 / 0.18);
   --soft: 0 4px 14px rgb(16 28 40 / 0.14), inset 0 1px 0 var(--glass-hi);
-  --hand: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto, system-ui, sans-serif;
-  --serif: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  --hand: Nunito, ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  --serif: var(--hand);
   --logo: var(--serif);
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
   --yellow: #ffd65a;
   /* the page's own font was set before these: start the HUD's over in the new one */
   font-family: var(--hand);
+  /* rounded, and a touch heavier than regular */
+  font-weight: 500;
   /* the sizes were picked for a narrow handwriting: this sets the new one's small letters to that height */
   font-size-adjust: 0.43;
   color: var(--ink);
@@ -67,13 +69,13 @@
 }
 
 .game .title-pill {
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
 .game .kicker {
   font-family: var(--hand);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.08em;
 }
 
@@ -184,7 +186,7 @@
 
 .game .cal-month,
 .game .welcome-title {
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
@@ -272,7 +274,7 @@ kbd {
   width: 22px;
   height: 22px;
   padding: 0;
-  font: 600 15px/1 var(--hand);
+  font: 700 15px/1 var(--hand);
   color: rgb(23 33 43 / 0.75);
   background: rgb(23 33 43 / 0.08);
   border: 1px solid rgb(23 33 43 / 0.14);
@@ -309,7 +311,7 @@ kbd {
   align-items: center;
   gap: 8px;
   padding: 2px 6px;
-  font: 600 15px var(--hand);
+  font: 700 15px var(--hand);
   color: var(--ink);
   background: none;
   border: 0;

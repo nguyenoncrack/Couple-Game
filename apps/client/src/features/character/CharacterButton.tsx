@@ -3,7 +3,7 @@ import { normalizeAppearance, type Appearance } from "./appearance";
 import { getAppearance, saveAppearance } from "../../net/api";
 const Editor = lazy(() => import("./CharacterCustomizer").then((m) => ({ default: m.CharacterCustomizer })));
 
-export function CharacterButton({ onSaved, compact = false, disabled = false }: { onSaved?: (appearance: Appearance) => void; compact?: boolean; disabled?: boolean }) {
+export function CharacterButton({ onSaved, compact = false, disabled = false, className, children }: { onSaved?: (appearance: Appearance) => void; compact?: boolean; disabled?: boolean; className?: string; children?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [initial, setInitial] = useState<Appearance | null>(null);
   const [failed, setFailed] = useState(false);
@@ -19,8 +19,8 @@ export function CharacterButton({ onSaved, compact = false, disabled = false }: 
     } catch { if (id === request.current) setFailed(true); }
   };
   return <>
-    <button type="button" className={compact ? "pill icon-pill" : "btn"} aria-label="Customize character" title="Customize character" disabled={disabled} onClick={() => void begin()}>
-      {compact ? <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="12" cy="7.5" r="4"/><path d="M4.5 21v-2a7.5 7.5 0 0 1 15 0v2M8 5c3 1 5 1 8 0"/></svg> : "My character"}
+    <button type="button" className={className ?? (compact ? "pill icon-pill" : "btn")} aria-label="Customize character" title="Customize character" disabled={disabled} onClick={() => void begin()}>
+      {children ?? (compact ? <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="12" cy="7.5" r="4"/><path d="M4.5 21v-2a7.5 7.5 0 0 1 15 0v2M8 5c3 1 5 1 8 0"/></svg> : "My character")}
     </button>
     {open && <WardrobeBoundary onClose={close}>{failed ? <WardrobeNotice failed onClose={close} /> : !initial ? <WardrobeNotice onClose={close} /> : <Suspense fallback={<WardrobeNotice onClose={close} />}>
       <Editor value={initial} onCancel={close} onSave={async (draft) => {

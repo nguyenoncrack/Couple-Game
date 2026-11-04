@@ -11,17 +11,6 @@ import { Icon } from "./icons";
 
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
-export function ChatButton() {
-  const open = useGame((s) => s.chatOpen);
-  const unread = useGame((s) => s.unread);
-  return (
-    <button className={`pill icon-pill chat-pill ${open ? "on" : ""}`} onClick={() => openChat(!open)} title="Chat (Enter)">
-      <Icon.chat />
-      {unread > 0 && <span className="unread">{unread > 9 ? "9+" : unread}</span>}
-    </button>
-  );
-}
-
 export function ChatPanel() {
   const open = useGame((s) => s.chatOpen);
   const chat = useGame((s) => s.chat);

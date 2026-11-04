@@ -1,4 +1,3 @@
-import { CharacterButton } from "../features/character/CharacterButton";
 import { catalog, cookingDone, costOf, enclosedCells, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -7,9 +6,8 @@ import { act, redo, roofVisible, serverNow, setFirstPerson, setMode, setRoofShow
 import { cameraApi } from "../render/CameraRig";
 import { useThumbnail } from "../render/thumbnails";
 import { deleteSelected, rotateSelected } from "../tools/BuildTools";
-import { setMusic, useMusicOn } from "../state/music";
 import { together } from "../state/together";
-import { ChatButton, ChatPanel } from "./Chat";
+import { ChatPanel } from "./Chat";
 import { Icon } from "./icons";
 import { CatalogSearch } from "./CatalogSearch";
 import { searchCatalog } from "./filterCatalog";
@@ -18,6 +16,7 @@ import { TableGamePanel } from "./TableGamePanel";
 import { NeedsPanel } from "./Needs";
 import { ClockPill, WelcomeBack } from "./Calendar";
 import { Floating } from "./Floating";
+import { Phone } from "./Phone";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -58,7 +57,6 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
   const status = useGame((s) => s.status);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const music = useMusicOn();
   const partner = members.find((m) => m.id !== me);
   const bar = useRef<HTMLDivElement>(null);
   // the bar wraps onto more rows on narrow screens: panels below it go by where it actually ends
@@ -86,33 +84,7 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
         <ClockPill />
       </div>
       <div className="topbar-right">
-        {members.map((m) => (
-          <div key={m.id} className={`pill member-pill ${m.online ? "" : "away"}`} title={m.online ? "Here now" : "Away"}>
-            <span className="avatar" style={{ background: m.color }}>
-              {m.name.slice(0, 1).toUpperCase()}
-            </span>
-            {m.name}
-            {m.id === me && <span className="you">you</span>}
-          </div>
-        ))}
-        {!partner && (
-          <button className="pill invite-pill" onClick={() => setInviteOpen((v) => !v)}>
-            <Icon.link /> Invite your partner
-          </button>
-        )}
-        {partner && (
-          <button className="pill icon-pill" onClick={() => setInviteOpen((v) => !v)} title="Room code">
-            <Icon.link />
-          </button>
-        )}
-        <CharacterButton compact disabled={status !== "online"} onSaved={(appearance) => useGame.setState((s) => ({ members: s.members.map((m) => m.id === s.me ? { ...m, appearance } : m) }))} />
-        <ChatButton />
-        <button className="pill icon-pill" onClick={() => setMusic(!music)} title={music ? "Turn the music and sounds off" : "Turn the music and sounds on"} aria-pressed={music}>
-          {music ? <Icon.music /> : <Icon.musicOff />}
-        </button>
-        <button className="pill icon-pill" onClick={() => setHelpOpen((v) => !v)} title="Controls">
-          <Icon.help />
-        </button>
+        <Phone onInvite={() => setInviteOpen(true)} onHelp={() => setHelpOpen(true)} />
       </div>
       {inviteOpen && house && <InviteCard code={house.inviteCode} full={Boolean(partner)} onClose={() => setInviteOpen(false)} />}
       {helpOpen && <HelpCard onClose={() => setHelpOpen(false)} />}
