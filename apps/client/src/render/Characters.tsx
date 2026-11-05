@@ -249,6 +249,11 @@ export function poseFor(activity: string, seatY: number | null, t: number, stand
       const rub = Math.sin(s * 11) * 0.12;
       return { hip: HIP, lean: -0.1, thighs: [0, 0], knees: [0, 0], arms: [-0.95 + rub, -0.95 - rub], spread: -0.28, roll: 0 };
     }
+    case "shower": {
+      // standing under the water, washing your hair
+      const rub = Math.sin(s * 7) * 0.18;
+      return { hip: HIP, lean: 0.06, thighs: [0, 0], knees: [0, 0], arms: [-2.6 + rub, -2.6 - rub], spread: -0.05, roll: 0 };
+    }
     case "bathe": {
       // lying back in the water, legs out, arms along the rim
       const sway = Math.sin(s * 0.9) * 0.03;

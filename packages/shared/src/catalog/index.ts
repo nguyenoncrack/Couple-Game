@@ -1,5 +1,6 @@
 import { z } from "zod";
 import furnitureData from "./furniture.json";
+import furnitureMoreData from "./furniture-more.json";
 import openingsData from "./openings.json";
 import piecesData from "./pieces.json";
 import recipesData from "./recipes.json";
@@ -16,7 +17,7 @@ const hex = z.string().regex(/^#[0-9a-f]{6}$/i);
  * Things a character can do with a piece of furniture. Station actions are where recipe steps happen. Watching
  * is done from a seat facing a TV (or the floor in front of it, if there's none).
  */
-export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep", "watch", "play", "pingpong", "blackjack", "swim", "bathe", "toilet", "wash"] as const;
+export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep", "watch", "play", "pingpong", "blackjack", "swim", "bathe", "shower", "toilet", "wash"] as const;
 export const STATIONS = ["stove", "counter"] as const;
 
 /**
@@ -59,6 +60,15 @@ const FurnitureItem = z.object({
   lift: z.boolean().optional(),
   /** Leftovers are kept in it (one store for the house, whichever fridge you open). */
   fridge: z.boolean().optional(),
+  /**
+   * Cells of the footprint (relative to its corner) left clear to walk on, like the space in front of an L-shaped
+   * sofa's seats. Nothing else can be put there.
+   */
+  walkable: z.array(z.tuple([z.number().int().min(0).max(5), z.number().int().min(0).max(5)])).optional(),
+  /** Another colour of this item (its id): the catalog shows them together, as swatches on the one card. */
+  variantOf: z.string().optional(),
+  /** The colour of its swatch, when it's one of a few colours of an item. */
+  swatch: hex.optional(),
   model: z.looseObject({ kind: z.string() }),
   interactions: z.array(Interaction).optional(),
 });
@@ -122,10 +132,42 @@ function byId<T extends { id: string }>(items: T[], what: string): Map<string, T
   return m;
 }
 
+/** Colours point at an item that isn't a colour of something else itself, in the same part of the catalog. */
+function checkVariants(furniture: Map<string, FurnitureItem>) {
+  for (const it of furniture.values()) {
+    if (!it.variantOf) continue;
+    const base = furniture.get(it.variantOf);
+    if (!base || base.variantOf || base.category !== it.category) throw new Error(`"${it.id}" is a colour of "${it.variantOf}", which isn't an item of its own in the same category`);
+  }
+  return furniture;
+}
+
+/** An item and its other colours, the item itself first. */
+export function variantsOf(cat: Catalog, id: string): FurnitureItem[] {
+  const item = cat.furniture.get(id);
+  if (!item) return [];
+  const base = item.variantOf ?? item.id;
+  return [...cat.furniture.values()].filter((i) => i.id === base || i.variantOf === base);
+}
+
+/**
+ * The colour of an item's swatch: its own, or else (for an item whose other colours were added after it) whatever
+ * it has where they differ, like a bed's wood when its colours are woods.
+ */
+export function swatchOf(cat: Catalog, item: FurnitureItem): string {
+  if (item.swatch) return item.swatch;
+  for (const v of variantsOf(cat, item.id)) {
+    const key = v.swatch && Object.keys(v.model).find((k) => v.model[k] === v.swatch);
+    const own = key ? item.model[key] : undefined;
+    if (typeof own === "string") return own;
+  }
+  return "#f4f1ea";
+}
+
 export function loadCatalog(raw: { furniture: unknown; openings: unknown; pieces: unknown; recipes: unknown }): Catalog {
   const pieces = z.object({ wallStyles: z.array(WallStyle), floorMaterials: z.array(FloorMaterial), roofStyles: z.array(RoofStyle) }).parse(raw.pieces);
   return {
-    furniture: byId(z.array(FurnitureItem).parse(raw.furniture), "furniture"),
+    furniture: checkVariants(byId(z.array(FurnitureItem).parse(raw.furniture), "furniture")),
     openings: byId(z.array(OpeningItem).parse(raw.openings), "opening"),
     wallStyles: byId(pieces.wallStyles, "wall style"),
     floorMaterials: byId(pieces.floorMaterials, "floor material"),
@@ -134,4 +176,4 @@ export function loadCatalog(raw: { furniture: unknown; openings: unknown; pieces
   };
 }
 
-export const catalog: Catalog = loadCatalog({ furniture: furnitureData, openings: openingsData, pieces: piecesData, recipes: recipesData });
+export const catalog: Catalog = loadCatalog({ furniture: [...furnitureData, ...furnitureMoreData], openings: openingsData, pieces: piecesData, recipes: recipesData });

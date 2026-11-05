@@ -38,6 +38,8 @@ export const GAIN: Partial<Record<Activity, Partial<NeedValues>>> = {
   lounge: { energy: 8, fun: 4 },
   sit: { energy: 2 },
   bathe: { hygiene: 60, fun: 3 },
+  // forty seconds under the shower gets you about as clean as a long bath
+  shower: { hygiene: 140, fun: 4 },
   swim: { fun: 20, hygiene: 15, energy: -2 },
   // ten seconds on the toilet empties you; the hand wash after puts the shine back
   toilet: { bladder: 800, hygiene: -15 },

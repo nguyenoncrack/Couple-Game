@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { Kit, type BuiltMesh } from "./kit";
 import { BOTANICAL_BUILDERS } from "./botanicalModels";
 import { ENTERTAINMENT_BUILDERS } from "./entertainmentModels";
+import { FURNITURE_BUILDERS } from "./furnitureModels";
 import { pencilMaterial, type Finish } from "./pencil";
 
 /**
@@ -116,6 +117,7 @@ const sofaLike = (seatsOverride?: number): Builder => (k, w, d, p, m) => {
 const BUILDERS: Record<string, Builder> = {
   ...ENTERTAINMENT_BUILDERS,
   ...BOTANICAL_BUILDERS,
+  ...FURNITURE_BUILDERS,
   sofa: sofaLike(),
   armchair: sofaLike(1),
 
@@ -269,7 +271,9 @@ const BUILDERS: Record<string, Builder> = {
     k.add("soft", m(blanket, "fabric"), [0, 0.47, 0.22], [W - 0.04, 0.06, D * 0.62]);
     k.add("soft", m(shade(blanket, 0.85), "fabric"), [0, 0.5, 0.22 - D * 0.31 + 0.06], [W - 0.03, 0.07, 0.14]);
     const pillow = m(str(p, "pillow", "#f6f0e2"), "fabric");
-    for (const s of [-1, 1]) k.add("soft", pillow, [s * (W / 4), 0.52, -D / 2 + 0.3], [W / 2 - 0.14, 0.14, 0.34], { rot: [-0.2, 0, 0] });
+    // a single bed has the one pillow
+    if (w < 1.5) k.add("soft", pillow, [0, 0.52, -D / 2 + 0.3], [W - 0.2, 0.14, 0.34], { rot: [-0.2, 0, 0] });
+    else for (const s of [-1, 1]) k.add("soft", pillow, [s * (W / 4), 0.52, -D / 2 + 0.3], [W / 2 - 0.14, 0.14, 0.34], { rot: [-0.2, 0, 0] });
   },
 
   nightstand: (k, w, d, p, m) => {
@@ -419,12 +423,12 @@ const BUILDERS: Record<string, Builder> = {
     k.add("sphere", m("#3d8fa3"), [0.2, 1.48, z + D / 2 + 0.012], 0.035, { outline: false });
   },
 
-  toilet: (k, _w, d, _p, m) => {
+  toilet: (k, _w, d, p, m) => {
     const china = m(PORCELAIN, "ceramic");
     const z = -d / 2 + 0.36;
     k.add("cone", china, [0, 0.2, z + 0.1], [0.3, 0.4, 0.36], { rot: [Math.PI, 0, 0] });
     k.add(basin([[0, 0.3], [0.25, 0.3], [0.45, 0.36], [0.5, 0.43], [0.48, 0.45], [0.4, 0.44], [0.32, 0.35], [0, 0.34]]), china, [0, 0, z + 0.13], [0.4, 1, 0.5], { outline: 0.005, normals: true });
-    k.add(new THREE.TorusGeometry(0.43, 0.055, 10, 40), m("#e9e4d8"), [0, 0.455, z + 0.13], [0.4, 0.5, 0.4], { rot: [Math.PI / 2, 0, 0], outline: 0.004, normals: true });
+    k.add(new THREE.TorusGeometry(0.43, 0.055, 10, 40), m(str(p, "seat", "#e9e4d8")), [0, 0.455, z + 0.13], [0.4, 0.5, 0.4], { rot: [Math.PI / 2, 0, 0], outline: 0.004, normals: true });
     k.add("cyl", m("#bcd3dc"), [0, 0.36, z + 0.13], [0.25, 0.008, 0.31], { outline: false });
     k.box(china, [0, 0.36, z - 0.13], [0.22, 0.28, 0.18]);
     k.add("roundbox", china, [0, 0.62, z - 0.22], [0.42, 0.42, 0.18]);

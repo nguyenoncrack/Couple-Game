@@ -1,0 +1,33 @@
+/* An item that comes in a few colours: its card, with a row of swatches along the bottom. */
+.item-family {
+  position: relative;
+  display: grid;
+}
+.item-family > .item {
+  padding-bottom: 26px;
+}
+
+.variant-swatches {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.variant-swatch {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 2px solid rgba(58, 54, 49, 0.55);
+  border-radius: 50%;
+}
+.variant-swatch:hover {
+  border-color: var(--ink);
+}
+.variant-swatch.active {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px #fffdf7, 0 0 0 3px var(--ink);
+}

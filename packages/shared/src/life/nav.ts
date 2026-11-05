@@ -4,6 +4,7 @@ import { cellKey, edgeKey } from "../grid";
 import { edgesOfOpening, footprintOf } from "../rules";
 import { liftShafts, liftsIn } from "../lifts";
 import { flightsOn, stairHoles } from "../stairs";
+import { walkableCells } from "./interactions";
 
 /**
  * Where characters can walk. Every lot cell is a node; furniture standing on the floor blocks its cells (rugs
@@ -43,7 +44,8 @@ export function buildNav(bp: Blueprint, level = 0, cat: Catalog = defaultCatalog
       const item = cat.furniture.get(o.catalogId);
       if (!item || item.layer !== "floor") continue;
       const f = footprintOf(item, o);
-      for (let x = f.x; x < f.x + f.w; x++) for (let z = f.z; z < f.z + f.d; z++) if (x >= 0 && z >= 0 && x < w && z < d) blocked[z * w + x] = 1;
+      const open = walkableCells(item, o);
+      for (let x = f.x; x < f.x + f.w; x++) for (let z = f.z; z < f.z + f.d; z++) if (x >= 0 && z >= 0 && x < w && z < d && !open.has(cellKey(x, z))) blocked[z * w + x] = 1;
     }
     for (const key of Object.keys(l.walls)) walls.add(key);
     for (const o of Object.values(l.openings)) {
