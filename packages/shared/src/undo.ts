@@ -40,10 +40,11 @@ function inverseSingle(bp: Blueprint, op: SingleOp, cat: Catalog): SingleOp[] {
   switch (op.t) {
     case "walls.add": {
       const out: SingleOp[] = [];
-      const fresh = op.edges.filter((e) => !level.walls[e]);
+      const targets = op.edges.filter((e) => !op.existingOnly || level.walls[e]);
+      const fresh = targets.filter((e) => !level.walls[e]);
       if (fresh.length) out.push({ t: "walls.remove", level: L, edges: fresh });
-      const restyled = op.edges.filter((e) => level.walls[e] && level.walls[e].style !== op.style);
-      for (const [style, edges] of groupBy(restyled, (e) => level.walls[e]!.style)) out.push({ t: "walls.add", level: L, edges, style: style! });
+      const restyled = targets.filter((e) => level.walls[e] && level.walls[e].style !== op.style);
+      for (const [style, edges] of groupBy(restyled, (e) => level.walls[e]!.style)) out.push({ t: "walls.add", level: L, edges, style: style!, ...(op.existingOnly ? { existingOnly: true } : {}) });
       return out;
     }
     case "walls.remove": {
@@ -56,8 +57,8 @@ function inverseSingle(bp: Blueprint, op: SingleOp, cat: Catalog): SingleOp[] {
     }
     case "floor.paint": {
       const out: SingleOp[] = [];
-      const changed = op.cells.filter((c) => (level.tiles[c]?.material ?? null) !== op.material);
-      for (const [material, cells] of groupBy(changed, (c) => level.tiles[c]?.material ?? null)) out.push({ t: "floor.paint", level: L, cells, material });
+      const changed = op.cells.filter((c) => (!op.existingOnly || level.tiles[c]) && (level.tiles[c]?.material ?? null) !== op.material);
+      for (const [material, cells] of groupBy(changed, (c) => level.tiles[c]?.material ?? null)) out.push({ t: "floor.paint", level: L, cells, material, ...(op.existingOnly ? { existingOnly: true } : {}) });
       return out;
     }
     case "roof.paint": {

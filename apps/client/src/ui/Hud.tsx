@@ -18,6 +18,7 @@ import { NeedsPanel } from "./Needs";
 import { ClockPill, WelcomeBack } from "./Calendar";
 import { Floating } from "./Floating";
 import { Phone } from "./Phone";
+import { MaterialPanel } from "../features/buildMaterials/MaterialPanel";
 import { FloorPicker } from "./FloorPicker";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
@@ -476,37 +477,12 @@ function RoofPanel() {
 
 function ToolPanel() {
   const tool = useGame((s) => s.tool);
-  const wallStyle = useGame((s) => s.wallStyle);
-  const floorMaterial = useGame((s) => s.floorMaterial);
   const placing = useGame((s) => s.placing);
   const [category, setCategory] = useState<Category>("living");
   const [query, setQuery] = useState("");
   const funds = useGame((s) => s.view?.funds ?? 0);
 
-  if (tool === "wall")
-    return (
-      <Floating id="tools" title="Wall style" className="tool-panel">
-        <div className="kicker">Wall style</div>
-        <div className="swatches">
-          {[...catalog.wallStyles.values()].map((s) => (
-            <Swatch key={s.id} color={s.color} label={s.name} active={wallStyle === s.id} onClick={() => useGame.setState({ wallStyle: s.id })} />
-          ))}
-        </div>
-        <p className="hint hand">Drag along the grid lines. Draw over a wall to repaint it.</p>
-      </Floating>
-    );
-  if (tool === "floor")
-    return (
-      <Floating id="tools" title="Floor" className="tool-panel">
-        <div className="kicker">Floor</div>
-        <div className="swatches">
-          {[...catalog.floorMaterials.values()].map((m) => (
-            <Swatch key={m.id} color={m.color} label={m.name} active={floorMaterial === m.id} onClick={() => useGame.setState({ floorMaterial: m.id })} />
-          ))}
-        </div>
-        <p className="hint hand">Drag a rectangle of tiles.</p>
-      </Floating>
-    );
+  if (tool === "wall" || tool === "floor") return <MaterialPanel kind={tool} />;
   if (tool === "roof") return <RoofPanel />;
   if (tool === "wallErase" || tool === "floorErase")
     return (

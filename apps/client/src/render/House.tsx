@@ -6,6 +6,8 @@ import { roofVisible, serverNow, useGame } from "../state/game";
 import type { Kit } from "./kit";
 import { KitMesh, Meshes } from "./KitMesh";
 import { doorParts, modelFor, openingModelFor, shade, type DoorLeaf } from "./models";
+import { buildingMaterial } from "../features/buildMaterials/material";
+import { buildWall } from "../features/buildMaterials/wallGeometry";
 import { pencilMaterial, shadowMaterial } from "./pencil";
 
 export const WALL_H = 2.7;
@@ -95,26 +97,7 @@ export function wallGroups(level: Pick<Level, "walls" | "openings">) {
  * for the build previews.
  */
 export function addWall(k: Kit, run: Run, height: number, mat: THREE.Material, trim: THREE.Material, gaps: Gap[] = []) {
-  const place = (a: number, b: number, y0: number, y1: number) => {
-    if (b - a < 1e-3 || y1 - y0 < 1e-3) return;
-    const mid = (a + b) / 2;
-    const [x, z] = run.dir === "h" ? [mid, run.at] : [run.at, mid];
-    const size = (l: number, h: number, t: number): [number, number, number] => (run.dir === "h" ? [l, h, t] : [t, h, l]);
-    const len = b - a;
-    k.box(mat, [x, (y0 + y1) / 2, z], size(len, y1 - y0, WALL_T), { outline: 0.024 });
-    if (y0 === 0) k.box(trim, [x, 0.06, z], size(len + 0.02, 0.12, WALL_T + 0.035), { outline: 0.008 });
-    if (y1 === height) k.box(trim, [x, height + 0.015, z], size(len + 0.02, 0.03, WALL_T + 0.03), { outline: 0.008 });
-  };
-  // Solid wall between the gaps; the ends reach half a wall's thickness further so corners close.
-  const sorted = gaps.map((g) => ({ ...g, from: Math.max(g.from, run.from), to: Math.min(g.to, run.to) })).sort((a, b) => a.from - b.from);
-  let cursor = run.from - WALL_T / 2;
-  for (const g of sorted) {
-    place(cursor, g.from === run.from ? g.from - WALL_T / 2 : g.from, 0, height);
-    if (g.sill > 0) place(g.from, g.to, 0, Math.min(g.sill, height));
-    if (g.top < height) place(g.from, g.to, g.top, height);
-    cursor = g.to === run.to ? g.to + WALL_T / 2 : g.to;
-  }
-  place(cursor, run.to + WALL_T / 2, 0, height);
+  buildWall(k, run, height, mat, trim, gaps);
 }
 
 /** Where a door or window model sits: centred in its wall, turned to face its front. */
@@ -156,6 +139,7 @@ export function Walls({
   standing = false,
   hiddenOpening,
   onOpeningDown,
+  onWallDown,
 }: {
   level: Level;
   /** How high this floor is (metres). */
@@ -165,6 +149,7 @@ export function Walls({
   /** A door or window I'm dragging (drawn as a ghost instead). */
   hiddenOpening: string | null;
   onOpeningDown: (id: string, e: ThreeEvent<PointerEvent>) => void;
+  onWallDown?: (run: Run, e: ThreeEvent<PointerEvent>) => void;
 }) {
   // walls stand at full height when you're inside looking around, or hold up a roof
   const mode = useGame((s) => (standing || (s.mode === "live" && s.firstPerson) || roofVisible(s) ? "up" : s.wallMode));
@@ -197,13 +182,13 @@ export function Walls({
           <group key={key}>
             {mode !== "down" && (
               <group ref={(g) => void (full.current[i] = g)}>
-                <WallRun run={run} openings={openings} height={WALL_H} />
+                <group onPointerDown={onWallDown ? (e) => { e.stopPropagation(); onWallDown(run, e); } : undefined}><WallRun run={run} openings={openings} height={WALL_H} raycast={!!onWallDown} /></group>
                 {models.map(({ o, item }) => o.id !== hiddenOpening && <OpeningModel key={o.id} o={o} item={item} low={null} onDown={onOpeningDown} />)}
               </group>
             )}
             {mode !== "up" && (
               <group ref={(g) => void (low.current[i] = g)} visible={mode === "down"}>
-                <WallRun run={run} openings={openings} height={WALL_DOWN_H} />
+                <group onPointerDown={onWallDown ? (e) => { e.stopPropagation(); onWallDown(run, e); } : undefined}><WallRun run={run} openings={openings} height={WALL_DOWN_H} raycast={!!onWallDown} /></group>
                 {models.map(({ o, item }) => o.id !== hiddenOpening && <OpeningModel key={o.id} o={o} item={item} low={WALL_DOWN_H} onDown={onOpeningDown} />)}
               </group>
             )}
@@ -216,15 +201,15 @@ export function Walls({
 
 const TRIM = "#f7f2e8";
 
-function WallRun({ run, openings, height }: { run: Run; openings: { o: PlacedOpening; item: OpeningItem }[]; height: number }) {
+function WallRun({ run, openings, height, raycast = false }: { run: Run; openings: { o: PlacedOpening; item: OpeningItem }[]; height: number; raycast?: boolean }) {
   const gapsKey = openings.map(({ o, item }) => `${o.id}:${o.x}:${o.z}:${item.id}`).join(",");
   return (
     <KitMesh
+      raycast={raycast}
       deps={[run.dir, run.at, run.from, run.to, run.style, height, gapsKey]}
       make={(k) => {
-        const style = catalog.wallStyles.get(run.style);
         const gaps = openings.map(({ o, item }) => ({ ...openingSpan(o, item), sill: item.sill, top: item.top }));
-        addWall(k, run, height, pencilMaterial(style?.color ?? "#f6eddc", { finish: style?.finish, rim: false }), pencilMaterial(TRIM), gaps);
+        addWall(k, run, height, buildingMaterial("wall", run.style), pencilMaterial(TRIM), gaps);
       }}
     />
   );
@@ -324,7 +309,7 @@ export function Floors({ tiles, slab = false }: { tiles: Level["tiles"]; slab?: 
           const c = parseCell(key);
           const mat = catalog.floorMaterials.get(t.material);
           if (!c || !mat) continue;
-          k.box(pencilMaterial(mat.color, { finish: mat.finish, rim: false }), [c.x + 0.5, FLOOR_Y / 2, c.z + 0.5], [1, FLOOR_Y, 1], { outline: false });
+          k.box(buildingMaterial("floor", t.material), [c.x + 0.5, FLOOR_Y / 2, c.z + 0.5], [1, FLOOR_Y, 1], { outline: false });
           // a darker lip where the floor ends, so a room's shape reads from above
           if (!edgeMat.has(t.material)) edgeMat.set(t.material, pencilMaterial(shade(mat.color, 0.72)));
           const lip = edgeMat.get(t.material)!;

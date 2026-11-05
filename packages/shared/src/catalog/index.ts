@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { surfaceMetadata, withBuildMaterials } from "../materials/catalog";
 import furnitureData from "./furniture.json";
 import openingsData from "./openings.json";
 import piecesData from "./pieces.json";
@@ -79,8 +80,8 @@ const OpeningItem = z
 
 const Finish = z.enum(["plaster", "wood", "stone", "brick", "checker", "setts", "concrete", "carpet", "shingle"]);
 
-const WallStyle = z.object({ id: z.string(), name: z.string(), color: hex, finish: Finish });
-const FloorMaterial = z.object({ id: z.string(), name: z.string(), color: hex, finish: Finish });
+const WallStyle = z.object({ id: z.string(), name: z.string(), color: hex, finish: Finish, ...surfaceMetadata });
+const FloorMaterial = z.object({ id: z.string(), name: z.string(), color: hex, finish: Finish, ...surfaceMetadata });
 /** `ceiling` is the colour of the roof's underside, seen from inside. */
 const RoofStyle = z.object({ id: z.string(), name: z.string(), color: hex, finish: Finish, ceiling: hex });
 
@@ -134,4 +135,4 @@ export function loadCatalog(raw: { furniture: unknown; openings: unknown; pieces
   };
 }
 
-export const catalog: Catalog = loadCatalog({ furniture: furnitureData, openings: openingsData, pieces: piecesData, recipes: recipesData });
+export const catalog: Catalog = loadCatalog({ furniture: furnitureData, openings: openingsData, pieces: withBuildMaterials(piecesData), recipes: recipesData });

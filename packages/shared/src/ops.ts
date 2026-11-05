@@ -17,10 +17,11 @@ const edgeList = z.array(z.string().max(16)).min(1).max(512);
 const cellList = z.array(z.string().max(12)).min(1).max(1024);
 
 const single = [
-  z.object({ t: z.literal("walls.add"), level, edges: edgeList, style: z.string().max(40) }),
+  // Optional repaint guard: old drawing operations still create surfaces by default.
+  z.object({ t: z.literal("walls.add"), level, edges: edgeList, style: z.string().max(40), existingOnly: z.literal(true).optional() }),
   /** Removing a wall also removes any door or window in it. */
   z.object({ t: z.literal("walls.remove"), level, edges: edgeList }),
-  z.object({ t: z.literal("floor.paint"), level, cells: cellList, material: z.string().max(40).nullable() }),
+  z.object({ t: z.literal("floor.paint"), level, cells: cellList, material: z.string().max(40).nullable(), existingOnly: z.literal(true).optional() }),
   z.object({ t: z.literal("roof.paint"), level, cells: cellList, style: z.string().max(40).nullable() }),
   z.object({ t: z.literal("object.place"), level, id: Id, catalogId: z.string().max(40), x: coord, z: coord, rot }),
   z.object({ t: z.literal("object.move"), level, id: Id, x: coord, z: coord, rot }),

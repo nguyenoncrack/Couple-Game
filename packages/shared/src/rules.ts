@@ -181,9 +181,10 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
         if (!e) return fail("bad-edge");
         if (!edgeInLot(e, w, d)) return fail("out-of-lot");
       }
-      if (objectsCutBy(level, new Set(op.edges), cat).length) return fail("blocks-furniture");
+      // A delayed material repaint must not rebuild a wall the partner just removed.
+      if (!op.existingOnly && objectsCutBy(level, new Set(op.edges), cat).length) return fail("blocks-furniture");
       const walls = { ...level.walls };
-      for (const key of op.edges) walls[key] = { style: op.style };
+      for (const key of op.edges) if (!op.existingOnly || level.walls[key]) walls[key] = { style: op.style };
       return { ok: true, blueprint: withLevel(bp, op.level, { ...level, walls }) };
     }
 
@@ -225,6 +226,7 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
       }
       const tiles = { ...level.tiles };
       for (const key of op.cells) {
+        if (op.existingOnly && !level.tiles[key]) continue;
         if (op.material === null) delete tiles[key];
         else tiles[key] = { material: op.material };
       }

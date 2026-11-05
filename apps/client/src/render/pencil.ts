@@ -400,6 +400,7 @@ const pencilFragment = /* glsl */ `
       #endif
       tone *= 1.0 + tv;
     #endif
+    // @build-material-detail
     #if defined(FINISH) && (FINISH == 1 || FINISH == 2 || FINISH == 8 || FINISH == 9 || FINISH == 18 || FINISH == 19 || FINISH == 20 || FINISH == 21 || FINISH == 23 || FINISH == 24 || FINISH == 25 || FINISH == 26)
       // Compile-time choice: derivatives must also run between individual yarns/pores.
       n = texturedNormal(n, vWorldPos, relief);

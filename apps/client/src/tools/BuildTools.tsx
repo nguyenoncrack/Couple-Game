@@ -1,3 +1,4 @@
+import { cancelMaterialPaint, edgeAtWall, finishMaterialPaint, MaterialTargets, queueMaterialPaint, useMaterialTools } from "../features/buildMaterials/tools";
 import { allowsBuildShortcut } from "../input/buildShortcuts";
 import {
   catalog,
@@ -214,6 +215,7 @@ function finishPlace(e: PointerEvent) {
 
 /** A second finger came down: the camera has the gesture, so drop whatever the first finger started. */
 function cancelForCamera() {
+  cancelMaterialPaint();
   pendingPlace = null;
   if (getB().drag || getB().move) setB({ drag: null, move: null });
 }
@@ -223,6 +225,7 @@ function finishDrag() {
   const s = useGame.getState();
   setB({ drag: null });
   if (!drag || !s.view) return;
+  if ((s.tool === "wall" || s.tool === "floor") && useMaterialTools.getState()[s.tool] !== "draw") return;
   if (s.tool === "wall" || s.tool === "wallErase") {
     const edges = edgesBetween(drag.start[0], drag.start[1], drag.end[0], drag.end[1]);
     if (!edges.length) return;
@@ -288,6 +291,7 @@ export function BuildTools() {
   const view = useGame((s) => s.view);
   const tool = useGame((s) => s.tool);
   const floor = useGame((s) => s.floor);
+  const materialScope = useMaterialTools((s) => tool === "wall" || tool === "floor" ? s[tool] : "draw");
   const move = useBuild((s) => s.move);
   const plane = useMemo(() => new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI / 2), []);
   const downAt = useRef<[number, number] | null>(null);
@@ -296,12 +300,18 @@ export function BuildTools() {
   useEffect(() => {
     const up = (e: PointerEvent) => {
       downAt.current = null;
+      finishMaterialPaint(e);
       finishPlace(e);
       finishDrag();
       finishMove();
     };
     window.addEventListener("pointerup", up);
-    return () => window.removeEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancelMaterialPaint);
+    return () => {
+      cancelMaterialPaint();
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancelMaterialPaint);
+    };
   }, []);
 
   useEffect(() => {
@@ -320,6 +330,7 @@ export function BuildTools() {
       } else if (k === "delete" || k === "backspace") {
         deleteSelected();
       } else if (k === "escape") {
+        cancelMaterialPaint();
         if (s.placing) useGame.setState({ placing: null });
         else select(null);
         setB({ drag: null, move: null });
@@ -394,6 +405,7 @@ export function BuildTools() {
     const p = gridPoint(e);
     const s = useGame.getState();
     downAt.current = p;
+    if (queueMaterialPaint(floorUnder(e), [e.nativeEvent.clientX, e.nativeEvent.clientY])) return;
     switch (s.tool) {
       case "wall":
       case "wallErase": {
@@ -459,7 +471,10 @@ export function BuildTools() {
     // everything at the height of the floor being built on
     <group position-y={floor * STOREY}>
       <mesh geometry={plane} position={[0, 0.04, 0]} visible={false} onPointerMove={onMove} onPointerDown={onDown} onPointerLeave={() => setB({ pointer: null })} />
-      <Walls level={level} base={floor * STOREY} hiddenOpening={move?.moved && move.kind === "opening" ? move.id : null} onOpeningDown={onOpeningDown} />
+      <Walls level={level} base={floor * STOREY} hiddenOpening={move?.moved && move.kind === "opening" ? move.id : null} onOpeningDown={onOpeningDown} onWallDown={materialScope !== "draw" ? (run, e) => {
+        if (e.button !== 0 || multiTouch() || cameraGestureActive()) return;
+        queueMaterialPaint(tool === "floor" ? floorUnder(e) : [e.point.x, e.point.z], [e.nativeEvent.clientX, e.nativeEvent.clientY], edgeAtWall(run, e.point));
+      } : undefined} />
       <Furniture objects={level.objects} hidden={move?.moved && move.kind === "object" ? move.id : null} onObjectDown={onObjectDown} />
       <Roofs roofs={openRoofs(view, floor)} />
       {tool !== "select" && <Grid w={view.lot.w} d={view.lot.d} y={tool === "roof" ? ROOF_BASE + 0.01 : 0.05} />}
@@ -502,6 +517,7 @@ function Previews() {
     return edges.length ? Object.fromEntries(edges.map((e) => [e, { style: "preview" }])) : null;
   }, [drag, tool]);
 
+  if ((tool === "wall" || tool === "floor") && useMaterialTools.getState()[tool] !== "draw") return <MaterialTargets pointer={pointer} />;
   const out: React.ReactNode[] = [];
 
   if (wallPreview) {

@@ -1,0 +1,26 @@
+{
+  "wallStyles": [
+    {"id":"plaster_cream","name":"Warm plaster","color":"#f6eddc","finish":"plaster","surface":"plaster","description":"Soft trowelled plaster with a warm matte finish."},
+    {"id":"plaster_sage","name":"Sage plaster","color":"#b8d0a5","finish":"plaster","surface":"plaster"},
+    {"id":"plaster_blush","name":"Blush plaster","color":"#ecc9bd","finish":"plaster","surface":"plaster"},
+    {"id":"plaster_sky","name":"Sky plaster","color":"#a9cce0","finish":"plaster","surface":"plaster"},
+    {"id":"wood_panel","name":"Oak wall panels","color":"#bc8c58","finish":"wood","surface":"panels","description":"Vertical timber panels, 22 cm wide, with continuous grain."},
+    {"id":"brick_red","name":"Fired brick","color":"#b96648","finish":"brick","surface":"brick","description":"Staggered 32 × 12 cm bricks and pale mortar."},
+    {"id":"stone_wall","name":"Limestone blocks","color":"#b5b4a3","finish":"stone","surface":"stone","description":"Uneven mineral blocks in 30 cm courses."},
+    {"id":"tile_wall","name":"Glazed wall tile","color":"#69b5ba","finish":"checker","surface":"tile","description":"Glossy 30 cm ceramic squares with fine grout."},
+    {"id":"concrete_wall","name":"Cast concrete","color":"#aaa99f","finish":"concrete","surface":"concrete","description":"Matte concrete, soft aggregate and casting marks."},
+    {"id":"glass_framed","name":"Framed clear glass","color":"#b5e0df","finish":"plaster","surface":"glass","description":"Transparent glass in slim charcoal frames; still a solid wall."}
+  ],
+  "floorMaterials": [
+    {"id":"oak","name":"Oak planks","color":"#c99552","finish":"wood","surface":"oak","description":"Warm 18 cm planks with staggered joints."},
+    {"id":"walnut","name":"Dark walnut","color":"#70472f","finish":"wood","surface":"walnut","description":"Rich dark wood with longer 20 cm boards."},
+    {"id":"parquet","name":"Herringbone parquet","color":"#b88348","finish":"wood","surface":"parquet","description":"Alternating timber fingers in a continuous herringbone pattern."},
+    {"id":"tile_white","name":"Ivory ceramic tile","color":"#eee9dc","finish":"checker","surface":"tile","description":"50 cm glazed ceramic with narrow grout."},
+    {"id":"tile_blue","name":"Blue ceramic tile","color":"#67b7d8","finish":"checker","surface":"tile"},
+    {"id":"marble","name":"White marble","color":"#e6e4db","finish":"concrete","surface":"marble","description":"Large polished slabs with flowing grey mineral veins."},
+    {"id":"carpet_sand","name":"Woven carpet","color":"#c8aa7b","finish":"carpet","surface":"carpet","description":"Soft, dense woven pile with a warm matte surface."},
+    {"id":"concrete","name":"Polished concrete","color":"#b8b9b3","finish":"concrete","surface":"concrete","description":"Subtle aggregate and broad 2 m casting joints."},
+    {"id":"decking","name":"Outdoor decking","color":"#9c7046","finish":"wood","surface":"decking","description":"Weathered 14 cm deck boards with open joints and fixings."},
+    {"id":"stone","name":"Stone pavers","color":"#bdb5a8","finish":"setts","surface":"pavers"}
+  ]
+}
