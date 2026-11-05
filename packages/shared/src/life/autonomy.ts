@@ -242,7 +242,7 @@ export class FreeWill {
       case "energy":
         return [...use("sleep"), ...use("lounge"), ...use("sit")];
       case "hygiene":
-        return [...use("bathe"), ...use("wash"), ...use("swim")];
+        return [...use("shower"), ...use("bathe"), ...use("wash"), ...use("swim")];
       case "bladder":
         return use("toilet");
       case "fun":

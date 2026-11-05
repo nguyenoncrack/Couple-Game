@@ -1,6 +1,6 @@
 import type { Level, PlacedObject } from "../blueprint";
-import { catalog as defaultCatalog, type Action, type Catalog, type Interaction, type InteractionSlot, type Station } from "../catalog";
-import type { Rot } from "../grid";
+import { catalog as defaultCatalog, type Action, type Catalog, type FurnitureItem, type Interaction, type InteractionSlot, type Station } from "../catalog";
+import { cellKey, type Rot } from "../grid";
 import { footprintOf } from "../rules";
 import type { Cell } from "./nav";
 
@@ -20,6 +20,16 @@ export function toWorld(item: { footprint: [number, number] }, o: Pick<PlacedObj
   const c = Math.round(Math.cos(a));
   const s = Math.round(Math.sin(a));
   return [f.x + f.w / 2 + vx * c + vz * s, f.z + f.d / 2 - vx * s + vz * c];
+}
+
+/** The lot cells of an item's footprint that are left clear to walk on (see `walkable` in the catalog), as keys. */
+export function walkableCells(item: Pick<FurnitureItem, "footprint" | "walkable">, o: Pick<PlacedObject, "x" | "z" | "rot">): Set<string> {
+  const out = new Set<string>();
+  for (const [cx, cz] of item.walkable ?? []) {
+    const [x, z] = toWorld(item, o, cx + 0.5, cz + 0.5);
+    out.add(cellKey(Math.floor(x), Math.floor(z)));
+  }
+  return out;
 }
 
 export interface PlacedSlot {

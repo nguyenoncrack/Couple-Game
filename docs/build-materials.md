@@ -1,6 +1,6 @@
 # Wall and floor materials
 
-Branch: `feature/build-materials`. Based on `c591e05` (multiple floors, stairs and lifts). This branch is intended for review and integration with Claude's furniture changes; it has not been merged or deployed.
+Branch: `feature/build-materials`. Based on `c591e05` (multiple floors, stairs and lifts). Integrated with main through `4e25b5d`, including Claude's expanded furniture catalog and the upstairs movement fix.
 
 ## Included
 
@@ -61,10 +61,10 @@ Furniture catalogs, furniture models, recipes, starter homes, server persistence
 
 ## Validation
 
-Final checks: `npm test` passed all 35 files / 385 tests; `npm run typecheck` passed shared, server, client and worker; `npm run build` passed. Tests require local sockets (the sandbox blocks server `listen` otherwise). The production build reports a large character-parts chunk warning; no character code or dependencies are changed here.
+Final checks: `npm test` passed all 39 files / 568 tests; `npm run typecheck` passed shared, server, client and worker; `npm run build` passed. Tests require local sockets (the sandbox blocks server `listen` otherwise). The production build reports a large character-parts chunk warning; no character code or dependencies are changed here.
 
 Automated checks cover every requested family, legacy catalog IDs, selected-floor room boundaries, openings, stair/lift rotations, unchanged collision/navigation, individual tiles, room batches, undo/redo, conflict fingerprints, old-home loading and JSON round trips. The server test connects two actual WebSocket clients, verifies material broadcasts and a concurrent removal/repaint race, then restarts the server and verifies saved state.
 
 Local browser checks use an isolated two-storey test house, not the live service. They verify upstairs room glass, room parquet, one marble tile, one brick wall segment and undo/redo, with independent SQLite snapshot/log inspection confirming downstairs and all opening IDs stay unchanged. Glass and herringbone patterns were visually inspected. A temporary review scene rendered all 20 choices in solid, valid-preview and invalid-preview states (60 variants) without shader failures. Review-only source files are excluded from the commit.
 
-The application is not deployed by this change. Browser evidence and local fixture scripts are stored outside the repository under `outputs/build-materials` in the task workspace.
+Deployment uses the existing Cloudflare workflow. Browser evidence and local fixture scripts are stored outside the repository under `outputs/build-materials` in the task workspace.

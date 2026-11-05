@@ -278,6 +278,26 @@ function Bubbles() {
   );
 }
 
+/** Water falling from a shower head (on a 1×1 shower, its head near the back) down to the tray. */
+function Spray() {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    ref.current?.children.forEach((c, i) => {
+      c.scale.x = c.scale.z = 1 + Math.sin(clock.elapsedTime * 25 + i * 1.3) * 0.25;
+    });
+  });
+  return (
+    <group ref={ref} position={[0, 1.0, -0.17]}>
+      {[[0, 0], [0.07, 0.03], [-0.07, 0.02], [0.03, -0.06], [-0.04, 0.07], [0.05, 0.08]].map(([x, z], i) => (
+        <mesh key={i} position={[x!, 0, z!]} raycast={() => null}>
+          <cylinderGeometry args={[0.006, 0.01, 1.86, 6]} />
+          <meshBasicMaterial color="#cfe6ee" transparent opacity={0.6} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 /** Water running from the tap into the basin. */
 function Tap({ top, bottom }: { top: number; bottom: number }) {
   const ref = useRef<THREE.Mesh>(null);
@@ -299,7 +319,7 @@ function InUse({ level }: { level: Level }) {
   useArrivals(life);
   if (!life) return null;
   const now = serverNow();
-  const shown = new Map<string, "tv" | "game" | "bath" | "tap">();
+  const shown = new Map<string, "tv" | "game" | "bath" | "tap" | "shower">();
   for (const a of Object.values(life.avatars)) {
     const u = a.use;
     if (!u || activityAt(a, now) !== u.action) continue;
@@ -307,6 +327,7 @@ function InUse({ level }: { level: Level }) {
     if (u.action === "play" && u.tv) shown.set(u.tv, "game");
     if (u.action === "bathe" && u.objectId) shown.set(u.objectId, "bath");
     if (u.action === "wash" && u.objectId) shown.set(u.objectId, "tap");
+    if (u.action === "shower" && u.objectId) shown.set(u.objectId, "shower");
   }
   return (
     <>
@@ -320,6 +341,7 @@ function InUse({ level }: { level: Level }) {
             {what === "tv" && <Screen seed={i * 3.1} />}
             {what === "game" && <ConsoleScreen />}
             {what === "bath" && <Bubbles />}
+            {what === "shower" && <Spray />}
             {what === "tap" && (pedestal ? <Tap top={1.04} bottom={0.83} /> : <Tap top={1.06} bottom={0.77} />)}
           </group>
         );

@@ -28,6 +28,7 @@ const VERB: Record<Action, string> = {
   blackjack: "Play blackjack",
   swim: "Swim",
   bathe: "Take a bath",
+  shower: "Take a shower",
   toilet: "Use the toilet",
   wash: "Wash your hands",
 };
@@ -183,7 +184,7 @@ function Menu() {
           if (s.level !== here) options.push({ group: "Go to", label: floorName(s.level), run: () => act({ do: "ride", objectId: o.id, level: s.level }) });
     }
     const using = mine?.use?.objectId === o.id && !mine.use.station;
-    const out = mine?.use?.action === "bathe" || mine?.use?.action === "swim";
+    const out = mine?.use?.action === "bathe" || mine?.use?.action === "shower" || mine?.use?.action === "swim";
     const playing = mine?.use?.action === "play" && (mine.use.consoleId === o.id || mine.use.tv === o.id || using);
     if (playing) options.push({ label: "Stop playing", run: () => act({ do: "stop" }) });
     else if (using) options.push({ label: mine?.use?.action === "pingpong" || mine?.use?.action === "blackjack" ? "Leave table" : out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });

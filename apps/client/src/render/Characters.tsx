@@ -249,6 +249,11 @@ export function poseFor(activity: string, seatY: number | null, t: number, stand
       const rub = Math.sin(s * 11) * 0.12;
       return { hip: HIP, lean: -0.1, thighs: [0, 0], knees: [0, 0], arms: [-0.95 + rub, -0.95 - rub], spread: -0.28, roll: 0 };
     }
+    case "shower": {
+      // standing under the water, washing your hair
+      const rub = Math.sin(s * 7) * 0.18;
+      return { hip: HIP, lean: 0.06, thighs: [0, 0], knees: [0, 0], arms: [-2.6 + rub, -2.6 - rub], spread: -0.05, roll: 0 };
+    }
     case "bathe": {
       // lying back in the water, legs out, arms along the rim
       const sway = Math.sin(s * 0.9) * 0.03;
@@ -339,6 +344,12 @@ function SpeechBubble({ memberId }: { memberId: string }) {
 }
 
 function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner: Avatar | null; member: MemberInfo; mine: boolean }) {
+  // The frame loop owns position after mounting. Updating this prop with each server path
+  // resets its animated height and makes floor-follow briefly switch downstairs.
+  const [initialPosition] = useState<[number, number, number]>(() => {
+    const p = positionAt(avatar, serverNow());
+    return [p.x, FLOOR_Y + p.y, p.z];
+  });
   const looks = useMemo(() => member.appearance ? customizedLooks(normalizeAppearance(member.appearance)) : looksFor(member.id, member.color), [member.id, member.color, member.appearance]);
   const live = useGame((s) => s.mode === "live");
   // in first person you're behind your own eyes, so your body is out of the way
@@ -484,7 +495,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
   };
 
   return (
-    <group ref={root} position={[avatar.path[0]![0], FLOOR_Y, avatar.path[0]![1]]} onPointerDown={clickable ? pick : undefined}>
+    <group ref={root} position={initialPosition} onPointerDown={clickable ? pick : undefined}>
       {clickable && (
         <mesh visible={false} position={[0, 0.9, 0]}>
           <cylinderGeometry args={[0.3, 0.3, 1.8, 8]} />

@@ -20,6 +20,7 @@ import { Floating } from "./Floating";
 import { Phone } from "./Phone";
 import { MaterialPanel } from "../features/buildMaterials/MaterialPanel";
 import { FloorPicker } from "./FloorPicker";
+import { colorsOf, familyOf, groupVariants, VariantSwatches } from "./VariantSwatches";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -480,6 +481,8 @@ function ToolPanel() {
   const placing = useGame((s) => s.placing);
   const [category, setCategory] = useState<Category>("living");
   const [query, setQuery] = useState("");
+  // the colour picked for each item that comes in a few
+  const [picked, setPicked] = useState<Record<string, string>>({});
   const funds = useGame((s) => s.view?.funds ?? 0);
 
   if (tool === "wall" || tool === "floor") return <MaterialPanel kind={tool} />;
@@ -505,24 +508,43 @@ function ToolPanel() {
             </button>
           ))}
         </div>
-        <CatalogSearch query={query} onChange={setQuery} count={items.length} />
+        <CatalogSearch query={query} onChange={(q) => { setQuery(q); setPicked({}); }} count={items.length} />
         {searching && items.length === 0 && <p className="catalog-empty hand">Nothing found. Try “sofa”, “sink” or “window”, or clear your search.</p>}
         <div className="items" key={searching ? query : category}>
-          {items.map((i) => (
-            <button
-              key={i.id}
-              className={`item ${placing?.catalogId === i.id ? "active" : ""} ${i.price > funds ? "dear" : ""}`}
-              title={i.price > funds ? `${i.price.toLocaleString()} coins: ${(i.price - funds).toLocaleString()} more than the house has` : undefined}
-              onClick={() => useGame.setState({ placing: placing?.catalogId === i.id ? null : { catalogId: i.id, rot: 0 } })}
-            >
-              <ItemPicture item={i} />
-              <span className="item-name">{i.name}</span>
-              <span className="item-price">
-                <Icon.coin />
-                {i.price.toLocaleString()}
-              </span>
-            </button>
-          ))}
+          {groupVariants(items).map((family) => {
+            const f = familyOf(family[0]!);
+            const placed = placing && (catalog.furniture.get(placing.catalogId) ?? catalog.openings.get(placing.catalogId));
+            const placingHere = placed && familyOf(placed) === f ? placed.id : undefined;
+            const shownId = placingHere ?? picked[f] ?? family[0]!.id;
+            const i = catalog.furniture.get(shownId) ?? family[0]!;
+            const pick = (id: string) => {
+              setPicked({ ...picked, [f]: id });
+              if (placingHere) useGame.setState({ placing: { catalogId: id, rot: placing!.rot } });
+            };
+            const card = (
+              <button
+                key={i.id}
+                className={`item ${placing?.catalogId === i.id ? "active" : ""} ${i.price > funds ? "dear" : ""}`}
+                title={i.price > funds ? `${i.price.toLocaleString()} coins: ${(i.price - funds).toLocaleString()} more than the house has` : undefined}
+                onClick={() => useGame.setState({ placing: placing?.catalogId === i.id ? null : { catalogId: i.id, rot: 0 } })}
+              >
+                <ItemPicture item={i} />
+                <span className="item-name">{i.name}</span>
+                <span className="item-price">
+                  <Icon.coin />
+                  {i.price.toLocaleString()}
+                </span>
+              </button>
+            );
+            return colorsOf(i.id).length ? (
+              <div key={f} className="item-family">
+                {card}
+                <VariantSwatches id={i.id} onPick={pick} />
+              </div>
+            ) : (
+              card
+            );
+          })}
         </div>
         <p className="hint hand">
           {placingOpening
