@@ -7,6 +7,11 @@ import type { CellKey, EdgeKey, Rot } from "./grid";
 
 export const BLUEPRINT_SCHEMA = 4;
 
+/** Floors a house can have, ground floor included. */
+export const MAX_LEVELS = 4;
+/** How far apart floors are (metres): a wall's height plus the floor above it. */
+export const STOREY = 3;
+
 /** Coins a house starts with (its furnishings come free): enough to make it your own. */
 export const STARTING_FUNDS = 10_000;
 
@@ -58,7 +63,10 @@ export interface Blueprint {
   schema: typeof BLUEPRINT_SCHEMA;
   /** Lot size in cells. */
   lot: { w: number; d: number };
-  /** Index 0 is the ground floor. Only one floor for now. */
+  /**
+   * Index 0 is the ground floor, each one after it the floor above. You can stand anywhere on the ground floor
+   * (it's the lot), but higher up only where there's floor.
+   */
   levels: Level[];
   /** The household's coins: furniture, doors and windows cost their price and give it back when they go. */
   funds: number;

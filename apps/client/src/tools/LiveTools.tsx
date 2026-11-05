@@ -1,4 +1,4 @@
-import { actionsOf, catalog, positionAt, slotsOf, tvFacing, type Action, type Level, type Leftover, type PlacedObject, type Recipe, type Together } from "@cg/shared";
+import { actionsOf, catalog, floorOf, isLift, liftStops, positionAt, slotsOf, tvFacing, type Action, type Level, type Leftover, type PlacedObject, type Recipe, STOREY, type Together } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -6,8 +6,10 @@ import * as THREE from "three";
 import { cameraGestureActive } from "../render/CameraRig";
 import { FLOOR_Y, Furniture, objectTransform, Walls } from "../render/House";
 import { Roofs } from "../render/Roof";
+import { openRoofs } from "../render/Storeys";
 import { act, openChat, serverNow, sharePresence, useGame } from "../state/game";
 import { together } from "../state/together";
+import { floorName } from "../ui/FloorPicker";
 
 /**
  * Pointer handling in Live mode: click the floor to walk there, click furniture or a plate for what you can do
@@ -31,6 +33,7 @@ const VERB: Record<Action, string> = {
 };
 
 const isFridge = (o: PlacedObject) => Boolean(catalog.furniture.get(o.catalogId)?.fridge);
+const liftIs = (o: PlacedObject) => isLift(catalog.furniture.get(o.catalogId));
 
 /** Seats can be watched from too, when there's a TV in view. */
 const seatSeesTv = (level: Level, o: PlacedObject) => slotsOf(o, "sit").some((s) => tvFacing(level, s));
@@ -39,10 +42,11 @@ const offers = (level: Level, o: PlacedObject): Action[] => [...new Set(actionsO
 /** Open what you can do with a piece of furniture, if anything. True if there's a menu. */
 export function openObjectMenu(level: Level, id: string) {
   const o = level.objects[id];
-  if (!o || (!offers(level, o).length && !isFridge(o))) return false;
+  if (!o || (!offers(level, o).length && !isFridge(o) && !liftIs(o))) return false;
   const { position, item } = objectTransform(o);
   const h = (item.model as { height?: unknown }).height;
-  useGame.setState({ menu: { objectId: id, at: [position[0], typeof h === "number" ? h + 0.4 : 1.2, position[2]] } });
+  const base = useGame.getState().floor * STOREY;
+  useGame.setState({ menu: { objectId: id, at: [position[0], base + (typeof h === "number" ? h + 0.4 : 1.2), position[2]] } });
   return true;
 }
 
@@ -53,7 +57,7 @@ export function openPartnerMenu() {
   const avatar = partner && s.life?.avatars[partner.id];
   if (!avatar) return;
   const p = positionAt(avatar, serverNow());
-  useGame.setState({ menu: { memberId: partner.id, at: [p.x, 2.3, p.z] } });
+  useGame.setState({ menu: { memberId: partner.id, at: [p.x, p.y + 2.3, p.z] } });
 }
 
 /** Things to do with your partner, in the menu you get by clicking them. */
@@ -65,6 +69,7 @@ const WITH_PARTNER: { group: string; items: [Together, string][] }[] = [
 
 export function LiveTools() {
   const view = useGame((s) => s.view);
+  const floor = useGame((s) => s.floor);
   const plane = useMemo(() => new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI / 2), []);
   const [tap, setTap] = useState<{ x: number; z: number; at: number } | null>(null);
 
@@ -79,8 +84,8 @@ export function LiveTools() {
     return () => window.removeEventListener("keydown", key);
   }, []);
 
-  if (!view) return null;
-  const level = view.levels[0]!;
+  const level = view?.levels[floor];
+  if (!view || !level) return null;
 
   const walk = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0 || cameraGestureActive() || useGame.getState().firstPerson) return;
@@ -93,7 +98,8 @@ export function LiveTools() {
       return;
     }
     setTap({ x: x + 0.5, z: z + 0.5, at: performance.now() });
-    act({ do: "walk", x, z });
+    // to the floor you're looking at
+    act({ do: "walk", x, z, level: useGame.getState().floor });
   };
 
   // A press on the roof means the room under it, not the ground somewhere past the house.
@@ -109,11 +115,13 @@ export function LiveTools() {
 
   return (
     <>
-      <mesh geometry={plane} position={[0, 0.04, 0]} visible={false} onPointerDown={walk} />
-      <Walls level={level} hiddenOpening={null} onOpeningDown={(_, e) => walk(e)} />
-      <Furniture objects={level.objects} hidden={null} onObjectDown={onObjectDown} />
-      <Roofs roofs={level.roofs} onDown={onRoofDown} />
-      {tap && <TapMarker key={tap.at} x={tap.x} z={tap.z} />}
+      <group position-y={floor * STOREY}>
+        <mesh geometry={plane} position={[0, 0.04, 0]} visible={false} onPointerDown={walk} />
+        <Walls level={level} base={floor * STOREY} hiddenOpening={null} onOpeningDown={(_, e) => walk(e)} />
+        <Furniture objects={level.objects} hidden={null} onObjectDown={onObjectDown} />
+        <Roofs roofs={openRoofs(view, floor)} onDown={onRoofDown} />
+        {tap && <TapMarker key={tap.at} x={tap.x} z={tap.z} />}
+      </group>
       <Menu />
     </>
   );
@@ -143,11 +151,13 @@ function TapMarker({ x, z }: { x: number; z: number }) {
 /** What you can do with the thing you clicked. */
 function Menu() {
   const menu = useGame((s) => s.menu);
-  const level = useGame((s) => s.view?.levels[0]);
+  const view = useGame((s) => s.view);
   const life = useGame((s) => s.life);
   const me = useGame((s) => s.me);
   const members = useGame((s) => s.members);
-  if (!menu || !level || !life || !me) return null;
+  // the floor what you clicked is on (a lift is on the ground floor, whichever floor you click it from)
+  const level = (menu?.objectId && view?.levels.find((l) => l.objects[menu.objectId!])) || view?.levels[0];
+  if (!menu || !view || !level || !life || !me) return null;
   const us = together({ life, members, me });
   const mine = life.avatars[me];
   const options: { label: string; run: () => void; group?: string }[] = [];
@@ -163,6 +173,15 @@ function Menu() {
     if (!o) return null;
     title = catalog.furniture.get(o.catalogId)?.name ?? "";
     if (isFridge(o)) fridge = o.id;
+    if (liftIs(o)) {
+      // pick a floor: walk over, call it, ride
+      const riding = mine?.use?.ride?.lift === o.id ? mine.use.ride : undefined;
+      if (riding) body = riding.on ? `Going to the ${floorName(riding.to).toLowerCase()}.` : `Waiting for the lift to the ${floorName(riding.to).toLowerCase()}.`;
+      const here = mine ? floorOf(mine) : 0;
+      if (!riding?.on)
+        for (const s of liftStops(view, o.id, catalog))
+          if (s.level !== here) options.push({ group: "Go to", label: floorName(s.level), run: () => act({ do: "ride", objectId: o.id, level: s.level }) });
+    }
     const using = mine?.use?.objectId === o.id && !mine.use.station;
     const out = mine?.use?.action === "bathe" || mine?.use?.action === "swim";
     const playing = mine?.use?.action === "play" && (mine.use.consoleId === o.id || mine.use.tv === o.id || using);
@@ -224,7 +243,7 @@ function Menu() {
       label: d.portions > 1 ? `Eat (${d.portions} servings left)` : "Eat the last serving",
       run: () => act({ do: "eat", dishId: d.id }),
     });
-    if (Object.values(level.objects).some(isFridge)) options.push({ label: "Put in the fridge", run: () => act({ do: "store", dishId: d.id }) });
+    if (view.levels.some((l) => Object.values(l.objects).some(isFridge))) options.push({ label: "Put in the fridge", run: () => act({ do: "store", dishId: d.id }) });
   }
 
   return (

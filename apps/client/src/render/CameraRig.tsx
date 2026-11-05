@@ -2,6 +2,7 @@ import { CameraControls, CameraControlsImpl } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { STOREY } from "@cg/shared";
 import { useGame } from "../state/game";
 
 const { ACTION } = CameraControlsImpl;
@@ -48,7 +49,7 @@ const TWIST_DEADZONE = 0.14;
  * their eyes are (sitting, lying in the bath, walking), for seeing through them in first person.
  */
 export const cameraFollow = {
-  target: null as { x: number; z: number } | null,
+  target: null as { x: number; z: number; y?: number } | null,
   eye: null as { x: number; y: number; z: number } | null,
 };
 
@@ -103,12 +104,25 @@ export function CameraRig({ w, d }: { w: number; d: number }) {
     cc.dollyToCursor = true;
     cc.smoothTime = 0.18;
     cc.truckSpeed = 1.6;
-    cc.setBoundary(new THREE.Box3(new THREE.Vector3(-6, 0, -6), new THREE.Vector3(w + 6, 0, d + 6)));
-    home = () => void cc.setLookAt(w / 2 + 14, 17, d / 2 + 16, w / 2, 0, d / 2, true);
-    void cc.setLookAt(w / 2 + 14, 17, d / 2 + 16, w / 2, 0, d / 2, false);
+    // the camera looks at the floor you're on: level with it, and kept there while you pan
+    const onFloor = (y: number) => cc.setBoundary(new THREE.Box3(new THREE.Vector3(-6, y, -6), new THREE.Vector3(w + 6, y, d + 6)));
+    const y0 = useGame.getState().floor * STOREY;
+    onFloor(y0);
+    home = () => void cc.setLookAt(w / 2 + 14, 17 + useGame.getState().floor * STOREY, d / 2 + 16, w / 2, useGame.getState().floor * STOREY, d / 2, true);
+    void cc.setLookAt(w / 2 + 14, 17 + y0, d / 2 + 16, w / 2, y0, d / 2, false);
+    // another floor: up or down by a storey, looking the same way
+    const off = useGame.subscribe((s, was) => {
+      if (s.floor === was.floor) return;
+      const dy = (s.floor - was.floor) * STOREY;
+      const t = cc.getTarget(new THREE.Vector3());
+      const p = cc.getPosition(new THREE.Vector3());
+      onFloor(s.floor * STOREY);
+      void cc.setLookAt(p.x, p.y + dy, p.z, t.x, s.floor * STOREY, t.z, true);
+    });
     // Handy for poking at the camera from the console while developing.
     if (import.meta.env.DEV) (window as unknown as { __camera: CameraControlsImpl }).__camera = cc;
     return () => {
+      off();
       if (controls === cc) controls = null;
     };
   }, [cc, w, d]);
@@ -278,7 +292,7 @@ export function CameraRig({ w, d }: { w: number; d: number }) {
     const follow = useGame.getState().follow;
     // panning by hand means you want to look elsewhere
     if (follow && (x || z)) useGame.setState({ follow: false });
-    else if (follow && cameraFollow.target) void c.moveTo(cameraFollow.target.x, 0, cameraFollow.target.z, true);
+    else if (follow && cameraFollow.target) void c.moveTo(cameraFollow.target.x, useGame.getState().floor * STOREY, cameraFollow.target.z, true);
   });
 
   return <CameraControls ref={setCc} makeDefault />;

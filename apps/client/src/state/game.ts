@@ -83,6 +83,8 @@ export interface GameState {
   placing: { catalogId: string; rot: Rot } | null;
   /** A selected object, door or window. */
   selection: string | null;
+  /** The floor being looked at and built on (0 is the ground floor); floors above it are hidden. */
+  floor: number;
   wallMode: WallMode;
   canUndo: boolean;
   canRedo: boolean;
@@ -129,6 +131,7 @@ export const useGame = create<GameState>(() => ({
   roofShown: storedRoofShown(),
   placing: null,
   selection: null,
+  floor: 0,
   wallMode: "cut",
   canUndo: false,
   canRedo: false,
@@ -168,10 +171,27 @@ const INSIDE_TOOLS: Tool[] = ["wall", "wallErase", "floor", "floorErase", "buy"]
 
 /** Is a roof drawn over the house right now? Walls stand up under it. */
 export const roofVisible = (s: GameState) =>
-  s.roofShown && !(s.mode === "build" && INSIDE_TOOLS.includes(s.tool)) && Object.keys(s.view?.levels[0]?.roofs ?? {}).length > 0;
+  s.roofShown && !(s.mode === "build" && INSIDE_TOOLS.includes(s.tool)) && (s.view?.levels ?? []).some((l) => Object.keys(l.roofs).length > 0);
 
 const get = useGame.getState;
 const set = useGame.setState;
+
+/** The floor being looked at and built on. */
+export const floorNow = () => get().floor;
+
+/** Look at (and build on) another floor; whatever was selected on the old one is let go. */
+export function setFloor(floor: number) {
+  const levels = get().view?.levels.length ?? 1;
+  const next = Math.max(0, Math.min(levels - 1, floor));
+  if (next === get().floor) return;
+  if (get().selection) hold(null);
+  set({ floor: next, selection: null, menu: null });
+}
+
+// a floor that's been taken away (by me, my partner, or an undo) can't stay the one I'm on
+useGame.subscribe((s) => {
+  if (s.view && s.floor >= s.view.levels.length) set({ floor: s.view.levels.length - 1, selection: null });
+});
 
 let conn: Connection | null = null;
 let toastSeq = 0;
@@ -220,7 +240,7 @@ function rebase(confirmed: HouseState, pending: Pending[]) {
   return { view, kept, dropped };
 }
 
-const exists = (bp: Blueprint, id: string) => Boolean(bp.levels[0]?.objects[id] || bp.levels[0]?.openings[id]);
+const exists = (bp: Blueprint, id: string) => bp.levels.some((l) => Boolean(l.objects[id] || l.openings[id]));
 
 function settle(confirmed: HouseState, pending: Pending[]) {
   const { view, kept, dropped } = rebase(confirmed, pending);

@@ -30,6 +30,9 @@ function openingsOn(level: Level, edges: Set<string>, cat: Catalog) {
 }
 
 function inverseSingle(bp: Blueprint, op: SingleOp, cat: Catalog): SingleOp[] {
+  // a floor is only ever taken away bare, so putting one back is just adding it again
+  if (op.t === "level.add") return [{ t: "level.remove", level: op.level }];
+  if (op.t === "level.remove") return [{ t: "level.add", level: op.level }];
   const level = bp.levels[op.level];
   if (!level) return [];
   const L = op.level;
@@ -109,6 +112,10 @@ export function inverseOp(before: Blueprint, op: Op, cat: Catalog = defaultCatal
 export function undoCheck(bp: Blueprint, op: Op, cat: Catalog = defaultCatalog): string {
   const parts: unknown[] = [];
   for (const s of op.t === "batch" ? op.ops : [op]) {
+    if (s.t === "level.add" || s.t === "level.remove") {
+      parts.push(bp.levels.length, bp.levels[s.level] ?? null);
+      continue;
+    }
     const level = bp.levels[s.level];
     if (!level) continue;
     switch (s.t) {

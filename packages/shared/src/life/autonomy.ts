@@ -1,4 +1,4 @@
-import type { Blueprint } from "../blueprint";
+import { STOREY, type Blueprint } from "../blueprint";
 import type { Action, Catalog } from "../catalog";
 import type { Life, LifeReject } from "./engine";
 import { actionsOf } from "./interactions";
@@ -114,6 +114,8 @@ export class FreeWill {
     // on the way somewhere: see once they're there
     if (now < arrive) return this.wait(id, arrive + 1500);
     const u = a.use;
+    // waiting for a lift, or in one: see once they're out
+    if (u?.action === "ride") return this.wait(id, now + CHECK_MS);
     // a plate, the toilet, a hug: over by itself
     if (u?.startsAt !== undefined && now < u.startsAt) return this.wait(id, u.startsAt + 500);
     if (u?.until !== undefined && now < u.until) return this.wait(id, u.until + 500);
@@ -250,12 +252,14 @@ export class FreeWill {
     }
   }
 
-  /** Objects offering an action, nearest first. */
+  /** Objects offering an action, on any floor, nearest first (another floor counting as a fair way off). */
   private near(a: Avatar, bp: Blueprint, action: Action, now: number): string[] {
     const p = positionAt(a, now);
-    return Object.values(bp.levels[0]!.objects)
-      .filter((o) => actionsOf(o, this.cat).includes(action))
-      .map((o) => ({ id: o.id, d: Math.hypot(o.x - p.x, o.z - p.z) }))
+    const here = Math.round(p.y / STOREY);
+    return bp.levels
+      .flatMap((l, level) => Object.values(l.objects).map((o) => ({ o, level })))
+      .filter(({ o }) => actionsOf(o, this.cat).includes(action))
+      .map(({ o, level }) => ({ id: o.id, d: Math.hypot(o.x - p.x, o.z - p.z) + Math.abs(level - here) * 8 }))
       .sort((x, y) => x.d - y.d)
       .map((o) => o.id);
   }

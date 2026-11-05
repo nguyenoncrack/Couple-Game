@@ -53,6 +53,10 @@ const FurnitureItem = z.object({
   layer: z.enum(["floor", "rug"]),
   /** Finished dishes are served on surfaces. */
   surface: z.boolean().optional(),
+  /** Climbs a whole storey along its length, to the floor above (see stairs.ts). */
+  stairs: z.boolean().optional(),
+  /** A lift: its shaft goes up through every floor above (see lifts.ts). */
+  lift: z.boolean().optional(),
   /** Leftovers are kept in it (one store for the house, whichever fridge you open). */
   fridge: z.boolean().optional(),
   model: z.looseObject({ kind: z.string() }),

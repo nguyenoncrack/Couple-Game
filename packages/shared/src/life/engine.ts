@@ -1,4 +1,5 @@
-import type { Blueprint, Level } from "../blueprint";
+import { STOREY, type Blueprint, type Level, type PlacedObject } from "../blueprint";
+import { liftsIn, type Shaft } from "../lifts";
 import { catalog as defaultCatalog, type Action, type Catalog, type Station } from "../catalog";
 import type { Rot } from "../grid";
 import { newId } from "../ids";
@@ -8,23 +9,30 @@ import { gamingSpots } from "./gaming";
 import { dealBlackjack, finishBlackjack, playBlackjack, type BlackjackCommand } from "./blackjack";
 import { FreeWill } from "./autonomy";
 import { needsAt, START_NEEDS } from "./needs";
-import { buildNav, canStep, findPath, nearestWalkable, roomAt, slide, walkable, type Cell, type Nav } from "./nav";
+import { buildNav, canStep, findRoute, levelOf, liftStops, linkBetween, linksOf, nearestWalkable, roomAt, slide, walkable, type Cell, type Point, type Spot } from "./nav";
 import {
   activityAt,
   arrivalTime,
   cellOf,
+  floorOf,
   cookingDone,
   cookingRate,
   EAT_MS,
   isTogether,
   LEFTOVER_MS,
+  LIFT_DOOR_MS,
+  LIFT_FLOOR_MS,
+  LIFT_OPEN_MS,
+  liftHeight,
   MAX_DISHES,
   MAX_LEFTOVERS,
   positionAt,
   type Avatar,
   type Dish,
   type Leftover,
+  type Lift,
   type LifeState,
+  type Ride,
   type Social,
   TOGETHER_MS,
   type Use,
@@ -50,6 +58,7 @@ export type LifeReject =
   | "not-in-bed"
   | "no-tv"
   | "no-fridge"
+  | "in-lift"
   | "not-at-table"
   | "round-changed"
   | "round-active"
@@ -69,6 +78,7 @@ export const LIFE_TEXT: Record<LifeReject, string> = {
   "not-in-bed": "Get into the same bed first.",
   "no-tv": "There's no TV in view from here.",
   "no-fridge": "There's no fridge to keep it in.",
+  "in-lift": "Hang on, you're in the lift.",
   "not-at-table": "Join the card table and finish walking there first.",
   "round-changed": "The round changed. Choose again from the current hand.",
   "round-active": "Finish this round before dealing another.",
@@ -97,6 +107,13 @@ const GAP: Record<keyof typeof TOGETHER_MS, number> = {
 const brief = (u: Use | null | undefined) => u?.action === "toilet" || u?.action === "wash";
 
 const center = ([x, z]: Cell): [number, number] => [x + 0.5, z + 0.5];
+/** The middle of a cell on a floor, as a path point (no height on the ground floor, as it always was). */
+const middle = ([x, z, l]: Spot): Point => (l ? [x + 0.5, z + 0.5, l * STOREY] : [x + 0.5, z + 0.5]);
+/** A point standing in the middle of a cell, on a floor (not on stairs, or at their edge). */
+const atCell = (p: Point) => Math.abs((p[0] % 1) - 0.5) < 1e-6 && Math.abs((p[1] % 1) - 0.5) < 1e-6 && Math.abs((p[2] ?? 0) - levelOf(p) * STOREY) < 1e-6;
+/** Slots on a floor, saying which. */
+type Slot = PlacedSlot & { level?: number };
+const on = (slots: PlacedSlot[], level: number): Slot[] => slots.map((s) => ({ ...s, level }));
 /** Walking freely: the furthest one step can go, and how close to a wall the middle of you can get. */
 const MOVE_MAX = 1.2;
 const BODY_R = 0.3;
@@ -173,7 +190,7 @@ export class Life {
     const others = Object.values(this.state.avatars).filter((o) => o !== a && o.use);
     const dish = u.dishId ? this.state.dishes.find((d) => d.id === u.dishId) : undefined;
     const eaters = others.filter((o) => o.use!.dishId === u.dishId).length + 1;
-    const console = u.consoleId ? this.level(bp).objects[u.consoleId] : undefined;
+    const console = this.find(bp, u.consoleId)?.o;
     const controllers = console ? slotsOf(console, "play", this.cat).length : 0;
     let gaming = others.filter((o) => o.use!.consoleId === u.consoleId).length + 1;
     for (const o of others) {
@@ -190,8 +207,19 @@ export class Life {
     }
   }
 
-  private level(bp: Blueprint): Level {
-    return bp.levels[0]!;
+  /** An object anywhere in the house, with the floor it's on. */
+  private find(bp: Blueprint, id: string | null | undefined): { o: PlacedObject; index: number; level: Level } | null {
+    if (!id) return null;
+    for (let i = 0; i < bp.levels.length; i++) {
+      const o = bp.levels[i]!.objects[id];
+      if (o) return { o, index: i, level: bp.levels[i]! };
+    }
+    return null;
+  }
+
+  /** Every slot for an action, on every floor. */
+  private everywhere(bp: Blueprint, slots: (level: Level) => PlacedSlot[]): Slot[] {
+    return bp.levels.flatMap((l, i) => on(slots(l), i));
   }
 
   /** Make sure a member has a character, starting at the street end of the lot. */
@@ -222,11 +250,28 @@ export class Life {
     return changed;
   }
 
-  /** Where a character can start a new walk from without jumping: the cell they're stepping into. */
+  /**
+   * Where a character can start a new walk from without jumping: the cell they're stepping into, on its floor. Part
+   * way up or down stairs, they finish the flight first: `on` is the rest of the way there (before that cell).
+   */
   private origin(a: Avatar, now: number) {
     const p = positionAt(a, now);
-    const target = p.next < a.path.length ? a.path[p.next]! : a.path[a.path.length - 1]!;
-    return { at: [p.x, p.z] as [number, number], cell: [Math.floor(target[0]), Math.floor(target[1])] as Cell };
+    const at: Point = p.y ? [p.x, p.z, p.y] : [p.x, p.z];
+    let k = Math.min(p.next, a.path.length - 1);
+    while (k < a.path.length - 1 && !atCell(a.path[k]!)) k++;
+    const target = a.path[k]!;
+    return { at, on: a.path.slice(Math.min(p.next, k), k), to: target, cell: [Math.floor(target[0]), Math.floor(target[1]), levelOf(target)] as Spot };
+  }
+
+  /** The points to walk through along a route: the middle of each cell, and every step of any stairs between. */
+  private pointsFor(bp: Blueprint, route: Spot[]): Point[] {
+    const out: Point[] = [];
+    route.forEach((s, i) => {
+      const prev = route[i - 1];
+      if (prev && prev[2] !== s[2]) out.push(...(linkBetween(bp, prev, s, this.cat)?.via ?? []));
+      out.push(middle(s));
+    });
+    return out;
   }
 
   /**
@@ -243,15 +288,24 @@ export class Life {
     }
   }
 
-  /** Walk a character to the nearest of `goals`, to do `use` when they get there. */
-  private walkTo(a: Avatar, nav: Nav, goals: Cell[], use: Use | null, now: number): LifeReject | null {
+  /** Walk a character to the nearest of `goals` (on any floor), to do `use` when they get there. */
+  private walkTo(a: Avatar, bp: Blueprint, goals: Spot[], use: Use | null, now: number): LifeReject | null {
+    if (a.use?.ride?.on) return "in-lift";
     const o = this.origin(a, now);
-    const cells = findPath(nav, o.cell, goals);
-    if (!cells) return "unreachable";
+    const route = findRoute(bp, o.cell, goals, this.cat);
+    if (!route) return "unreachable";
     this.letGo(a);
-    const points = cells.map(center);
+    // a lift on the way: walk to its doors and wait for it there; the rest of the way comes after the ride
+    let cut = route.length;
+    let lift: string | undefined;
+    for (let i = 1; i < route.length && !lift; i++) {
+      if (route[i - 1]![2] === route[i]![2]) continue;
+      lift = linkBetween(bp, route[i - 1]!, route[i]!, this.cat)?.lift;
+      if (lift) cut = i;
+    }
+    const points = [...o.on, ...this.pointsFor(bp, route.slice(0, cut))];
     const first = points[0]!;
-    if (Math.hypot(first[0] - o.at[0], first[1] - o.at[1]) > 1e-3) points.unshift(o.at);
+    if (Math.hypot(first[0] - o.at[0], first[1] - o.at[1], (first[2] ?? 0) - (o.at[2] ?? 0)) > 1e-3) points.unshift(o.at);
     a.path = points;
     a.startedAt = now;
     if (points.length > 1) {
@@ -260,69 +314,87 @@ export class Life {
       a.face = rotToward(x1 - x0, z1 - z0);
     }
     a.use = use;
+    if (lift) this.waitFor(a, bp, lift, route[cut]![2], { goals, use });
     return null;
+  }
+
+  /** Wait at a lift's doors (where the walk ends) to ride it to floor `to`, then carry on with `then`. */
+  private waitFor(a: Avatar, bp: Blueprint, lift: string, to: number, then?: Ride["then"]) {
+    a.use = { objectId: lift, action: "ride", slot: 0, pose: null, ride: { lift, to, ...(then ? { then, due: arrivalTime(a) } : {}) } };
+    const shaft = liftsIn(bp, this.cat).find(({ o }) => o.id === lift)?.shaft;
+    if (shaft) a.face = rotToward(-shaft.face[0], -shaft.face[1]);
+  }
+
+  /** What a character is setting out to do: after the lift, if they're taking it on the way. */
+  private target(a: Avatar): Use | null {
+    return a.use?.ride?.then ? a.use.ride.then.use : a.use;
   }
 
   /** Is this slot used (or about to be) by someone else? */
   private taken(s: Pick<PlacedSlot, "objectId" | "slot">, memberId: string) {
     return Object.values(this.state.avatars).some(
-      (o) => o.memberId !== memberId && !this.givesWay(o, memberId) && o.use?.objectId === s.objectId && o.use.slot === s.slot,
+      (o) => o.memberId !== memberId && !this.givesWay(o, memberId) && this.target(o)?.objectId === s.objectId && this.target(o)?.slot === s.slot,
     );
   }
 
-  /** Send a character to the free slot (of several) that's quickest to reach. */
-  private goUse(a: Avatar, nav: Nav, slots: PlacedSlot[], now: number, extra: Partial<Use> = {}): LifeReject | null {
+  /** Send a character to the free slot (of several, on any floor) that's quickest to reach. */
+  private goUse(a: Avatar, bp: Blueprint, slots: Slot[], now: number, extra: Partial<Use> = {}): LifeReject | null {
     const free = slots.filter((s) => !this.taken(s, a.memberId));
     if (!slots.length) return "nothing-to-do";
     if (!free.length) return "taken";
     const from = this.origin(a, now).cell;
-    let best: { s: PlacedSlot; cells: Cell[] } | null = null;
+    let best: { s: Slot; cells: Spot[] } | null = null;
     for (const s of free) {
-      const cells = findPath(nav, from, s.stand) ?? findPath(nav, from, s.around);
+      const L = s.level ?? 0;
+      const spots = (cells: Cell[]): Spot[] => cells.map(([x, z]) => [x, z, L]);
+      const cells = findRoute(bp, from, spots(s.stand), this.cat) ?? findRoute(bp, from, spots(s.around), this.cat);
       if (cells && (!best || cells.length < best.cells.length)) best = { s, cells };
     }
     if (!best) return "unreachable";
     const { s } = best;
     const r = this.walkTo(
       a,
-      nav,
+      bp,
       [best.cells[best.cells.length - 1]!],
       { objectId: s.objectId, action: s.action, slot: s.slot, station: s.station, pose: s.pose, ...extra },
       now,
     );
-    if (!r && s.seconds) a.use!.until = arrivalTime(a) + s.seconds * 1000;
+    if (!r && s.seconds) this.target(a)!.until = arrivalTime(a) + s.seconds * 1000;
     return r;
   }
 
-  walk(memberId: string, bp: Blueprint, cell: Cell, now: number): LifeReject | null {
+  /** Walk to a cell, on a floor (the one they're on, if not said). */
+  walk(memberId: string, bp: Blueprint, cell: Cell, now: number, level?: number): LifeReject | null {
     const a = this.state.avatars[memberId];
-    if (!a) return "unreachable";
-    const nav = buildNav(bp, 0, this.cat);
+    const L = level ?? (a ? this.origin(a, now).cell[2] : 0);
+    if (!a || !bp.levels[L]) return "unreachable";
+    const nav = buildNav(bp, L, this.cat);
     const goal = walkable(nav, cell[0], cell[1]) ? cell : nearestWalkable(nav, cell);
     if (!goal) return "unreachable";
-    return this.walkTo(a, nav, [goal], null, now);
+    return this.walkTo(a, bp, [[goal[0], goal[1], L]], null, now);
   }
 
   use(memberId: string, bp: Blueprint, objectId: string, action: Action, now: number): LifeReject | null {
     const a = this.state.avatars[memberId];
-    const o = this.level(bp).objects[objectId];
-    if (!a || !o) return "nothing-to-do";
+    const found = this.find(bp, objectId);
+    if (!a || !found) return "nothing-to-do";
+    const { o, index } = found;
     if (action === "watch") return this.watch(a, bp, o.id, now);
     if (action === "play") return this.play(a, bp, o.id, now);
     if (action === "pingpong" || action === "blackjack") {
-      const nav = buildNav(bp, 0, this.cat);
+      const nav = buildNav(bp, index, this.cat);
       const slots = slotsOf(o, action, this.cat);
       if (!slots.length) return "nothing-to-do";
       const reachable = slots.filter((s) => roomAt(nav, s.pose.x, s.pose.z, BODY_R)).map((s) => ({ ...s, around: [] }));
-      return reachable.length ? this.goUse(a, nav, reachable, now) : "unreachable";
+      return reachable.length ? this.goUse(a, bp, on(reachable, index), now) : "unreachable";
     }
-    return this.goUse(a, buildNav(bp, 0, this.cat), slotsOf(o, action, this.cat), now);
+    return this.goUse(a, bp, on(slotsOf(o, action, this.cat), index), now);
   }
 
   /** Card choices belong to an arrived table participant and the round currently visible to them. */
   cards(memberId: string, bp: Blueprint, objectId: string, roundId: string | null, command: BlackjackCommand, now: number): LifeReject | null {
     const a = this.state.avatars[memberId];
-    const table = this.level(bp).objects[objectId];
+    const table = this.find(bp, objectId)?.o;
     if (!a || !table || !slotsOf(table, "blackjack", this.cat).length || a.use?.action !== "blackjack" || a.use.objectId !== objectId || activityAt(a, now) !== "blackjack") return "not-at-table";
     const round = this.state.blackjack?.[objectId];
     if ((round?.id ?? null) !== roundId) return "round-changed";
@@ -346,7 +418,7 @@ export class Life {
   syncTableGames(bp: Blueprint): boolean {
     let changed = false;
     for (const [tableId, round] of Object.entries(this.state.blackjack ?? {})) {
-      const table = this.level(bp).objects[tableId];
+      const table = this.find(bp, tableId)?.o;
       if (!table || !slotsOf(table, "blackjack", this.cat).length) {
         delete this.state.blackjack![tableId];
         changed = true;
@@ -366,7 +438,7 @@ export class Life {
 
   /** Reserve a controller and a seat facing the console's nearest TV, falling back to an open floor spot. */
   private play(a: Avatar, bp: Blueprint, objectId: string, now: number): LifeReject | null {
-    const level = this.level(bp);
+    const { level, index } = this.find(bp, objectId)!;
     const console = level.objects[objectId]!;
     const controllers = slotsOf(console, "play", this.cat).length;
     if (!controllers) return "nothing-to-do";
@@ -374,13 +446,13 @@ export class Life {
       (other) => other.memberId !== a.memberId && !this.givesWay(other, a.memberId) && other.use?.consoleId === console.id,
     ).length;
     if (used >= controllers) return "taken";
-    const nav = buildNav(bp, 0, this.cat);
+    const nav = buildNav(bp, index, this.cat);
     const spots = gamingSpots(level, console, nav, this.cat);
     if (!spots) return "no-tv";
     const extra: Partial<Use> = { action: "play", tv: spots.tv.id, consoleId: console.id };
-    const seated = spots.seats.length ? this.goUse(a, nav, spots.seats, now, extra) : "nothing-to-do";
+    const seated = spots.seats.length ? this.goUse(a, bp, on(spots.seats, index), now, extra) : "nothing-to-do";
     if (!seated) return null;
-    if (spots.floor.length) return this.goUse(a, nav, spots.floor, now, extra);
+    if (spots.floor.length) return this.goUse(a, bp, on(spots.floor, index), now, extra);
     return seated === "nothing-to-do" ? "unreachable" : seated;
   }
 
@@ -389,19 +461,19 @@ export class Life {
    * if there's none; picked from a seat, you sit there and watch the TV it faces.
    */
   private watch(a: Avatar, bp: Blueprint, objectId: string, now: number): LifeReject | null {
-    const level = this.level(bp);
-    const nav = buildNav(bp, 0, this.cat);
+    const { level, index } = this.find(bp, objectId)!;
     const o = level.objects[objectId]!;
     const isTv = Boolean(screenOf(o, this.cat));
     const seats = isTv ? seatsFacing(level, o, this.cat) : slotsOf(o, "sit", this.cat).filter((s) => tvFacing(level, s, this.cat));
-    const r: LifeReject | null = seats.length ? this.goUse(a, nav, seats, now, { action: "watch" }) : "no-tv";
+    const r: LifeReject | null = seats.length ? this.goUse(a, bp, on(seats, index), now, { action: "watch" }) : "no-tv";
     if (!r) {
-      const seat = seats.find((s) => s.objectId === a.use!.objectId && s.slot === a.use!.slot)!;
-      a.use!.tv = isTv ? o.id : tvFacing(level, seat, this.cat)!.id;
+      const u = this.target(a)!;
+      const seat = seats.find((s) => s.objectId === u.objectId && s.slot === u.slot)!;
+      u.tv = isTv ? o.id : tvFacing(level, seat, this.cat)!.id;
       return null;
     }
     if (isTv) {
-      const floor = this.goUse(a, nav, slotsOf(o, "watch", this.cat), now, { tv: o.id });
+      const floor = this.goUse(a, bp, on(slotsOf(o, "watch", this.cat), index), now, { tv: o.id });
       if (!floor || !seats.length) return floor;
     }
     return r;
@@ -414,34 +486,206 @@ export class Life {
   move(memberId: string, bp: Blueprint, to: [number, number], now: number): LifeReject | null {
     const a = this.state.avatars[memberId];
     if (!a) return "unreachable";
-    const nav = buildNav(bp, 0, this.cat);
+    if (a.use?.ride?.on) return null;
     const p = positionAt(a, now);
     const seated = a.use?.pose && p.next >= a.path.length;
     // from a seat you get up where you sat down from
-    const from: [number, number] = seated ? a.path[a.path.length - 1]! : [p.x, p.z];
+    const here: Point = seated ? a.path[a.path.length - 1]! : p.y ? [p.x, p.z, p.y] : [p.x, p.z];
+    const L = levelOf(here);
+    // part way up or down stairs, you keep going to the end of the flight
+    if (Math.abs((here[2] ?? 0) - L * STOREY) > 1e-3) return null;
+    const nav = buildNav(bp, L, this.cat);
+    const from: [number, number] = [here[0], here[1]];
     let [dx, dz] = [to[0] - from[0], to[1] - from[1]];
     const len = Math.hypot(dx, dz);
     if (len > MOVE_MAX) [dx, dz] = [(dx / len) * MOVE_MAX, (dz / len) * MOVE_MAX];
+    // heading into stairs from the cell at their foot (or head): up (or down) the whole flight
+    const flight = len > 0.05 && this.stairsAhead(bp, here, dx, dz);
     const end = slide(nav, from, [from[0] + dx, from[1] + dz], BODY_R);
     const moved = Math.hypot(end[0] - from[0], end[1] - from[1]) > 0.01;
-    if (!moved && !a.use && p.next >= a.path.length) return "unreachable";
+    if (!flight && !moved && !a.use && p.next >= a.path.length) return "unreachable";
     this.letGo(a);
     if (a.use?.pose) a.face = a.use.pose.face;
     a.use = null;
-    a.path = moved ? [from, end] : [from];
+    const y = (q: [number, number]): Point => (L ? [q[0], q[1], L * STOREY] : q);
+    a.path = flight ? [here, ...flight] : moved ? [here, y(end)] : [here];
     a.startedAt = now;
+    if (flight) {
+      const [x0, z0] = flight[0]!;
+      const [x1, z1] = flight[flight.length - 1]!;
+      a.face = rotToward(x1 - x0, z1 - z0);
+      return null;
+    }
     // a little shuffle (stopping where you are) doesn't turn you round
     if (Math.hypot(end[0] - from[0], end[1] - from[1]) > 0.15) a.face = rotToward(end[0] - from[0], end[1] - from[1]);
     return null;
   }
 
-  /** Stand still (getting up if sitting), stopping at the next cell if walking. */
+  // --- lifts ---
+
+  /** Take a lift to floor `to`: walk to its doors on the floor you're on, call it, and ride. */
+  ride(memberId: string, bp: Blueprint, liftId: string, to: number, now: number): LifeReject | null {
+    const a = this.state.avatars[memberId];
+    if (!a) return "unreachable";
+    if (a.use?.ride?.on) return "in-lift";
+    const stops = liftStops(bp, liftId, this.cat);
+    const here = this.origin(a, now).cell[2];
+    const from = stops.find((s) => s.level === here);
+    if (!from || !stops.some((s) => s.level === to)) return "unreachable";
+    if (to === here) return "nothing-to-do";
+    const r = this.walkTo(a, bp, [[...from.at, here]], null, now);
+    if (r) return r;
+    this.waitFor(a, bp, liftId, to);
+    return null;
+  }
+
+  /**
+   * Run the lifts up to `now`: cars arrive and open their doors, people waiting call them and get on, riders get
+   * off at their floor (and carry on where they were going), and a car with somewhere to be closes up and sets off.
+   */
+  private runLifts(bp: Blueprint, now: number): boolean {
+    const lifts = liftsIn(bp, this.cat);
+    if (!lifts.length) return false;
+    const cars = (this.state.lifts ??= {});
+    let changed = false;
+    for (const { o, shaft } of lifts) {
+      const car = (cars[o.id] ??= { level: 0, stops: [] });
+      const stops = new Set(liftStops(bp, o.id, this.cat).map((s) => s.level));
+      for (let step = 0; step < 8; step++) {
+        const did = this.liftStep(bp, o.id, shaft, car, stops, now);
+        if (!did) break;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /** One thing a lift does next, if anything's due. */
+  private liftStep(bp: Blueprint, id: string, shaft: Shaft, car: Lift, stops: Set<number>, now: number): boolean {
+    const riders = Object.values(this.state.avatars).filter((a) => a.use?.ride?.lift === id);
+    const call = (level: number) => {
+      if (car.stops.includes(level) || (!car.move && car.level === level && car.open !== undefined && now < car.open)) return false;
+      car.stops.push(level);
+      return true;
+    };
+    // the car gets there and opens up
+    if (car.move && now >= car.move.arrives) {
+      car.level = car.move.to;
+      car.open = Math.max(car.move.arrives, now - LIFT_OPEN_MS / 2) + LIFT_OPEN_MS;
+      delete car.move;
+      car.stops = car.stops.filter((l) => l !== car.level);
+      return true;
+    }
+    const open = !car.move && car.open !== undefined && now < car.open;
+    if (open) {
+      // off at their floor (or wherever it's stopped, if theirs has gone)
+      const off = riders.find((a) => a.use!.ride!.on && (a.use!.ride!.to === car.level || !stops.has(a.use!.ride!.to)));
+      if (off) {
+        this.stepOut(off, bp, shaft, car.level, now);
+        car.open = Math.max(car.open!, now + 900);
+        return true;
+      }
+      // on, if there's room
+      const taken = new Set(riders.filter((a) => a.use!.ride!.on).map((a) => a.use!.slot));
+      const on = riders.find((a) => !a.use!.ride!.on && now >= arrivalTime(a) && floorOf(a) === car.level && a.use!.ride!.to !== car.level);
+      const slot = shaft.spots.findIndex((_, i) => !taken.has(i));
+      if (on && slot >= 0) {
+        const r = on.use!.ride!;
+        const [x, z] = shaft.spots[slot]!;
+        const y = car.level * STOREY;
+        const p = positionAt(on, now);
+        on.path = [y ? [p.x, p.z, y] : [p.x, p.z], y ? [x, z, y] : [x, z]];
+        on.startedAt = now;
+        on.face = rotToward(shaft.face[0], shaft.face[1]);
+        on.use = { ...on.use!, slot, ride: { ...r, on: true } };
+        if (stops.has(r.to)) call(r.to);
+        car.open = Math.max(car.open!, arrivalTime(on) + 700);
+        return true;
+      }
+    }
+    // waiting at the doors (or riding, after a reload): press the button
+    let pressed = false;
+    for (const a of riders) {
+      const r = a.use!.ride!;
+      if (r.on) pressed = (stops.has(r.to) && r.to !== car.level && call(r.to)) || pressed;
+      else if (now >= arrivalTime(a) && stops.has(floorOf(a))) pressed = call(floorOf(a)) || pressed;
+    }
+    if (pressed) return true;
+    if (car.move || open) return false;
+    // stopped with the doors shut: open up for this floor, or set off for the next one asked for
+    if (car.stops.includes(car.level)) {
+      car.stops = car.stops.filter((l) => l !== car.level);
+      car.open = now + LIFT_OPEN_MS;
+      return true;
+    }
+    car.stops = car.stops.filter((l) => stops.has(l));
+    const first = car.stops[0];
+    if (first === undefined) return false;
+    // on the way to the first, stop at any others asked for that it passes
+    const up = first > car.level;
+    const to = car.stops.filter((l) => (up ? l > car.level && l <= first : l < car.level && l >= first)).sort((x, y) => Math.abs(x - car.level) - Math.abs(y - car.level))[0]!;
+    const departs = now + LIFT_DOOR_MS;
+    car.move = { from: car.level, to, departs, arrives: departs + Math.abs(to - car.level) * LIFT_FLOOR_MS };
+    delete car.open;
+    return true;
+  }
+
+  /** Out of the lift onto floor `level`, and on to wherever they were going after. */
+  private stepOut(a: Avatar, bp: Blueprint, shaft: Shaft, level: number, now: number) {
+    const u = a.use!;
+    const r = u.ride!;
+    const here = a.path[a.path.length - 1]!;
+    // out through the nearer door, if there's floor there (riders side by side don't end up on top of each other)
+    const nav = buildNav(bp, level, this.cat);
+    const doors = shaft.front.filter(([x, z]) => walkable(nav, x, z)).sort((p, q) => Math.hypot(p[0] + 0.5 - here[0], p[1] + 0.5 - here[1]) - Math.hypot(q[0] + 0.5 - here[0], q[1] + 0.5 - here[1]));
+    const out = doors[0] ?? liftStops(bp, r.lift, this.cat).find((s) => s.level === level)?.at ?? shaft.front[0]!;
+    const y = level * STOREY;
+    a.path = [y ? [here[0], here[1], y] : [here[0], here[1]], middle([...out, level])];
+    a.startedAt = now;
+    a.use = null;
+    if (!r.then) return;
+    const next = r.then.use && { ...r.then.use };
+    if (this.walkTo(a, bp, r.then.goals, next, now) || !next || r.due === undefined) return;
+    // whatever's timed from getting there (a plate, a quick wash) is as late as the ride made it
+    const late = arrivalTime(a) - r.due;
+    if (next.until !== undefined) next.until += late;
+    if (next.startsAt !== undefined) next.startsAt += late;
+  }
+
+  /** The car of a lift, as it is now. */
+  lift(id: string): Lift | undefined {
+    return this.state.lifts?.[id];
+  }
+
+  /**
+   * Stairs just ahead of someone standing at `here` and heading (dx, dz): the way up or down them, to the middle of
+   * the cell at the other end. Only from the cell right at their foot or head, and heading more or less into them.
+   */
+  private stairsAhead(bp: Blueprint, here: Point, dx: number, dz: number): Point[] | null {
+    const spot: Spot = [Math.floor(here[0]), Math.floor(here[1]), levelOf(here)];
+    const len = Math.hypot(dx, dz);
+    for (const l of linksOf(bp, this.cat).get(`${spot[2]}:${spot[0]}:${spot[1]}`) ?? []) {
+      const [ex, ez] = l.via[0]!;
+      const [ox, oz] = [ex - here[0], ez - here[1]];
+      const dist = Math.hypot(ox, oz);
+      if (dist < 0.8 && (ox * dx + oz * dz) / (dist * len || 1) > 0.75) return [...l.via, middle(l.to)];
+    }
+    return null;
+  }
+
+  /** Stand still (getting up if sitting), stopping at the next cell if walking (at the end of the flight, on stairs). */
   stop(memberId: string, now: number): LifeReject | null {
     const a = this.state.avatars[memberId];
     if (!a) return "nothing-to-do";
+    // in a lift you ride it to the floor you asked for, and stay there
+    if (a.use?.ride?.on) {
+      a.use = { ...a.use, ride: { lift: a.use.ride.lift, to: a.use.ride.to, on: true } };
+      return null;
+    }
     const p = positionAt(a, now);
     if (p.next < a.path.length) {
-      a.path = [[p.x, p.z], a.path[p.next]!];
+      const o = this.origin(a, now);
+      a.path = [o.at, ...o.on, o.to];
       a.startedAt = now;
     }
     this.letGo(a);
@@ -465,6 +709,8 @@ export class Life {
     const p = Object.values(this.state.avatars).find((o) => o.memberId !== memberId);
     if (!a) return "nothing-to-do";
     if (!p || !this.isHere(p.memberId)) return "partner-away";
+    if (a.use?.ride?.on) return "in-lift";
+    if (p.use?.ride?.on) return "partner-busy";
 
     if (action === "cuddle" || action === "uncuddle") {
       const bed = a.use?.objectId;
@@ -478,20 +724,22 @@ export class Life {
 
     // a sitter gets up for a hug; someone cooking, eating or asleep is busy, unless they're only at it of their own accord
     if (p.use && !this.givesWay(p, memberId) && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge" && p.use.action !== "watch" && p.use.action !== "play") return "partner-busy";
-    const nav = buildNav(bp, 0, this.cat);
     // they stop where they are (the cell they're stepping into); you go beside them, with no wall in between
-    const [px, pz] = this.origin(p, now).cell;
-    const beside: Cell[] = [];
+    const [px, pz, pl] = this.origin(p, now).cell;
+    const nav = buildNav(bp, pl, this.cat);
+    const beside: Spot[] = [];
     for (const [dx, dz] of [
       [1, 0],
       [-1, 0],
       [0, 1],
       [0, -1],
     ] as const)
-      if (walkable(nav, px + dx, pz + dz) && canStep(nav, px, pz, px + dx, pz + dz)) beside.push([px + dx, pz + dz]);
-    if (!beside.length || !findPath(nav, this.origin(a, now).cell, beside)) return "unreachable";
+      if (walkable(nav, px + dx, pz + dz) && canStep(nav, px, pz, px + dx, pz + dz)) beside.push([px + dx, pz + dz, pl]);
+    const route = beside.length ? findRoute(bp, this.origin(a, now).cell, beside, this.cat) : null;
+    // (not by lift: you'd keep them waiting at the doors for the ride)
+    if (!route || route.some((s, i) => i > 0 && s[2] !== route[i - 1]![2] && linkBetween(bp, route[i - 1]!, s, this.cat)?.lift)) return "unreachable";
     this.stop(p.memberId, now);
-    this.walkTo(a, nav, beside, null, now);
+    this.walkTo(a, bp, beside, null, now);
 
     // close together, facing each other, halfway between the two cells
     const [ax, az] = cellOf(a);
@@ -520,11 +768,10 @@ export class Life {
   // --- cooking ---
 
   private sendToStation(a: Avatar, bp: Blueprint, station: Station, now: number, objectId: string | null = null) {
-    const level = this.level(bp);
-    const nav = buildNav(bp, 0, this.cat);
-    const own = objectId && level.objects[objectId] ? slotsOf(level.objects[objectId], undefined, this.cat).filter((s) => s.station === station) : [];
-    if (own.length && this.goUse(a, nav, own, now) === null) return null;
-    return this.goUse(a, nav, stationSlots(level, station, this.cat), now);
+    const found = this.find(bp, objectId);
+    const own = found ? on(slotsOf(found.o, undefined, this.cat).filter((s) => s.station === station), found.index) : [];
+    if (own.length && this.goUse(a, bp, own, now) === null) return null;
+    return this.goUse(a, bp, this.everywhere(bp, (l) => stationSlots(l, station, this.cat)), now);
   }
 
   cook(memberId: string, bp: Blueprint, recipeId: string, objectId: string | null, now: number): LifeReject | null {
@@ -532,8 +779,7 @@ export class Life {
     const a = this.state.avatars[memberId];
     if (!recipe || !a) return "unknown-recipe";
     if (this.state.cooking) return "already-cooking";
-    const level = this.level(bp);
-    if (recipe.steps.some((s) => stationSlots(level, s.station, this.cat).length === 0)) return "no-kitchen";
+    if (recipe.steps.some((s) => this.everywhere(bp, (l) => stationSlots(l, s.station, this.cat)).length === 0)) return "no-kitchen";
     const r = this.sendToStation(a, bp, recipe.steps[0]!.station, now, objectId);
     if (r) return r;
     this.state.cooking = { recipeId, step: 0, done: 0, rate: 0, updatedAt: now, startedBy: memberId };
@@ -577,8 +823,9 @@ export class Life {
     if (!a || !dish) return "no-dish";
     const eating = Object.values(this.state.avatars).filter((o) => o.memberId !== memberId && !this.givesWay(o, memberId) && o.use?.dishId === dishId).length;
     if (eating >= dish.portions) return "taken";
-    const level = this.level(bp);
-    const nav = buildNav(bp, 0, this.cat);
+    const L = dish.level ?? 0;
+    const level = bp.levels[L];
+    if (!level) return "no-dish";
     // a seat at the plate's table if there is one, otherwise stand by the plate
     const table = dish.surfaceId ? level.objects[dish.surfaceId] : undefined;
     const item = table && this.cat.furniture.get(table.catalogId);
@@ -586,23 +833,23 @@ export class Life {
     const gap = (x: number, z: number) => Math.hypot(Math.max(f.x - x, 0, x - f.x - f.w), Math.max(f.z - z, 0, z - f.z - f.d));
     const seats: PlacedSlot[] = [];
     for (const o of Object.values(level.objects)) for (const s of slotsOf(o, "sit", this.cat)) if (gap(s.pose.x, s.pose.z) < 0.9) seats.push(s);
-    if (seats.length && this.goUse(a, nav, seats, now, { action: "eat", dishId }) === null) {
-      a.use!.until = arrivalTime(a) + EAT_MS;
+    if (seats.length && this.goUse(a, bp, on(seats, L), now, { action: "eat", dishId }) === null) {
+      this.target(a)!.until = arrivalTime(a) + EAT_MS;
       return null;
     }
     const dc: Cell = [Math.floor(dish.x), Math.floor(dish.z)];
-    const around: Cell[] = [];
-    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (dx || dz) around.push([dc[0] + dx, dc[1] + dz]);
-    const r = this.walkTo(a, nav, around, { objectId: null, action: "eat", slot: 0, pose: null, dishId }, now);
+    const around: Spot[] = [];
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (dx || dz) around.push([dc[0] + dx, dc[1] + dz, L]);
+    const r = this.walkTo(a, bp, around, { objectId: null, action: "eat", slot: 0, pose: null, dishId }, now);
     if (r) return r;
     const end = a.path[a.path.length - 1]!;
     a.face = rotToward(dish.x - end[0], dish.z - end[1]);
-    a.use!.until = arrivalTime(a) + EAT_MS;
+    this.target(a)!.until = arrivalTime(a) + EAT_MS;
     return null;
   }
 
-  private serve(bp: Blueprint, recipeId: string, near: { x: number; z: number }, now: number, portions = this.cat.recipes.get(recipeId)?.serves ?? 1): Dish {
-    const level = this.level(bp);
+  private serve(bp: Blueprint, recipeId: string, near: { x: number; z: number; level: number }, now: number, portions = this.cat.recipes.get(recipeId)?.serves ?? 1): Dish {
+    const level = bp.levels[near.level] ?? bp.levels[0]!;
     let best: { id: string | null; x: number; z: number; dist: number } | null = null;
     for (const o of Object.values(level.objects)) {
       const item = this.cat.furniture.get(o.catalogId);
@@ -624,6 +871,7 @@ export class Life {
       surfaceId: spot.id,
       portions,
       servedAt: now,
+      ...(near.level && bp.levels[near.level] ? { level: near.level } : {}),
     };
     this.state.dishes.push(dish);
     // too many plates out: the oldest one nobody's eating goes in the fridge (or, with no fridge, away)
@@ -637,8 +885,9 @@ export class Life {
 
   // --- the fridge ---
 
+  /** Every fridge in the house, with the floor it's on. */
   private fridges(bp: Blueprint) {
-    return Object.values(this.level(bp).objects).filter((o) => this.cat.furniture.get(o.catalogId)?.fridge);
+    return bp.levels.flatMap((l, level) => Object.values(l.objects).filter((o) => this.cat.furniture.get(o.catalogId)?.fridge).map((o) => ({ o, level })));
   }
 
   private beingEaten(d: Dish) {
@@ -674,12 +923,14 @@ export class Life {
     if (!a || i < 0) return "no-dish";
     const fridges = this.fridges(bp);
     const me = positionAt(a, now);
-    const from = fridges.find((o) => o.id === fridgeId) ?? fridges.sort((p, q) => Math.hypot(p.x - me.x, p.z - me.z) - Math.hypot(q.x - me.x, q.z - me.z))[0];
+    // the nearest, counting another floor as a good way off
+    const far = ({ o, level }: { o: PlacedObject; level: number }) => Math.hypot(o.x - me.x, o.z - me.z) + Math.abs(level - floorOf(a)) * 20;
+    const from = fridges.find(({ o }) => o.id === fridgeId) ?? fridges.sort((p, q) => far(p) - far(q))[0];
     if (!from) return "no-fridge";
-    const item = this.cat.furniture.get(from.catalogId)!;
-    const f = footprintOf(item, from);
+    const item = this.cat.furniture.get(from.o.catalogId)!;
+    const f = footprintOf(item, from.o);
     const [l] = fridge.splice(i, 1) as [Leftover];
-    const dish = this.serve(bp, l.recipeId, { x: f.x + f.w / 2, z: f.z + f.d / 2 }, now, l.portions);
+    const dish = this.serve(bp, l.recipeId, { x: f.x + f.w / 2, z: f.z + f.d / 2, level: from.level }, now, l.portions);
     if (!eat) return null;
     const r = this.eat(memberId, bp, dish.id, now);
     if (r) {
@@ -702,7 +953,8 @@ export class Life {
   }
 
   private passTime(bp: Blueprint, now: number): boolean {
-    let changed = this.syncTableGames(bp);
+    let changed = this.runLifts(bp, now);
+    changed = this.syncTableGames(bp) || changed;
     for (const a of Object.values(this.state.avatars)) {
       const u = a.use;
       if ((together(u) || brief(u)) && u!.until !== undefined && now >= u!.until) {
@@ -710,7 +962,7 @@ export class Life {
         a.use = null;
         changed = true;
         // after the toilet, wash your hands if there's a sink you can get to
-        if (u!.action === "toilet") this.goUse(a, buildNav(bp, 0, this.cat), slotsFor(this.level(bp), "wash", this.cat), now);
+        if (u!.action === "toilet") this.goUse(a, bp, this.everywhere(bp, (l) => slotsFor(l, "wash", this.cat)), now);
         continue;
       }
       if (u?.action !== "eat" || u.until === undefined || now < u.until) continue;
@@ -750,8 +1002,8 @@ export class Life {
       c.rate = 0;
       if (c.step >= recipe.steps.length) {
         const last = finishers[0];
-        const near = last?.use?.pose ?? (last ? { x: last.path[0]![0], z: last.path[0]![1] } : { x: bp.lot.w / 2, z: bp.lot.d / 2 });
-        this.serve(bp, recipe.id, near, now);
+        const at = last?.use?.pose ?? (last ? { x: last.path[0]![0], z: last.path[0]![1] } : { x: bp.lot.w / 2, z: bp.lot.d / 2 });
+        this.serve(bp, recipe.id, { x: at.x, z: at.z, level: last ? floorOf(last) : 0 }, now);
         for (const a of this.workers(now)) this.stop(a.memberId, now);
         this.state.cooking = null;
         return true;
@@ -788,6 +1040,14 @@ export class Life {
       if ((a.use?.action === "eat" || together(a.use) || brief(a.use)) && a.use!.until !== undefined) next = Math.min(next, a.use!.until);
     }
     for (const d of this.state.dishes) if (d.servedAt !== undefined) next = Math.min(next, d.servedAt + LEFTOVER_MS);
+    // lifts: a car getting there, doors closing with somewhere to go, someone getting to the doors to call it
+    for (const [id, car] of Object.entries(this.state.lifts ?? {})) {
+      const riders = Object.values(this.state.avatars).some((a) => a.use?.ride?.lift === id);
+      if (car.move) next = Math.min(next, car.move.arrives);
+      else if (car.open !== undefined && car.open > now && (car.stops.length || riders)) next = Math.min(next, car.open);
+      else if (car.stops.length || riders) next = Math.min(next, now);
+    }
+    for (const a of Object.values(this.state.avatars)) if (a.use?.ride && !a.use.ride.on && arrivalTime(a) > now) next = Math.min(next, arrivalTime(a));
     const c = this.state.cooking;
     const step = c && this.cat.recipes.get(c.recipeId)?.steps[c.step];
     if (c && step && c.rate > 0) next = Math.min(next, c.updatedAt + ((step.seconds - c.done) / c.rate) * 1000);
@@ -801,13 +1061,16 @@ export class Life {
    * went are cleared. True if anything changed.
    */
   onBlueprint(bp: Blueprint, now: number): boolean {
-    const level = this.level(bp);
-    const nav = buildNav(bp, 0, this.cat);
-    let changed = false;
+    let changed = this.liftsChanged(bp, now);
     for (const a of Object.values(this.state.avatars)) {
       const u = a.use;
-      if (u?.objectId) {
-        const o = level.objects[u.objectId];
+      // riding a lift that's still there: it sees them off at a floor it still stops at
+      if (u?.ride?.on) continue;
+      const found = this.find(bp, u?.objectId);
+      const level = found?.level ?? bp.levels[0]!;
+      const nav = buildNav(bp, found?.index ?? 0, this.cat);
+      if (u?.objectId && !u.ride) {
+        const o = found?.o;
         const s = o ? slotsOf(o, slotAction(u), this.cat)[u.slot] : undefined;
         if (!s || !u.pose || s.pose.x !== u.pose.x || s.pose.z !== u.pose.z || s.pose.face !== u.pose.face) {
           this.letGo(a);
@@ -832,25 +1095,42 @@ export class Life {
       }
       const p = positionAt(a, now);
       if (p.next < a.path.length) {
-        // still walking: is the rest of the way still open?
+        // still walking: is the rest of the way still open (on the flat, and up or down any stairs)?
         let open = true;
-        for (let i = Math.max(p.next, 1); i < a.path.length && open; i++) {
-          const [x0, z0] = a.path[i - 1]!.map(Math.floor) as Cell;
-          const [x1, z1] = a.path[i]!.map(Math.floor) as Cell;
-          if ((x0 !== x1 || z0 !== z1) && !canStep(nav, x0, z0, x1, z1)) open = false;
+        let from: Spot | null = null;
+        for (let i = Math.max(p.next - 1, 0); i < a.path.length && open; i++) {
+          const q = a.path[i]!;
+          if (!atCell(q) && i < a.path.length - 1) continue;
+          const to: Spot = [Math.floor(q[0]), Math.floor(q[1]), levelOf(q)];
+          if (from && from[2] !== to[2]) open = Boolean(linkBetween(bp, from, to, this.cat));
+          else if (from && (from[0] !== to[0] || from[1] !== to[1])) {
+            const n = buildNav(bp, to[2], this.cat);
+            open = walkable(n, to[0], to[1]) && canStep(n, from[0], from[1], to[0], to[1]);
+          }
+          from = to;
         }
         if (!open) {
-          const goal = cellOf(a);
-          if (this.walkTo(a, nav, [goal], a.use, now)) this.stop(a.memberId, now);
+          // another way to the same spot, or the nearest one left if that's gone
+          const L = floorOf(a);
+          const n = buildNav(bp, L, this.cat);
+          const goal = walkable(n, ...cellOf(a)) ? cellOf(a) : nearestWalkable(n, cellOf(a));
+          if (!goal || this.walkTo(a, bp, [[...goal, L]], a.use, now)) this.stop(a.memberId, now);
           changed = true;
         }
       } else {
+        // standing somewhere that's gone (or been built on): step to the nearest spot on the same floor, or downstairs
         const here = cellOf(a);
-        if (!walkable(nav, here[0], here[1])) {
-          const to = nearestWalkable(nav, here);
+        const L = floorOf(a);
+        const own = bp.levels[L] ? buildNav(bp, L, this.cat) : null;
+        if (!own || !walkable(own, here[0], here[1])) {
+          let to = own && nearestWalkable(own, here);
+          let at = L;
+          if (!to) [to, at] = [nearestWalkable(buildNav(bp, 0, this.cat), here), 0];
           if (to) {
-            a.path = [[p.x, p.z], center(to)];
+            a.path = [p.y ? [p.x, p.z, p.y] : [p.x, p.z], middle([to[0], to[1], at])];
             a.startedAt = now;
+            if (a.use?.pose) a.face = a.use.pose.face;
+            this.letGo(a);
             a.use = null;
             changed = true;
           }
@@ -860,7 +1140,7 @@ export class Life {
     const kept: Dish[] = [];
     const gone: Dish[] = [];
     for (const d of this.state.dishes) {
-      if (d.surfaceId && !level.objects[d.surfaceId]) {
+      if ((d.surfaceId && !this.find(bp, d.surfaceId)) || !bp.levels[d.level ?? 0]) {
         changed = true;
         gone.push(d);
         for (const a of Object.values(this.state.avatars))
@@ -878,14 +1158,56 @@ export class Life {
     return this.syncTableGames(bp) || changed;
   }
 
+  /**
+   * Lifts that went (or stopped stopping somewhere): anyone in one gets out on the floor it was at, and anyone
+   * waiting for one gives up.
+   */
+  private liftsChanged(bp: Blueprint, now: number): boolean {
+    if (!this.state.lifts) return false;
+    let changed = false;
+    const there = new Set(liftsIn(bp, this.cat).map(({ o }) => o.id));
+    for (const [id, car] of Object.entries(this.state.lifts)) {
+      const stops = new Set(liftStops(bp, id, this.cat).map((s) => s.level));
+      for (const a of Object.values(this.state.avatars)) {
+        const r = a.use?.ride;
+        if (r?.lift !== id) continue;
+        if (r.on && !there.has(id)) {
+          // out where the car was, at the nearest place to stand on that floor (or the ground floor)
+          const L = Math.round(liftHeight(car, now) / STOREY);
+          const here = a.path[a.path.length - 1]!;
+          const cell: Cell = [Math.floor(here[0]), Math.floor(here[1])];
+          let at = bp.levels[L] ? nearestWalkable(buildNav(bp, L, this.cat), cell) : null;
+          let level = L;
+          if (!at) [at, level] = [nearestWalkable(buildNav(bp, 0, this.cat), cell), 0];
+          a.path = [middle([...(at ?? cell), level])];
+          a.startedAt = now;
+          a.use = null;
+          changed = true;
+        } else if (!r.on && (!there.has(id) || !stops.has(floorOf(a)))) {
+          a.use = null;
+          changed = true;
+        }
+      }
+      if (!there.has(id)) {
+        delete this.state.lifts[id];
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   /** Pick up from a saved state on a new clock: everyone where they were, meals paused, eating finished. */
   static restore(saved: LifeState, now: number, cat: Catalog = defaultCatalog): Life {
     // a plate's clock is the real one: one left out while the house was empty goes in the fridge on the first look
     const state: LifeState = { avatars: {}, cooking: null, dishes: (saved.dishes ?? []).map((d) => ({ ...d, servedAt: d.servedAt ?? now })) };
     if (saved.fridge) state.fridge = saved.fridge.map((l) => ({ ...l }));
     if (saved.blackjack) state.blackjack = structuredClone(saved.blackjack);
+    // lifts stopped where they were going, doors shut; anyone in one carries on to their floor
+    if (saved.lifts) state.lifts = Object.fromEntries(Object.entries(saved.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }]));
     for (const a of Object.values(saved.avatars ?? {})) {
-      const end = a.path[a.path.length - 1]!;
+      const car = a.use?.ride?.on ? state.lifts?.[a.use.ride.lift] : undefined;
+      const last = a.path[a.path.length - 1]!;
+      const end: Point = car ? (car.level ? [last[0], last[1], car.level * STOREY] : [last[0], last[1]]) : last;
       const use =
         a.use?.action === "eat"
           ? a.use.objectId
@@ -894,11 +1216,13 @@ export class Life {
           : together(a.use) || brief(a.use)
             ? null
             : a.use;
+      // the rest of a trip planned on the old clock is dropped: they get to their floor and stand
+      const ride = use?.ride && { ...use, ride: { lift: use.ride.lift, to: use.ride.to, ...(use.ride.on ? { on: true } : {}) } };
       state.avatars[a.memberId] = {
         ...a,
         path: [end],
         startedAt: now,
-        use,
+        use: ride || use,
         ...(a.needs ? { needs: { ...a.needs, at: now } } : {}),
         ...(a.auto ? { auto: { need: a.auto.need, since: now } } : {}),
       };
@@ -930,6 +1254,7 @@ export class Life {
       dishes: this.state.dishes.map((d) => ({ ...d })),
       ...(this.state.fridge ? { fridge: this.state.fridge.map((l) => ({ ...l })) } : {}),
       ...(this.state.blackjack ? { blackjack: structuredClone(this.state.blackjack) } : {}),
+      ...(this.state.lifts ? { lifts: Object.fromEntries(Object.entries(this.state.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }])) } : {}),
     };
   }
 }
@@ -939,7 +1264,7 @@ export class Life {
  * they stood, since from then on they go differently. One that's turned down, or finds nothing to do, puts them
  * back, so it leaves the state just as it was, like everything else it does.
  */
-const CHANGES = ["walk", "use", "cards", "move", "stop", "social", "cook", "help", "eat", "takeOut", "store", "tick", "onBlueprint"] as const;
+const CHANGES = ["walk", "use", "cards", "move", "stop", "social", "cook", "help", "eat", "takeOut", "store", "ride", "tick", "onBlueprint"] as const;
 for (const name of CHANGES) {
   const change = Life.prototype[name] as (this: Life, ...args: unknown[]) => LifeReject | boolean | null;
   Object.defineProperty(Life.prototype, name, {

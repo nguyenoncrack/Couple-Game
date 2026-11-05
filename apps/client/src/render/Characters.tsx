@@ -1,9 +1,9 @@
-import { normalizeAppearance, activityAt, arrivalTime, faceDir, pingPongMoment, positionAt, TOGETHER_MS, type Avatar, type MemberInfo } from "@cg/shared";
+import { normalizeAppearance, activityAt, arrivalTime, faceDir, floorOf, liftHeight, pingPongMoment, positionAt, STOREY, TOGETHER_MS, type Avatar, type MemberInfo } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { serverNow, useGame } from "../state/game";
+import { roofVisible, serverNow, setFloor, useGame } from "../state/game";
 import { cameraFollow, cameraGestureActive } from "./CameraRig";
 import { FLOOR_Y } from "./House";
 import { HIP, THIGH, TORSO, SHOULDER, ARM, torso, arm, thigh, shin, looksFor, customizedLooks } from "../features/character/characterParts";
@@ -359,6 +359,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
   const heldPaddle = useRef<THREE.Group>(null);
   const heldCard = useRef<THREE.Group>(null);
   const first = useRef(true);
+  const myStorey = useRef<number | null>(null);
   // Html made in the scene's very first commit can lose its React root in development; add the tag a tick later.
   const [tagged, setTagged] = useState(false);
   useEffect(() => {
@@ -375,6 +376,9 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     const posed = activity !== "walk" && activity !== "idle" && avatar.use?.pose;
     let tx = posed ? avatar.use!.pose!.x : p.x;
     let tz = posed ? avatar.use!.pose!.z : p.z;
+    // how high: up or down the stairs, riding a lift, or on the floor they're on (a pose's own height is from there)
+    const car = avatar.use?.ride?.on && activity !== "walk" ? useGame.getState().life?.lifts?.[avatar.use.ride.lift] : undefined;
+    const ty = car ? liftHeight(car, t) : posed ? floorOf(avatar) * STOREY : p.y;
     const face = posed ? avatar.use!.pose!.face : avatar.face;
     let yaw = p.heading ?? (-face * Math.PI) / 2;
     if (activity === "swim") {
@@ -399,6 +403,20 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     const k = snap ? 1 : 1 - Math.exp(-dt * 14);
     g.position.x = ease(g.position.x, tx, k);
     g.position.z = ease(g.position.z, tz, k);
+    g.position.y = ease(g.position.y, FLOOR_Y + ty, k);
+    // on a floor above the one you're looking at, they're out of sight (name and all)
+    const storey = Math.floor((g.position.y - FLOOR_Y) / STOREY + 0.02);
+    const game = useGame.getState();
+    const whole = roofVisible(game);
+    g.visible = whole || storey <= game.floor;
+    // and their name only shows on the floor you're looking at (not through the floor from downstairs)
+    const half = Math.round((g.position.y - FLOOR_Y) / STOREY);
+    if (tag.current) tag.current.style.visibility = whole || half === game.floor ? "" : "hidden";
+    // my character going up or down the stairs takes the view with them, in Live mode
+    if (mine && live && half !== myStorey.current) {
+      myStorey.current = half;
+      setFloor(half);
+    }
     g.rotation.y = turnToward(g.rotation.y, yaw, snap ? 1 : 1 - Math.exp(-dt * 10));
 
     const u = avatar.use;
@@ -448,7 +466,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     }
     if (tag.current) tag.current.dataset.close = CLOSE.has(activity) ? "1" : "";
     if (mine) {
-      cameraFollow.target = { x: g.position.x, z: g.position.z };
+      cameraFollow.target = { x: g.position.x, z: g.position.z, y: g.position.y - FLOOR_Y };
       g.updateMatrixWorld();
       eyeAt.copy(EYE);
       b.localToWorld(eyeAt);
@@ -462,7 +480,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     if (e.button !== 0 || cameraGestureActive() || !root.current) return;
     e.stopPropagation();
     const g = root.current.position;
-    useGame.setState({ menu: { memberId: member.id, at: [g.x, 2.3, g.z] } });
+    useGame.setState({ menu: { memberId: member.id, at: [g.x, g.y + 2.3, g.z] } });
   };
 
   return (

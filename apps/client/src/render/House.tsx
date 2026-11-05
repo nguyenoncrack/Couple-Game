@@ -1,6 +1,6 @@
 import { catalog, cellKey, footprintOf, parseCell, parseEdge, positionAt, type Level, type OpeningItem, type PlacedObject, type PlacedOpening } from "@cg/shared";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { createContext, useContext, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { roofVisible, serverNow, useGame } from "../state/game";
 import type { Kit } from "./kit";
@@ -147,18 +147,27 @@ function isCut(run: Run, cam: THREE.Vector3, target: THREE.Vector3) {
 const ray = new THREE.Vector3();
 const lookTarget = new THREE.Vector3();
 
+/** How high the floor being drawn is, for the doors on it (which open only for people on that floor). */
+const FloorBase = createContext(0);
+
 export function Walls({
   level,
+  base = 0,
+  standing = false,
   hiddenOpening,
   onOpeningDown,
 }: {
   level: Level;
+  /** How high this floor is (metres). */
+  base?: number;
+  /** Always at full height (a floor below the one you're on). */
+  standing?: boolean;
   /** A door or window I'm dragging (drawn as a ghost instead). */
   hiddenOpening: string | null;
   onOpeningDown: (id: string, e: ThreeEvent<PointerEvent>) => void;
 }) {
   // walls stand at full height when you're inside looking around, or hold up a roof
-  const mode = useGame((s) => ((s.mode === "live" && s.firstPerson) || roofVisible(s) ? "up" : s.wallMode));
+  const mode = useGame((s) => (standing || (s.mode === "live" && s.firstPerson) || roofVisible(s) ? "up" : s.wallMode));
   const groups = useMemo(() => wallGroups(level), [level.walls, level.openings]);
   const full = useRef<(THREE.Group | null)[]>([]);
   const low = useRef<(THREE.Group | null)[]>([]);
@@ -169,9 +178,9 @@ export function Walls({
       for (const g of full.current) if (g && !g.visible) g.visible = true;
       return;
     }
-    // The middle of the view: where the camera's line of sight meets the floor.
+    // The middle of the view: where the camera's line of sight meets this floor.
     camera.getWorldDirection(ray);
-    const t = ray.y < -0.05 ? -camera.position.y / ray.y : 12;
+    const t = ray.y < -0.05 ? (base - camera.position.y) / ray.y : 12;
     lookTarget.copy(camera.position).addScaledVector(ray, t);
     for (let i = 0; i < groups.length; i++) {
       const cut = isCut(groups[i]!.run, camera.position, lookTarget);
@@ -181,7 +190,7 @@ export function Walls({
   });
 
   return (
-    <>
+    <FloorBase.Provider value={base}>
       {groups.map(({ run, openings, models }, i) => {
         const key = `${run.dir}|${run.at}|${run.from}|${run.style}`;
         return (
@@ -201,7 +210,7 @@ export function Walls({
           </group>
         );
       })}
-    </>
+    </FloorBase.Provider>
   );
 }
 
@@ -251,6 +260,7 @@ function Door({ item, transform }: { item: OpeningItem; transform: { position: [
   const parts = doorParts(item)!;
   const hinges = useRef<(THREE.Group | null)[]>([]);
   const swing = useRef({ angle: 0, side: 1 });
+  const base = useContext(FloorBase);
   useFrame((_, dt) => {
     const life = useGame.getState().life;
     const [ox, , oz] = transform.position;
@@ -262,6 +272,7 @@ function Door({ item, transform }: { item: OpeningItem; transform: { position: [
       const t = serverNow();
       for (const a of Object.values(life.avatars)) {
         const p = positionAt(a, t);
+        if (Math.abs(p.y - base) > 1) continue;
         const dx = p.x - ox;
         const dz = p.z - oz;
         const lx = dx * c - dz * s;
@@ -291,11 +302,23 @@ function Door({ item, transform }: { item: OpeningItem; transform: { position: [
   );
 }
 
-export function Floors({ tiles }: { tiles: Level["tiles"] }) {
+/** How thick an upstairs floor is: it's the ceiling of the room below too. */
+const SLAB = 0.24;
+const CEILING = "#f3eee4";
+
+export function Floors({ tiles, slab = false }: { tiles: Level["tiles"]; slab?: boolean }) {
   return (
     <KitMesh
-      deps={[tiles]}
+      deps={[tiles, slab]}
       make={(k) => {
+        // upstairs, each bit of floor is a slab you can see from below
+        if (slab) {
+          const under = pencilMaterial(CEILING, { rim: false });
+          for (const key of Object.keys(tiles)) {
+            const c = parseCell(key);
+            if (c) k.box(under, [c.x + 0.5, -SLAB / 2, c.z + 0.5], [1, SLAB, 1], { outline: 0.004 });
+          }
+        }
         const edgeMat = new Map<string, THREE.Material>();
         for (const [key, t] of Object.entries(tiles)) {
           const c = parseCell(key);

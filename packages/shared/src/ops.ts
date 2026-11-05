@@ -8,6 +8,8 @@ import { z } from "zod";
 export const Id = z.string().regex(/^[A-Za-z0-9_-]{6,40}$/);
 
 const level = z.number().int().min(0).max(7);
+/** A new floor on top (`level` is its index), or the top floor taken away (it has to be empty). */
+const levels = [z.object({ t: z.literal("level.add"), level }), z.object({ t: z.literal("level.remove"), level })] as const;
 const dir = z.enum(["h", "v"]);
 const rot = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
 const coord = z.number().int().min(-1000).max(1000);
@@ -26,6 +28,7 @@ const single = [
   z.object({ t: z.literal("opening.place"), level, id: Id, catalogId: z.string().max(40), dir, x: coord, z: coord, flip: z.boolean() }),
   z.object({ t: z.literal("opening.move"), level, id: Id, dir, x: coord, z: coord, flip: z.boolean() }),
   z.object({ t: z.literal("opening.remove"), level, id: Id }),
+  ...levels,
 ] as const;
 
 /** One edit. */

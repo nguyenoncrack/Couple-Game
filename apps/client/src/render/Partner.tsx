@@ -1,4 +1,4 @@
-import { catalog, footprintOf } from "@cg/shared";
+import { catalog, footprintOf, STOREY } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
@@ -6,10 +6,11 @@ import type * as THREE from "three";
 import { useGame } from "../state/game";
 import { Ghost, OpeningGhost, openingFootprint, rotToOpening } from "../tools/BuildTools";
 import { FootprintMarker } from "./House";
+import { topShown } from "./Storeys";
 
 /**
  * What my partner is up to: a pencil-pin cursor with their name, the ghost of whatever they're carrying, and a
- * coloured outline around anything they're holding.
+ * coloured outline around anything they're holding, each on the floor it's on (and not on a floor hidden above mine).
  */
 export function PartnerPresence() {
   const me = useGame((s) => s.me);
@@ -17,7 +18,7 @@ export function PartnerPresence() {
   const presence = useGame((s) => s.presence);
   const holds = useGame((s) => s.holds);
   const view = useGame((s) => s.view);
-  const level = view?.levels[0];
+  const top = useGame(topShown);
 
   return (
     <>
@@ -25,29 +26,36 @@ export function PartnerPresence() {
         .filter((m) => m.id !== me && m.online)
         .map((m) => {
           const p = presence[m.id];
+          const on = Math.min(p?.level ?? 0, (view?.levels.length ?? 1) - 1);
+          if (on > top) return null;
           return (
-            <group key={m.id}>
+            <group key={m.id} position-y={on * STOREY}>
               {p?.cursor && <Pin x={p.cursor.x} z={p.cursor.z} color={m.color} name={m.name} tool={p.tool} />}
               {p?.drag && catalog.furniture.has(p.drag.catalogId) && (
-                <Ghost catalogId={p.drag.catalogId} x={p.drag.x} z={p.drag.z} rot={p.drag.rot} ignore={p.drag.objectId} color={m.color} />
+                <Ghost catalogId={p.drag.catalogId} x={p.drag.x} z={p.drag.z} rot={p.drag.rot} ignore={p.drag.objectId} color={m.color} level={on} />
               )}
               {p?.drag && catalog.openings.has(p.drag.catalogId) && (
-                <OpeningGhost catalogId={p.drag.catalogId} x={p.drag.x} z={p.drag.z} {...rotToOpening(p.drag.rot)} ignore={p.drag.objectId} color={m.color} />
+                <OpeningGhost catalogId={p.drag.catalogId} x={p.drag.x} z={p.drag.z} {...rotToOpening(p.drag.rot)} ignore={p.drag.objectId} color={m.color} on={on} />
               )}
             </group>
           );
         })}
-      {level &&
+      {view &&
         Object.entries(holds).map(([objectId, memberId]) => {
           if (memberId === me) return null;
           const m = members.find((x) => x.id === memberId);
-          if (!m) return null;
+          const i = view.levels.findIndex((l) => l.objects[objectId] || l.openings[objectId]);
+          const level = view.levels[i];
+          if (!m || !level || i > top) return null;
           const o = level.objects[objectId];
           const item = o && catalog.furniture.get(o.catalogId);
-          if (o && item) return <FootprintMarker key={objectId} {...footprintOf(item, o)} color={m.color} />;
           const w = level.openings[objectId];
           const wi = w && catalog.openings.get(w.catalogId);
-          return w && wi ? <FootprintMarker key={objectId} {...openingFootprint(w, wi)} color={m.color} /> : null;
+          return (
+            <group key={objectId} position-y={i * STOREY}>
+              {o && item ? <FootprintMarker {...footprintOf(item, o)} color={m.color} /> : w && wi ? <FootprintMarker {...openingFootprint(w, wi)} color={m.color} /> : null}
+            </group>
+          );
         })}
     </>
   );

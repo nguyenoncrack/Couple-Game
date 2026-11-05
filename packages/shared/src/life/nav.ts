@@ -1,15 +1,25 @@
-import type { Blueprint } from "../blueprint";
+import { STOREY, type Blueprint } from "../blueprint";
 import { catalog as defaultCatalog, type Catalog } from "../catalog";
 import { cellKey, edgeKey } from "../grid";
 import { edgesOfOpening, footprintOf } from "../rules";
+import { liftShafts, liftsIn } from "../lifts";
+import { flightsOn, stairHoles } from "../stairs";
 
 /**
  * Where characters can walk. Every lot cell is a node; furniture standing on the floor blocks its cells (rugs
  * don't), and walls block the line between two cells unless a door or archway is in that bit of wall. Windows
- * don't let anyone through. The server plans every path with this, and the client draws the same thing.
+ * don't let anyone through. Upstairs you can only stand where there's floor (and not over the stairwell). Stairs
+ * join one floor to the next (`findRoute`). The server plans every path with this, and the client draws the same.
  */
 
 export type Cell = [number, number];
+/** A cell on a floor: x, z, and which floor. */
+export type Spot = [number, number, number];
+/** A point on a path: lot metres, and the height above the ground (missing on the ground floor in old saves). */
+export type Point = [number, number] | [number, number, number];
+
+/** Which floor a point is on. */
+export const levelOf = (p: Point) => Math.max(0, Math.round((p[2] ?? 0) / STOREY));
 
 export interface Nav {
   w: number;
@@ -19,10 +29,10 @@ export interface Nav {
   walls: Set<string>;
 }
 
-const cache = new WeakMap<Blueprint, Nav>();
+const cache = new WeakMap<Blueprint, Nav[]>();
 
 export function buildNav(bp: Blueprint, level = 0, cat: Catalog = defaultCatalog): Nav {
-  const hit = level === 0 ? cache.get(bp) : undefined;
+  const hit = cache.get(bp)?.[level];
   if (hit) return hit;
   const l = bp.levels[level];
   const { w, d } = bp.lot;
@@ -40,10 +50,93 @@ export function buildNav(bp: Blueprint, level = 0, cat: Catalog = defaultCatalog
       const item = cat.openings.get(o.catalogId);
       if (item?.kind === "door") for (const e of edgesOfOpening(item, o)) walls.delete(e);
     }
-  }
+    // upstairs: nothing to stand on but floor, and not over the stairs coming up or in a lift shaft
+    if (level > 0) {
+      const holes = stairHoles(bp, level, cat);
+      const shafts = liftShafts(bp, level, cat);
+      for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) if (!l.tiles[cellKey(x, z)] || holes.has(cellKey(x, z)) || shafts.has(cellKey(x, z))) blocked[z * w + x] = 1;
+    }
+  } else blocked.fill(1);
   const nav = { w, d, blocked, walls };
-  if (level === 0) cache.set(bp, nav);
+  const navs = cache.get(bp) ?? [];
+  navs[level] = nav;
+  cache.set(bp, navs);
   return nav;
+}
+
+/**
+ * A way between floors: up or down one lane of stairs, through `via` (the steps, at their heights), or a ride in a
+ * lift (`lift`), from waiting at its doors on one floor to stepping out on another.
+ */
+export interface Link {
+  from: Spot;
+  to: Spot;
+  via: [number, number, number][];
+  cost: number;
+  lift?: string;
+}
+
+const linkCache = new WeakMap<Blueprint, Map<string, Link[]>>();
+const spotKey = (s: Spot) => `${s[2]}:${s[0]}:${s[1]}`;
+
+/** Every way between floors, by the spot it starts from. */
+export function linksOf(bp: Blueprint, cat: Catalog = defaultCatalog): Map<string, Link[]> {
+  const hit = linkCache.get(bp);
+  if (hit) return hit;
+  const out = new Map<string, Link[]>();
+  const add = (l: Link) => out.set(spotKey(l.from), [...(out.get(spotKey(l.from)) ?? []), l]);
+  for (let L = 0; L + 1 < bp.levels.length; L++) {
+    const below = buildNav(bp, L, cat);
+    const above = buildNav(bp, L + 1, cat);
+    for (const { flight } of flightsOn(bp.levels[L], cat)) {
+      const [cx, cz] = flight.climb;
+      for (const lane of flight.lanes) {
+        if (!walkable(below, ...lane.entry) || !walkable(above, ...lane.exit)) continue;
+        const n = lane.cells.length;
+        const base = L * STOREY;
+        const [fx, fz] = lane.cells[0]!;
+        const [tx, tz] = lane.cells[n - 1]!;
+        const up: [number, number, number][] = [
+          [fx + 0.5 - cx / 2, fz + 0.5 - cz / 2, base],
+          ...lane.cells.map(([x, z], j): [number, number, number] => [x + 0.5, z + 0.5, base + ((j + 0.5) / n) * STOREY]),
+          [tx + 0.5 + cx / 2, tz + 0.5 + cz / 2, base + STOREY],
+        ];
+        const from: Spot = [...lane.entry, L];
+        const to: Spot = [...lane.exit, L + 1];
+        // a bit more than walking the same way on the flat, so the stairs aren't taken for a short cut
+        const cost = n + 2;
+        add({ from, to, via: up, cost });
+        add({ from: to, to: from, via: [...up].reverse(), cost });
+      }
+    }
+  }
+  // lifts: from any floor they stop at to any other, a bit slower to set off than stairs (there's the wait)
+  for (const { o } of liftsIn(bp, cat)) {
+    const stops = liftStops(bp, o.id, cat);
+    for (const a of stops) for (const b of stops) if (a.level !== b.level) add({ from: [...a.at, a.level], to: [...b.at, b.level], via: [], cost: 6 + 2 * Math.abs(a.level - b.level), lift: o.id });
+  }
+  linkCache.set(bp, out);
+  return out;
+}
+
+/** The floors a lift stops at (ground first), each with where you wait for it: floor you can stand on at its doors. */
+export function liftStops(bp: Blueprint, liftId: string, cat: Catalog = defaultCatalog): { level: number; at: Cell }[] {
+  const lift = liftsIn(bp, cat).find(({ o }) => o.id === liftId);
+  if (!lift) return [];
+  const out: { level: number; at: Cell }[] = [];
+  for (let i = 0; i < bp.levels.length; i++) {
+    const nav = buildNav(bp, i, cat);
+    const at = lift.shaft.front.find(([x, z]) => walkable(nav, x, z) && !nav.walls.has(lift.shaft.doors[lift.shaft.front.findIndex((f) => f[0] === x && f[1] === z)]!));
+    if (at) out.push({ level: i, at });
+  }
+  return out;
+}
+
+/** The way up or down from one spot to the next, if they're the two ends of some stairs or a lift ride (the quicker). */
+export function linkBetween(bp: Blueprint, from: Spot, to: Spot, cat: Catalog = defaultCatalog): Link | undefined {
+  let best: Link | undefined;
+  for (const l of linksOf(bp, cat).get(spotKey(from)) ?? []) if (l.to[0] === to[0] && l.to[1] === to[1] && l.to[2] === to[2] && (!best || l.cost < best.cost)) best = l;
+  return best;
 }
 
 export function walkable(nav: Nav, x: number, z: number) {
@@ -221,6 +314,74 @@ export function findPath(nav: Nav, from: Cell, goals: Cell[], maxNodes = 20_000)
         g.set(nk, ng);
         came.set(nk, key);
         push([ng + h(nx, nz), nx, nz]);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The shortest way from a spot to the nearest of several goal spots, on any floor, going up and down stairs as
+ * needed (A* over every floor at once). Like `findPath`, the start may be blocked. Null if no goal can be reached.
+ */
+export function findRoute(bp: Blueprint, from: Spot, goals: Spot[], cat: Catalog = defaultCatalog, maxNodes = 40_000): Spot[] | null {
+  const navs = bp.levels.map((_, i) => buildNav(bp, i, cat));
+  // all on one floor, no stairs to think about: the plain search
+  if (goals.every((g) => g[2] === from[2]) && bp.levels.length === 1) {
+    const cells = findPath(navs[from[2]]!, [from[0], from[1]], goals.map((g) => [g[0], g[1]] as Cell), maxNodes);
+    return cells && cells.map(([x, z]) => [x, z, from[2]]);
+  }
+  const links = linksOf(bp, cat);
+  const goalSet = new Set(goals.filter(([x, z, l]) => navs[l] && walkable(navs[l]!, x, z)).map(spotKey));
+  if (goalSet.size === 0) return null;
+  const start = spotKey(from);
+  if (goalSet.has(start)) return [from];
+  const targets = goals.filter((g) => goalSet.has(spotKey(g)));
+  const h = (x: number, z: number) => {
+    let best = Infinity;
+    for (const [gx, gz] of targets) {
+      const dx = Math.abs(gx - x);
+      const dz = Math.abs(gz - z);
+      best = Math.min(best, Math.max(dx, dz) + (Math.SQRT2 - 1) * Math.min(dx, dz));
+    }
+    return best;
+  };
+  const g = new Map<string, number>([[start, 0]]);
+  const came = new Map<string, string>();
+  const spotOf = new Map<string, Spot>([[start, from]]);
+  // a plain sorted queue is plenty for a house
+  const open: [number, Spot][] = [[h(from[0], from[1]), from]];
+  const closed = new Set<string>();
+  while (open.length && closed.size < maxNodes) {
+    let bi = 0;
+    for (let i = 1; i < open.length; i++) if (open[i]![0] < open[bi]![0]) bi = i;
+    const [, here] = open.splice(bi, 1)[0]!;
+    const key = spotKey(here);
+    if (closed.has(key)) continue;
+    closed.add(key);
+    if (goalSet.has(key)) {
+      const path: Spot[] = [here];
+      let k = key;
+      while (came.has(k)) {
+        k = came.get(k)!;
+        path.push(spotOf.get(k)!);
+      }
+      return path.reverse();
+    }
+    const [x, z, L] = here;
+    const nav = navs[L]!;
+    const gHere = g.get(key)!;
+    const next: [Spot, number][] = [];
+    for (const [dx, dz, cost] of STEPS) if (canStep(nav, x, z, x + dx, z + dz)) next.push([[x + dx, z + dz, L], cost]);
+    for (const l of links.get(key) ?? []) next.push([l.to, l.cost]);
+    for (const [s, cost] of next) {
+      const nk = spotKey(s);
+      const ng = gHere + cost;
+      if (ng < (g.get(nk) ?? Infinity)) {
+        g.set(nk, ng);
+        came.set(nk, key);
+        spotOf.set(nk, s);
+        open.push([ng + h(s[0], s[1]), s]);
       }
     }
   }

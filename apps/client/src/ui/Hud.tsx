@@ -18,6 +18,7 @@ import { NeedsPanel } from "./Needs";
 import { ClockPill, WelcomeBack } from "./Calendar";
 import { Floating } from "./Floating";
 import { Phone } from "./Phone";
+import { FloorPicker } from "./FloorPicker";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
 export function Hud({ onLeave }: { onLeave: () => void }) {
@@ -241,13 +242,13 @@ function WallModeButton() {
 
 export function toggleRoof() {
   const s = useGame.getState();
-  if (!s.roofShown && !Object.keys(s.view?.levels[0]?.roofs ?? {}).length) toast("No roof yet. Build one with the Roof tool.");
+  if (!s.roofShown && !(s.view?.levels ?? []).some((l) => Object.keys(l.roofs).length)) toast("No roof yet. Build one with the Roof tool.");
   setRoofShown(!s.roofShown);
 }
 
 function RoofButton() {
   const shown = useGame((s) => s.roofShown);
-  const has = useGame((s) => Object.keys(s.view?.levels[0]?.roofs ?? {}).length > 0);
+  const has = useGame((s) => (s.view?.levels ?? []).some((l) => Object.keys(l.roofs).length > 0));
   const on = shown && has;
   return (
     <button className={`slot round ${on ? "active" : ""}`} onClick={toggleRoof} title={on ? "Hide the roof (O)" : "Show the roof (O)"}>
@@ -357,6 +358,7 @@ function Toolbar() {
 function CameraButtons() {
   return (
     <div className="camera-buttons">
+      <FloorPicker />
       <button className="pill icon-pill" onClick={() => cameraApi.turn(-1)} title="Turn left (Q)">
         <Icon.turnLeft />
       </button>
@@ -422,25 +424,27 @@ function ItemPicture({ item, size = true }: { item: FurnitureItem | OpeningItem;
 /** Put a roof over every room shut in by walls, in the chosen style. */
 function roofHouse() {
   const s = useGame.getState();
-  const level = s.view?.levels[0];
+  const level = s.view?.levels[s.floor];
   if (!level || !s.view) return;
   const cells = enclosedCells(level.walls, s.view.lot.w, s.view.lot.d).filter((c) => level.roofs[c]?.style !== s.roofStyle);
   if (!cells.length) {
     toast(Object.keys(level.roofs).length ? "The house already has that roof." : "Close in a room with walls first, or drag the roof where you want it.");
     return;
   }
-  submit({ t: "roof.paint", level: 0, cells, style: s.roofStyle });
+  submit({ t: "roof.paint", level: s.floor, cells, style: s.roofStyle });
 }
 
+/** Take the roof off the floor you're on. */
 function clearRoof() {
-  const cells = Object.keys(useGame.getState().view?.levels[0]?.roofs ?? {});
-  if (cells.length) submit({ t: "roof.paint", level: 0, cells, style: null });
+  const s = useGame.getState();
+  const cells = Object.keys(s.view?.levels[s.floor]?.roofs ?? {});
+  if (cells.length) submit({ t: "roof.paint", level: s.floor, cells, style: null });
 }
 
 function RoofPanel() {
   const roofStyle = useGame((s) => s.roofStyle);
   const erase = useGame((s) => s.roofErase);
-  const has = useGame((s) => Object.keys(s.view?.levels[0]?.roofs ?? {}).length > 0);
+  const has = useGame((s) => Object.keys(s.view?.levels[s.floor]?.roofs ?? {}).length > 0);
   return (
     <Floating id="tools" title="Roof" className="tool-panel">
       <div className="kicker">Roof</div>
@@ -563,7 +567,7 @@ function ToolPanel() {
 
 function SelectionCard() {
   const selection = useGame((s) => s.selection);
-  const o = useGame((s) => (s.selection ? (s.view?.levels[0]?.objects[s.selection] ?? s.view?.levels[0]?.openings[s.selection]) : undefined));
+  const o = useGame((s) => (s.selection ? (s.view?.levels[s.floor]?.objects[s.selection] ?? s.view?.levels[s.floor]?.openings[s.selection]) : undefined));
   if (!selection || !o) return null;
   const opening = catalog.openings.get(o.catalogId);
   const item = opening ?? catalog.furniture.get(o.catalogId);

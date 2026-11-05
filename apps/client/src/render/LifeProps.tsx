@@ -1,4 +1,4 @@
-import { activityAt, arrivalTime, catalog, faceDir, type Dish, type Level, type LifeState } from "@cg/shared";
+import { activityAt, arrivalTime, catalog, faceDir, STOREY, type Dish, type Level, type LifeState } from "@cg/shared";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useReducer, useRef } from "react";
 import type * as THREE from "three";
@@ -8,6 +8,7 @@ import { KitMesh } from "./KitMesh";
 import { FLOOR_Y, objectTransform } from "./House";
 import { pencilMaterial } from "./pencil";
 import { ConsoleScreen } from "./ConsoleScreen";
+import { topShown } from "./Storeys";
 import { TableGameProps } from "./TableGameProps";
 
 /**
@@ -98,7 +99,7 @@ function DishProp({ dish, level }: { dish: Dish; level: Level }) {
     if (e.button !== 0 || useGame.getState().mode !== "live") return;
     e.stopPropagation();
     useGame.setState({
-      menu: { dishId: dish.id, at: [dish.x, y + 0.3, dish.z] },
+      menu: { dishId: dish.id, at: [dish.x, y + 0.3 + (dish.level ?? 0) * STOREY, dish.z] },
     });
   };
   return (
@@ -212,7 +213,7 @@ function useArrivals(life: LifeState | null) {
 }
 
 /** Whoever's eating gets their own plate in front of them, served from the dish on the table. */
-function Servings({ level }: { level: Level }) {
+function Servings({ level, index }: { level: Level; index: number }) {
   const life = useGame((s) => s.life);
   useArrivals(life);
   if (!life) return null;
@@ -222,7 +223,7 @@ function Servings({ level }: { level: Level }) {
       {Object.values(life.avatars).map((a) => {
         const u = a.use;
         const dish = u?.action === "eat" ? life.dishes.find((d) => d.id === u.dishId) : undefined;
-        if (!u || !dish || activityAt(a, now) === "walk") return null;
+        if (!u || !dish || (dish.level ?? 0) !== index || activityAt(a, now) === "walk") return null;
         const at = u.pose ?? { x: a.path[a.path.length - 1]![0], z: a.path[a.path.length - 1]![1], face: a.face };
         const [dx, dz] = faceDir(at.face);
         // a seated eater's plate sits on the table edge in front of them; standing ones hold theirs at the table
@@ -327,19 +328,27 @@ function InUse({ level }: { level: Level }) {
   );
 }
 
+/** Plates, pans and screens on each floor you can see (the one you're on and those below, or all with the roof on), each at its height. */
 export function LifeProps() {
   const life = useGame((s) => s.life);
-  const level = useGame((s) => s.view?.levels[0]);
-  if (!life || !level) return null;
+  const levels = useGame((s) => s.view?.levels);
+  const top = useGame(topShown);
+  if (!life || !levels) return null;
   return (
     <>
-      {life.dishes.map((d) => (
-        <DishProp key={d.id} dish={d} level={level} />
+      {levels.slice(0, top + 1).map((level, i) => (
+        <group key={i} position-y={i * STOREY}>
+          {life.dishes
+            .filter((d) => (d.level ?? 0) === i)
+            .map((d) => (
+              <DishProp key={d.id} dish={d} level={level} />
+            ))}
+          <CookingProps level={level} />
+          <Servings level={level} index={i} />
+          <InUse level={level} />
+          <TableGameProps level={level} />
+        </group>
       ))}
-      <CookingProps level={level} />
-      <Servings level={level} />
-      <InUse level={level} />
-      <TableGameProps level={level} />
     </>
   );
 }

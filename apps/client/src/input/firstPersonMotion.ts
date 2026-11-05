@@ -7,7 +7,8 @@ export function firstPersonEye(avatar: Avatar, now: number, posedEye: Eye | null
   const activity = activityAt(avatar, now);
   if (activity !== "walk" && activity !== "idle" && avatar.use?.pose && posedEye) return posedEye;
   const p = positionAt(avatar, now);
-  return { x: p.x, y: 1.64, z: p.z };
+  // level, at eye height over the floor they're on (or the step they're on)
+  return { x: p.x, y: p.y + 1.64, z: p.z };
 }
 
 /** Filter small network corrections without feeding animated head motion back into the camera. */

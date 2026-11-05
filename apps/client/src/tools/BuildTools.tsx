@@ -8,6 +8,14 @@ import {
   openingProblem,
   placementProblem,
   rotatedSize,
+  STOREY,
+  cellKey,
+  flightOf,
+  isLift,
+  isStairs,
+  shaftOf,
+  type Op,
+  type SingleOp,
   type OpeningItem,
   type PlacedOpening,
   type Rot,
@@ -22,7 +30,8 @@ import type { Kit } from "../render/kit";
 import { KitMesh, Meshes } from "../render/KitMesh";
 import { modelFor, openingModelFor } from "../render/models";
 import { buildRoof, ROOF_BASE, Roofs } from "../render/Roof";
-import { heldByPartner, hold, sharePresence, submit, toast, useGame } from "../state/game";
+import { openRoofs } from "../render/Storeys";
+import { floorNow, heldByPartner, hold, sharePresence, submit, toast, useGame } from "../state/game";
 
 /**
  * Pointer handling for the build tools, plus everything they draw while you work: the grid, wall and floor
@@ -54,20 +63,19 @@ interface MoveDrag {
 
 /** How far (in screen pixels) the pointer must travel before a press on furniture becomes a move, not a click. */
 const DRAG_PX = 8;
-const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.04);
-
-const roofPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -ROOF_BASE);
+/** Level with the floor being built on, or with the tops of its walls. */
+const planeAt = (y: number) => new THREE.Plane(new THREE.Vector3(0, 1, 0), -(floorNow() * STOREY + y));
 
 /** Where the pointer is on the grid: on the floor, or for the roof tool, level with the tops of the walls. */
 function gridPoint(e: ThreeEvent<PointerEvent>): [number, number] {
   if (useGame.getState().tool !== "roof") return [e.point.x, e.point.z];
-  const hit = e.ray.intersectPlane(roofPlane, new THREE.Vector3());
+  const hit = e.ray.intersectPlane(planeAt(ROOF_BASE), new THREE.Vector3());
   return hit ? [hit.x, hit.z] : [e.point.x, e.point.z];
 }
 
 /** The floor point under the pointer. The hit point on a model sits above the floor, in a different cell. */
 function floorUnder(e: ThreeEvent<PointerEvent>): [number, number] {
-  const hit = e.ray.intersectPlane(floorPlane, new THREE.Vector3());
+  const hit = e.ray.intersectPlane(planeAt(0.04), new THREE.Vector3());
   return hit ? [hit.x, hit.z] : [e.point.x, e.point.z];
 }
 
@@ -103,11 +111,46 @@ function anchorUnder(p: [number, number], catalogId: string, rot: Rot): [number,
   return [Math.round(p[0] - w / 2), Math.round(p[1] - d / 2)];
 }
 
-function problemAt(catalogId: string, x: number, z: number, rot: Rot, ignore: string | null) {
+/** The floor something goes on: the one you're looking at, but a lift always stands on the ground floor. */
+const levelFor = (catalogId: string) => (isLift(catalog.furniture.get(catalogId)) ? 0 : floorNow());
+
+function problemAt(catalogId: string, x: number, z: number, rot: Rot, ignore: string | null, on = floorNow()) {
   const view = useGame.getState().view;
   const item = catalog.furniture.get(catalogId);
-  if (!view || !item) return "unknown-item";
-  return placementProblem(view, view.levels[0]!, item, { x, z, rot }, ignore);
+  const level = isLift(item) ? 0 : on;
+  if (!view || !item || !view.levels[level]) return "unknown-item";
+  const problem = placementProblem(view, view.levels[level]!, item, { x, z, rot }, ignore);
+  // stairs (or a lift) with no floor to step off onto get it laid with them
+  return (problem === "needs-landing" || problem === "lift-no-stop") && landing(catalogId, x, z, rot).length ? null : problem;
+}
+
+/**
+ * Laying the floor stairs need at the top, when there isn't any: the cells to step off onto, on the floor above.
+ * Null if they're not stairs, there's no floor above, or the landing is already there.
+ */
+function landing(catalogId: string, x: number, z: number, rot: Rot): SingleOp[] {
+  const s = useGame.getState();
+  const item = catalog.furniture.get(catalogId);
+  const levels = s.view?.levels ?? [];
+  const lay = (level: number, cells: string[]): SingleOp[] => {
+    const missing = cells.filter((c) => !levels[level]!.tiles[c]);
+    return missing.length ? [{ t: "floor.paint", level, cells: missing, material: s.floorMaterial }] : [];
+  };
+  // stairs: the floor at the top, on the floor above
+  if (isStairs(item)) return levels[s.floor + 1] ? lay(s.floor + 1, flightOf(item, { x, z, rot }).lanes.map((l) => cellKey(...l.exit))) : [];
+  // a lift: floor at its doors on every floor above that has some (or the first, if none do yet), to stop at
+  if (isLift(item) && levels.length > 1) {
+    const doors = shaftOf(item, { x, z, rot }).front.map(([fx, fz]) => cellKey(fx, fz));
+    const floors = [...levels.keys()].filter((i) => i > 0 && (i === s.floor || Object.keys(levels[i]!.tiles).length));
+    return (floors.length ? floors : [1]).flatMap((i) => lay(i, doors));
+  }
+  return [];
+}
+
+/** An edit to stairs or a lift, with the floor to step out onto laid first if it's missing. */
+function withLanding(op: SingleOp & { x: number; z: number; rot: Rot }, catalogId: string): Op {
+  const lay = landing(catalogId, op.x, op.z, op.rot);
+  return lay.length ? { t: "batch", ops: [...lay, op] } : op;
 }
 
 /** Doors and windows snap to the nearest wall line, preferring a spot where they'd fit. */
@@ -115,7 +158,7 @@ function openingSpotAt(p: [number, number], item: OpeningItem, ignore: string | 
   const half = item.width / 2;
   const h = { dir: "h" as const, x: Math.round(p[0] - half), z: Math.round(p[1]) };
   const v = { dir: "v" as const, x: Math.round(p[0]), z: Math.round(p[1] - half) };
-  const level = useGame.getState().view?.levels[0];
+  const level = useGame.getState().view?.levels[floorNow()];
   if (level) {
     const okH = openingProblem(level, item, h, ignore) === null;
     const okV = openingProblem(level, item, v, ignore) === null;
@@ -132,15 +175,15 @@ function finishMove() {
   const m = getB().move;
   if (!m) return;
   setB({ move: null });
-  const level = useGame.getState().view?.levels[0];
+  const level = useGame.getState().view?.levels[floorNow()];
   if (!m.moved || !level) return;
   if (m.kind === "opening") {
     const o = level.openings[m.id];
-    if (o && (o.x !== m.x || o.z !== m.z || o.dir !== m.dir || o.flip !== m.flip)) submit({ t: "opening.move", level: 0, id: m.id, dir: m.dir, x: m.x, z: m.z, flip: m.flip });
+    if (o && (o.x !== m.x || o.z !== m.z || o.dir !== m.dir || o.flip !== m.flip)) submit({ t: "opening.move", level: floorNow(), id: m.id, dir: m.dir, x: m.x, z: m.z, flip: m.flip });
     return;
   }
   const o = level.objects[m.id];
-  if (o && (o.x !== m.x || o.z !== m.z || o.rot !== m.rot)) submit({ t: "object.move", level: 0, id: m.id, x: m.x, z: m.z, rot: m.rot });
+  if (o && (o.x !== m.x || o.z !== m.z || o.rot !== m.rot)) submit(withLanding({ t: "object.move", level: levelFor(o.catalogId), id: m.id, x: m.x, z: m.z, rot: m.rot }, o.catalogId));
 }
 
 /**
@@ -156,11 +199,11 @@ function placeAt(p: [number, number]) {
   const opening = catalog.openings.get(catalogId);
   if (opening) {
     const spot = openingSpotAt(p, opening, null);
-    submit({ t: "opening.place", level: 0, id: newId(), catalogId, ...spot, flip: rot % 2 === 1 });
+    submit({ t: "opening.place", level: floorNow(), id: newId(), catalogId, ...spot, flip: rot % 2 === 1 });
     return;
   }
   const [x, z] = anchorUnder(p, catalogId, rot);
-  submit({ t: "object.place", level: 0, id: newId(), catalogId, x, z, rot });
+  submit(withLanding({ t: "object.place", level: levelFor(catalogId), id: newId(), catalogId, x, z, rot }, catalogId));
 }
 
 function finishPlace(e: PointerEvent) {
@@ -183,26 +226,26 @@ function finishDrag() {
   if (s.tool === "wall" || s.tool === "wallErase") {
     const edges = edgesBetween(drag.start[0], drag.start[1], drag.end[0], drag.end[1]);
     if (!edges.length) return;
-    if (s.tool === "wall") submit({ t: "walls.add", level: 0, edges, style: s.wallStyle });
+    if (s.tool === "wall") submit({ t: "walls.add", level: floorNow(), edges, style: s.wallStyle });
     else {
-      const existing = edges.filter((e) => s.view!.levels[0]!.walls[e]);
-      if (existing.length) submit({ t: "walls.remove", level: 0, edges: existing });
+      const existing = edges.filter((e) => s.view!.levels[floorNow()]!.walls[e]);
+      if (existing.length) submit({ t: "walls.remove", level: floorNow(), edges: existing });
     }
   } else if (s.tool === "floor" || s.tool === "floorErase") {
     const cells = cellsBetween(drag.start[0], drag.start[1], drag.end[0], drag.end[1]);
     if (s.tool === "floorErase") {
-      const existing = cells.filter((c) => s.view!.levels[0]!.tiles[c]);
-      if (existing.length) submit({ t: "floor.paint", level: 0, cells: existing, material: null });
-    } else submit({ t: "floor.paint", level: 0, cells, material: s.floorMaterial });
+      const existing = cells.filter((c) => s.view!.levels[floorNow()]!.tiles[c]);
+      if (existing.length) submit({ t: "floor.paint", level: floorNow(), cells: existing, material: null });
+    } else submit({ t: "floor.paint", level: floorNow(), cells, material: s.floorMaterial });
   } else if (s.tool === "roof") {
     const cells = cellsBetween(drag.start[0], drag.start[1], drag.end[0], drag.end[1]);
-    const roofs = s.view.levels[0]!.roofs;
+    const roofs = s.view.levels[floorNow()]!.roofs;
     if (s.roofErase) {
       const existing = cells.filter((c) => roofs[c]);
-      if (existing.length) submit({ t: "roof.paint", level: 0, cells: existing, style: null });
+      if (existing.length) submit({ t: "roof.paint", level: floorNow(), cells: existing, style: null });
     } else {
       const changed = cells.filter((c) => roofs[c]?.style !== s.roofStyle);
-      if (changed.length) submit({ t: "roof.paint", level: 0, cells: changed, style: s.roofStyle });
+      if (changed.length) submit({ t: "roof.paint", level: floorNow(), cells: changed, style: s.roofStyle });
     }
   }
 }
@@ -217,10 +260,10 @@ export function select(id: string | null) {
 /** Turn the selected object a quarter, keeping it centred where it was; turn a door or window to face the other way. */
 export function rotateSelected() {
   const s = useGame.getState();
-  const level = s.view?.levels[0];
+  const level = s.view?.levels[floorNow()];
   const opening = s.selection ? level?.openings[s.selection] : null;
   if (opening) {
-    submit({ t: "opening.move", level: 0, id: opening.id, dir: opening.dir, x: opening.x, z: opening.z, flip: !opening.flip });
+    submit({ t: "opening.move", level: floorNow(), id: opening.id, dir: opening.dir, x: opening.x, z: opening.z, flip: !opening.flip });
     return;
   }
   const o = s.selection ? level?.objects[s.selection] : null;
@@ -229,7 +272,7 @@ export function rotateSelected() {
   const f = footprintOf(item, o);
   const rot = ((o.rot + 1) % 4) as Rot;
   const [w, d] = rotatedSize(item.footprint[0], item.footprint[1], rot);
-  submit({ t: "object.move", level: 0, id: o.id, x: Math.round(f.x + f.w / 2 - w / 2), z: Math.round(f.z + f.d / 2 - d / 2), rot });
+  submit(withLanding({ t: "object.move", level: levelFor(o.catalogId), id: o.id, x: Math.round(f.x + f.w / 2 - w / 2), z: Math.round(f.z + f.d / 2 - d / 2), rot }, o.catalogId));
 }
 
 export function deleteSelected() {
@@ -237,13 +280,14 @@ export function deleteSelected() {
   if (!s.selection) return;
   const id = s.selection;
   select(null);
-  if (s.view?.levels[0]?.openings[id]) submit({ t: "opening.remove", level: 0, id });
-  else submit({ t: "object.remove", level: 0, id });
+  if (s.view?.levels[floorNow()]?.openings[id]) submit({ t: "opening.remove", level: floorNow(), id });
+  else submit({ t: "object.remove", level: floorNow(), id });
 }
 
 export function BuildTools() {
   const view = useGame((s) => s.view);
   const tool = useGame((s) => s.tool);
+  const floor = useGame((s) => s.floor);
   const move = useBuild((s) => s.move);
   const plane = useMemo(() => new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI / 2), []);
   const downAt = useRef<[number, number] | null>(null);
@@ -290,7 +334,7 @@ export function BuildTools() {
   const placing = useGame((s) => s.placing);
   useEffect(() => {
     let drag = null;
-    const level = view?.levels[0];
+    const level = view?.levels[floorNow()];
     if (move?.moved && move.kind === "opening") {
       const o = level?.openings[move.id];
       if (o) drag = { catalogId: o.catalogId, objectId: move.id, x: move.x, z: move.z, rot: openingToRot(move.dir, move.flip) };
@@ -307,11 +351,11 @@ export function BuildTools() {
         drag = { catalogId: placing.catalogId, objectId: null, x, z, rot: placing.rot };
       }
     }
-    sharePresence({ cursor: pointer ? { x: pointer[0], z: pointer[1] } : null, tool, drag });
-  }, [pointer, move, tool, placing, view]);
+    sharePresence({ cursor: pointer ? { x: pointer[0], z: pointer[1] } : null, tool, drag, level: floor });
+  }, [pointer, move, tool, placing, view, floor]);
 
-  if (!view) return null;
-  const level = view.levels[0]!;
+  const level = view?.levels[floor];
+  if (!view || !level) return null;
 
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     const p = gridPoint(e);
@@ -331,7 +375,7 @@ export function BuildTools() {
       else setB({ drag: { ...drag, end: cellAt(p) } });
     }
     if (move?.kind === "opening") {
-      const item = catalog.openings.get(s.view?.levels[0]?.openings[move.id]?.catalogId ?? "");
+      const item = catalog.openings.get(s.view?.levels[floorNow()]?.openings[move.id]?.catalogId ?? "");
       if (item) {
         const spot = openingSpotAt(p, item, move.id);
         if (spot.x !== move.x || spot.z !== move.z || spot.dir !== move.dir) setB({ move: { ...move, ...spot, moved: true } });
@@ -386,7 +430,7 @@ export function BuildTools() {
       toast(`${partner.name} is moving that right now.`);
       return;
     }
-    const o = s.view!.levels[0]!.objects[id]!;
+    const o = s.view!.levels[floorNow()]!.objects[id]!;
     select(id);
     const c = cellAt(floorUnder(e));
     const from: [number, number] = [e.nativeEvent.clientX, e.nativeEvent.clientY];
@@ -405,21 +449,22 @@ export function BuildTools() {
       toast(`${partner.name} is moving that right now.`);
       return;
     }
-    const o = s.view!.levels[0]!.openings[id]!;
+    const o = s.view!.levels[floorNow()]!.openings[id]!;
     select(id);
     const from: [number, number] = [e.nativeEvent.clientX, e.nativeEvent.clientY];
     setB({ move: { kind: "opening", id, offset: [0, 0], x: o.x, z: o.z, rot: 0, dir: o.dir, flip: o.flip, from, armed: false, moved: false } });
   };
 
   return (
-    <>
+    // everything at the height of the floor being built on
+    <group position-y={floor * STOREY}>
       <mesh geometry={plane} position={[0, 0.04, 0]} visible={false} onPointerMove={onMove} onPointerDown={onDown} onPointerLeave={() => setB({ pointer: null })} />
-      <Walls level={level} hiddenOpening={move?.moved && move.kind === "opening" ? move.id : null} onOpeningDown={onOpeningDown} />
+      <Walls level={level} base={floor * STOREY} hiddenOpening={move?.moved && move.kind === "opening" ? move.id : null} onOpeningDown={onOpeningDown} />
       <Furniture objects={level.objects} hidden={move?.moved && move.kind === "object" ? move.id : null} onObjectDown={onObjectDown} />
-      <Roofs roofs={level.roofs} />
+      <Roofs roofs={openRoofs(view, floor)} />
       {tool !== "select" && <Grid w={view.lot.w} d={view.lot.d} y={tool === "roof" ? ROOF_BASE + 0.01 : 0.05} />}
       <Previews />
-    </>
+    </group>
   );
 }
 
@@ -449,7 +494,7 @@ function Previews() {
   const selection = useGame((s) => s.selection);
   const view = useGame((s) => s.view);
   const wallsDown = useGame((s) => s.wallMode === "down");
-  const level = view?.levels[0];
+  const level = useGame((s) => s.view?.levels[s.floor]);
 
   const wallPreview = useMemo(() => {
     if (!drag || (tool !== "wall" && tool !== "wallErase")) return null;
@@ -550,15 +595,26 @@ function RoofGhost({ roofs, cells }: { roofs: Record<string, { style: string }>;
 }
 
 /** See-through furniture with a green (fits) or red (doesn't) footprint. */
-export function Ghost({ catalogId, x, z, rot, ignore, color }: { catalogId: string; x: number; z: number; rot: Rot; ignore: string | null; color?: string }) {
+export function Ghost({ catalogId, x, z, rot, ignore, color, level }: { catalogId: string; x: number; z: number; rot: Rot; ignore: string | null; color?: string; level?: number }) {
   const { item, f, position, rotationY } = objectTransform({ catalogId, x, z, rot });
-  const ok = problemAt(catalogId, x, z, rot, ignore) === null;
+  const ok = problemAt(catalogId, x, z, rot, ignore, level) === null;
+  const tint = color ?? (ok ? "#6f9e5c" : "#c4534a");
   return (
     <group>
       <group position={position} rotation-y={rotationY}>
         <Meshes meshes={modelFor(item, ok ? "ok" : "bad")} raycast={false} />
       </group>
-      <FootprintMarker {...f} color={color ?? (ok ? "#6f9e5c" : "#c4534a")} />
+      <FootprintMarker {...f} color={tint} />
+      {/* stairs: where you step on, and off at the top */}
+      {isStairs(item) &&
+        flightOf(item, { x, z, rot }).lanes.map((l, i) => (
+          <group key={i}>
+            <FootprintMarker x={l.entry[0]} z={l.entry[1]} w={1} d={1} color={tint} opacity={0.35} />
+            <FootprintMarker x={l.exit[0]} z={l.exit[1]} w={1} d={1} color={tint} opacity={0.35} at={STOREY} />
+          </group>
+        ))}
+      {/* a lift: where you wait at its doors */}
+      {isLift(item) && shaftOf(item, { x, z, rot }).front.map(([fx, fz], i) => <FootprintMarker key={`door${i}`} x={fx} z={fz} w={1} d={1} color={tint} opacity={0.35} />)}
     </group>
   );
 }
@@ -569,9 +625,9 @@ export function openingFootprint(o: Pick<PlacedOpening, "dir" | "x" | "z">, item
 }
 
 /** A see-through door or window snapped to a wall, green if it fits there and red if not. */
-export function OpeningGhost({ catalogId, dir, x, z, flip, ignore, color }: { catalogId: string; dir: "h" | "v"; x: number; z: number; flip: boolean; ignore: string | null; color?: string }) {
+export function OpeningGhost({ catalogId, dir, x, z, flip, ignore, color, on }: { catalogId: string; dir: "h" | "v"; x: number; z: number; flip: boolean; ignore: string | null; color?: string; on?: number }) {
   const item = catalog.openings.get(catalogId);
-  const level = useGame((s) => s.view?.levels[0]);
+  const level = useGame((s) => s.view?.levels[on ?? s.floor]);
   if (!item || !level) return null;
   const ok = openingProblem(level, item, { dir, x, z }, ignore) === null;
   const { position, rotationY } = openingTransform({ dir, x, z, flip }, item);

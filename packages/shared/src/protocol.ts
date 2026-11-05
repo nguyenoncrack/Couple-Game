@@ -26,7 +26,8 @@ const Drag = z
 /** What a player asks their character to do. The server decides whether and how. */
 export const LifeIntent = z.discriminatedUnion("do", [
   /** Walk to a lot cell. */
-  z.object({ do: z.literal("walk"), x: z.number().int().min(0).max(200), z: z.number().int().min(0).max(200) }),
+  z.object({ do: z.literal("walk"), x: z.number().int().min(0).max(200), z: z.number().int().min(0).max(200), level: z.number().int().min(0).max(7).optional() }),
+  z.object({ do: z.literal("ride"), objectId: z.string().min(1).max(64), level: z.number().int().min(0).max(7) }),
   /** Sit, sleep or lounge on something. */
   z.object({ do: z.literal("use"), objectId: Id, action: z.enum(ACTIONS) }),
   z.object({ do: z.literal("stop") }),
@@ -63,7 +64,7 @@ export const ClientMsg = z.discriminatedUnion("type", [
   z.object({ type: z.literal("op"), clientOpId: Id, op: Op }),
   /** Claim (or release, with null) an object while dragging it, so the partner can't grab it at the same time. */
   z.object({ type: z.literal("hold"), objectId: Id.nullable() }),
-  z.object({ type: z.literal("presence"), cursor: Cursor, tool: z.string().max(20), drag: Drag }),
+  z.object({ type: z.literal("presence"), cursor: Cursor, tool: z.string().max(20), drag: Drag, level: z.number().int().min(0).max(7).optional() }),
   z.object({ type: z.literal("life"), intent: LifeIntent }),
   z.object({ type: z.literal("ping") }),
   /** Say something: it shows in a bubble over your head and in the chat. */
@@ -105,6 +106,8 @@ export interface Presence {
   cursor: { x: number; z: number } | null;
   tool: string;
   drag: { catalogId: string; objectId: string | null; x: number; z: number; rot: Rot } | null;
+  /** The floor they're on (the ground floor if missing, as from an older client). */
+  level?: number;
 }
 
 export type ServerMsg =

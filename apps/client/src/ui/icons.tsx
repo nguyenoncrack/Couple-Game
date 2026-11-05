@@ -119,6 +119,19 @@ export const Icon = {
       <path d="M12 5.2v13.5M5.3 12.1h13.4" />
     </svg>
   ),
+  stairs: () => (
+    <svg {...base}>
+      <path d="M3.6 19.6h4.6v-4.4h4.4v-4.5h4.5V6.3h3.4" />
+      <path d="M3.5 13.4 15.8 4.2" />
+    </svg>
+  ),
+  lift: () => (
+    <svg {...base}>
+      <rect x="4.6" y="3.4" width="14.8" height="17.2" rx="1.6" />
+      <path d="M12 3.6v16.8" />
+      <path d="m6.8 11 1.6-2.1 1.6 2.1M14 13l1.6 2.1 1.6-2.1" />
+    </svg>
+  ),
   minus: () => (
     <svg {...base}>
       <path d="M5.3 12.1h13.4" />

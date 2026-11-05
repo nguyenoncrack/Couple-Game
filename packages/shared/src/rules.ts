@@ -1,7 +1,9 @@
-import { STARTING_FUNDS, type Blueprint, type Level, type PlacedObject, type PlacedOpening } from "./blueprint";
+import { emptyLevel, MAX_LEVELS, STARTING_FUNDS, type Blueprint, type Level, type PlacedObject, type PlacedOpening } from "./blueprint";
 import { catalog as defaultCatalog, type Catalog, type FurnitureItem, type OpeningItem } from "./catalog";
-import { cellInLot, edgeInLot, interiorEdges, openingEdges, parseCell, parseEdge, rotatedSize, type Rot } from "./grid";
+import { cellInLot, cellKey, edgeInLot, interiorEdges, openingEdges, parseCell, parseEdge, rotatedSize, type Rot } from "./grid";
 import type { LoggedOp, SingleOp } from "./ops";
+import { brokenLifts, isLift, liftClearance, liftProblem } from "./lifts";
+import { brokenStairs, isStairs, stairsClearance, stairsProblem } from "./stairs";
 
 /**
  * The game's building rules. `applyOp` is pure: the server runs it to decide what happens, and the client runs the
@@ -26,6 +28,16 @@ export type RejectReason =
   | "wall-in-the-way"
   | "blocks-furniture"
   | "needs-wall"
+  | "needs-floor"
+  | "furniture-on-it"
+  | "too-many-levels"
+  | "level-not-empty"
+  | "needs-floor-above"
+  | "needs-landing"
+  | "blocks-stairs"
+  | "lift-ground"
+  | "lift-no-stop"
+  | "blocks-lift"
   | "cant-afford";
 
 /** Short, friendly explanations for the UI. */
@@ -44,6 +56,16 @@ export const REJECT_TEXT: Record<RejectReason | "held" | "rate-limited" | "inval
   "wall-in-the-way": "A wall is in the way.",
   "blocks-furniture": "Furniture is in the way of that wall.",
   "needs-wall": "Doors and windows go in a wall.",
+  "needs-floor": "Upstairs, things need floor under them. Lay some floor first.",
+  "furniture-on-it": "Something's standing on that floor. Move it first.",
+  "too-many-levels": "That's as tall as a house can go.",
+  "level-not-empty": "Clear everything off this floor before taking it away.",
+  "needs-floor-above": "Stairs go up to a floor above. Add one first with the + by the floor buttons.",
+  "needs-landing": "There's no floor upstairs to step off onto at the top. Lay some there first.",
+  "blocks-stairs": "That would block the stairs.",
+  "lift-ground": "Lifts stand on the ground floor; the shaft goes up through every floor above.",
+  "lift-no-stop": "The lift needs floor laid in front of its doors on a floor above, to stop at.",
+  "blocks-lift": "That would block the lift.",
   "cant-afford": "Not enough coins for that yet. Dropping by each day earns more.",
   held: "Your partner is moving that right now.",
   "rate-limited": "Slow down a little.",
@@ -68,6 +90,9 @@ export function placementProblem(
 ): RejectReason | null {
   const f = footprintOf(item, at);
   if (f.x < 0 || f.z < 0 || f.x + f.w > bp.lot.w || f.z + f.d > bp.lot.d) return "out-of-lot";
+  if (isLift(item) && level !== bp.levels[0]) return "lift-ground";
+  // upstairs there's only floor where it's been laid
+  if (level !== bp.levels[0]) for (let x = f.x; x < f.x + f.w; x++) for (let z = f.z; z < f.z + f.d; z++) if (!level.tiles[cellKey(x, z)]) return "needs-floor";
   for (const e of interiorEdges(f.x, f.z, f.w, f.d)) if (level.walls[e]) return "wall-in-the-way";
   for (const other of Object.values(level.objects)) {
     if (other.id === ignoreId) continue;
@@ -76,6 +101,17 @@ export function placementProblem(
     const g = footprintOf(oi, other);
     if (f.x < g.x + g.w && g.x < f.x + f.w && f.z < g.z + g.d && g.z < f.z + f.d) return "overlaps";
   }
+  const index = bp.levels.indexOf(level);
+  if (index < 0) return null;
+  // out of the way of stairs (rugs are fine), and stairs themselves need somewhere to go
+  if (item.layer === "floor") {
+    const keep = stairsClearance(bp, index, cat, ignoreId);
+    for (let x = f.x; x < f.x + f.w; x++) for (let z = f.z; z < f.z + f.d; z++) if (keep.has(cellKey(x, z))) return "blocks-stairs";
+    const shaft = liftClearance(bp, index, cat, ignoreId);
+    for (let x = f.x; x < f.x + f.w; x++) for (let z = f.z; z < f.z + f.d; z++) if (shaft.has(cellKey(x, z))) return "blocks-lift";
+  }
+  if (isStairs(item)) return stairsProblem(bp, index, { id: ignoreId ?? "", ...at }, item, cat);
+  if (isLift(item)) return liftProblem(bp, index, { id: ignoreId ?? "", ...at }, item, cat);
   return null;
 }
 
@@ -118,9 +154,23 @@ export function openingProblem(level: Level, item: OpeningItem, at: Pick<PlacedO
 
 const idTaken = (bp: Blueprint, id: string) => bp.levels.some((l) => l.objects[id] || l.openings[id]);
 
+/** Is there anything at all on this floor? */
+const isEmpty = (l: Level) => [l.walls, l.tiles, l.objects, l.openings, l.roofs].every((r) => Object.keys(r).length === 0);
+
 function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
+  if (op.t === "level.add") {
+    if (op.level >= MAX_LEVELS) return fail("too-many-levels");
+    if (op.level !== bp.levels.length) return fail("no-level");
+    return { ok: true, blueprint: { ...bp, levels: [...bp.levels, emptyLevel()] } };
+  }
   const level = bp.levels[op.level];
   if (!level) return fail("no-level");
+  if (op.t === "level.remove") {
+    // only the top floor, never the ground, and only once it's bare
+    if (op.level === 0 || op.level !== bp.levels.length - 1) return fail("no-level");
+    if (!isEmpty(level)) return fail("level-not-empty");
+    return { ok: true, blueprint: { ...bp, levels: bp.levels.slice(0, -1) } };
+  }
   const { w, d } = bp.lot;
 
   switch (op.t) {
@@ -162,6 +212,16 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
         const c = parseCell(key);
         if (!c) return fail("bad-cell");
         if (!cellInLot(c.x, c.z, w, d)) return fail("out-of-lot");
+      }
+      // upstairs, taking floor away from under furniture would leave it in the air
+      if (op.material === null && op.level > 0) {
+        const gone = new Set(op.cells);
+        for (const o of Object.values(level.objects)) {
+          const item = cat.furniture.get(o.catalogId);
+          if (!item) continue;
+          const f = footprintOf(item, o);
+          for (let x = f.x; x < f.x + f.w; x++) for (let z = f.z; z < f.z + f.d; z++) if (gone.has(cellKey(x, z))) return fail("furniture-on-it");
+        }
       }
       const tiles = { ...level.tiles };
       for (const key of op.cells) {
@@ -266,6 +326,12 @@ export function applyOp(bp: Blueprint, op: LoggedOp, cat: Catalog = defaultCatal
       if (!r.ok) return r;
       cur = r.blueprint;
     }
+  }
+  // nothing may leave stairs with nowhere to step on or off (checked once a batch is done, so a batch can lay the
+  // landing and put the stairs in together)
+  if (!accepted) {
+    const broken = brokenStairs(bp, cur, cat) ?? brokenLifts(bp, cur, cat);
+    if (broken) return fail(broken);
   }
   if (!accepted && cur.funds < 0 && cur.funds < (bp.funds ?? STARTING_FUNDS)) return fail("cant-afford");
   return { ok: true, blueprint: cur };

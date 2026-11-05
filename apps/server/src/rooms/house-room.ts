@@ -339,7 +339,9 @@ export class HouseRoom {
     const r: LifeReject | null = this.life.command(id, bp, now, () => {
       switch (intent.do) {
         case "walk":
-          return this.life.walk(id, bp, [intent.x, intent.z], now);
+          return this.life.walk(id, bp, [intent.x, intent.z], now, intent.level);
+        case "ride":
+          return this.life.ride(id, bp, intent.objectId, intent.level, now);
         case "use":
           return this.life.use(id, bp, intent.objectId, intent.action, now);
         case "stop":

@@ -1,5 +1,5 @@
 import type { AddressInfo } from "node:net";
-import { DAILY_COINS, DEFAULT_APPEARANCE, CLOSE, localDay, STARTING_FUNDS, type ClientMsg, type HouseSummary, type Op, type ServerMsg } from "@cg/shared";
+import { DAILY_COINS, DEFAULT_APPEARANCE, CLOSE, localDay, STARTING_FUNDS, STOREY, type ClientMsg, type HouseSummary, type Op, type ServerMsg } from "@cg/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createApp } from "../app";
@@ -589,6 +589,77 @@ describe("living together", () => {
   });
 });
 
+
+describe("floors, stairs and lifts", () => {
+  /**
+   * A second floor (floored over x 1-9, z 2-9, and by the lift) with stairs up from (2, 3), and a lift near where
+   * people come in (at the front of the lot) opening onto (11, 17).
+   */
+  const upstairs: Op = {
+    t: "batch",
+    ops: [
+      { t: "level.add", level: 1 },
+      { t: "floor.paint", level: 1, cells: [...Array.from({ length: 9 * 8 }, (_, i) => `${1 + (i % 9)}:${2 + Math.floor(i / 9)}`), "11:17", "12:17"], material: "oak" },
+      { t: "object.place", level: 0, id: "stairs0001", catalogId: "stairs_oak", x: 2, z: 4, rot: 0 },
+      { t: "object.place", level: 0, id: "lift000001", catalogId: "lift_glass", x: 11, z: 15, rot: 0 },
+    ],
+  };
+
+  it("shares floors and the way between them, catching a reconnecting partner up, and shows where each other is", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    await b.connect();
+    a.op("opA0000001", { t: "floor.paint", level: 0, cells: ["0:0"], material: "oak" });
+    await b.next("applied");
+    await b.disconnect();
+    a.op("opA0000002", upstairs);
+    await a.next("applied", (m) => m.version === 2);
+    // back in: the new floor, stairs and lift come with the catching up
+    const wb = await b.connect(1);
+    expect(wb.sync).toMatchObject({ kind: "ops", ops: [expect.objectContaining({ op: expect.objectContaining({ t: "batch" }) })] });
+    // walking upstairs takes the stairs, and the partner sees it
+    a.send({ type: "life", intent: { do: "walk", x: 5, z: 8, level: 1 } });
+    const walk = await b.next("life", (m) => m.life.avatars[wa.memberId]!.path.at(-1)![2] === STOREY);
+    expect(walk.life.avatars[wa.memberId]!.path.some((p) => p[2] !== undefined && p[2] > 0 && p[2] < STOREY)).toBe(true);
+    // and where you're building is on your floor
+    a.send({ type: "presence", cursor: { x: 3, z: 3 }, tool: "select", drag: null, level: 1 });
+    expect(await b.next("presence")).toMatchObject({ memberId: wa.memberId, level: 1 });
+    await a.disconnect();
+    await b.disconnect();
+  });
+
+  it("runs the lift for both, keeps a ride going through a restart, and turns down a way that's gone", async () => {
+    const { a, b, houseId } = await couple();
+    const wa = await a.connect();
+    a.op("opA0000001", upstairs);
+    await a.next("applied");
+    await b.connect();
+    a.send({ type: "life", intent: { do: "ride", objectId: "lift000001", level: 1 } });
+    // the partner sees them get on, and the car set off with them in it
+    await b.next("life", (m) => m.life.avatars[wa.memberId]!.use?.ride?.on === true);
+    await b.next("life", (m) => Boolean(m.life.lifts?.lift000001?.move) && m.life.avatars[wa.memberId]!.use?.ride?.on === true);
+    await a.disconnect();
+    await b.disconnect();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // a restart mid-ride: they're still in the lift, and it takes them up
+    const old = app;
+    await startApp();
+    const again = new Player(`${base.replace("http", "ws")}/ws`, houseId, a.cookie);
+    const welcome = await again.connect();
+    expect(welcome.life.lifts?.lift000001).toBeDefined();
+    const there = welcome.life.avatars[wa.memberId]!.use === null ? welcome : await again.next("life", (m) => m.life.avatars[wa.memberId]!.use === null);
+    expect(there.life.avatars[wa.memberId]!.path.at(-1)![2]).toBe(STOREY);
+
+    // with the stairs and lift gone, there's no way down
+    again.op("opA0000002", { t: "batch", ops: [{ t: "object.remove", level: 0, id: "stairs0001" }, { t: "object.remove", level: 0, id: "lift000001" }] });
+    await again.next("applied");
+    again.send({ type: "life", intent: { do: "walk", x: 12, z: 12, level: 0 } });
+    expect((await again.next("lifeRejected")).reason).toBe("unreachable");
+    await again.disconnect();
+    await old.close();
+  });
+});
 
 describe("character appearance", () => {
   it("saves to the signed-in account, broadcasts to the partner, and survives reconnect without editing the house", async () => {

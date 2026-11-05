@@ -3,6 +3,8 @@ export * from "./blueprint";
 export * from "./catalog";
 export * from "./ops";
 export * from "./rules";
+export * from "./stairs";
+export * from "./lifts";
 export * from "./protocol";
 export * from "./ids";
 export * from "./undo";

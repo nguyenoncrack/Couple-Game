@@ -1,4 +1,4 @@
-import { faceDir, positionAt } from "@cg/shared";
+import { faceDir, floorOf, positionAt, STOREY } from "@cg/shared";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import type * as THREE from "three";
@@ -45,7 +45,9 @@ function myPosition() {
 /** Open the menu for whatever's nearest the middle of the view and within reach. */
 function openWhatsAhead(yaw: number, eye: Eye) {
   const s = useGame.getState();
-  const level = s.view?.levels[0];
+  const me = s.me ? s.life?.avatars[s.me] : undefined;
+  const at = me ? floorOf(me) : 0;
+  const level = s.view?.levels[at];
   if (!level || !s.life || !s.me || !eye) return;
   const [fx, fz] = [Math.sin(yaw), Math.cos(yaw)];
   const options: { score: number; open: () => boolean }[] = [];
@@ -58,16 +60,16 @@ function openWhatsAhead(yaw: number, eye: Eye) {
   };
   const now = serverNow();
   for (const a of Object.values(s.life.avatars)) {
-    if (a.memberId === s.me) continue;
+    if (a.memberId === s.me || floorOf(a) !== at) continue;
     const p = positionAt(a, now);
     consider(p.x, p.z, Math.hypot(p.x - eye.x, p.z - eye.z), () => {
-      useGame.setState({ menu: { memberId: a.memberId, at: [p.x, 2.3, p.z] } });
+      useGame.setState({ menu: { memberId: a.memberId, at: [p.x, p.y + 2.3, p.z] } });
       return true;
     });
   }
-  for (const d of s.life.dishes)
+  for (const d of s.life.dishes.filter((d) => (d.level ?? 0) === at))
     consider(d.x, d.z, Math.hypot(d.x - eye.x, d.z - eye.z) - 0.3, () => {
-      useGame.setState({ menu: { dishId: d.id, at: [d.x, 1.2, d.z] } });
+      useGame.setState({ menu: { dishId: d.id, at: [d.x, at * STOREY + 1.2, d.z] } });
       return true;
     });
   for (const o of Object.values(level.objects)) {

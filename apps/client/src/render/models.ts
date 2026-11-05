@@ -1,4 +1,4 @@
-import type { FurnitureItem, OpeningItem } from "@cg/shared";
+import { STOREY, type FurnitureItem, type OpeningItem } from "@cg/shared";
 import * as THREE from "three";
 import { Kit, type BuiltMesh } from "./kit";
 import { BOTANICAL_BUILDERS } from "./botanicalModels";
@@ -345,6 +345,64 @@ const BUILDERS: Record<string, Builder> = {
     k.add("cyl", m("#8f4a3f"), [0.18, 1.085, z - 0.15], [0.23, 0.015, 0.23], { outline: 0.005 });
   },
 
+  // a flight up to the floor above, climbing towards +z: open treads on two sloping stringers, a rail each side
+  stairs: (k, w, d, p, m) => {
+    const wood = str(p, "wood", "#b98a5a");
+    const tread = m(wood, "timber");
+    const side = m(shade(wood, 0.82), "timber");
+    const rail = m(str(p, "rail", "#7a5a3c"), "timber");
+    const steps = 15;
+    const run = d / steps;
+    const rise = STOREY / steps;
+    const W = w - 0.08;
+    for (let i = 0; i < steps; i++) {
+      const z = -d / 2 + (i + 0.5) * run;
+      const y = (i + 1) * rise;
+      k.box(tread, [0, y - 0.025, z], [W - 0.12, 0.05, run], { outline: 0.005 });
+      // a closed riser on the lower steps, so it reads as a staircase from the side
+      if (i < 3) k.box(side, [0, y - rise / 2, z - run / 2 + 0.01], [W - 0.12, rise, 0.02], { outline: false });
+    }
+    const slope = Math.atan2(STOREY, d);
+    const len = Math.hypot(d, STOREY) - 0.12;
+    for (const sx of [-1, 1]) {
+      const x = sx * (W / 2 - 0.04);
+      // the stringer, stepped to follow the treads (it stays inside the stairs' own cells)
+      for (let i = 0; i < steps; i++) {
+        const top = (i + 1) * rise;
+        const h = Math.min(top, 0.32);
+        k.box(side, [x, top - h / 2, -d / 2 + (i + 0.5) * run], [0.07, h, run], { outline: i === 0 ? 0.005 : false });
+      }
+      // the handrail, on posts at the bottom and top
+      k.box(rail, [x, STOREY / 2 + 0.85, 0], [0.06, 0.06, len], { rot: [-slope, 0, 0], outline: 0.005 });
+      for (const [z, y] of [
+        [-d / 2 + run / 2, rise],
+        [0, STOREY / 2],
+        [d / 2 - run / 2, STOREY],
+      ] as const)
+        k.box(rail, [x, y + 0.42, z], [0.05, 0.9, 0.05], { outline: 0.004 });
+    }
+  },
+
+  // one storey of a glass lift shaft (drawn again on every floor above): corner posts, glass on three sides, and a
+  // frame round the doorway at the front (+z). The car and the doors move, so Lifts.tsx draws those.
+  lift: (k, w, d, p, m) => {
+    const frame = m(str(p, "frame", "#e9e4da"), "metal");
+    const glass = m(str(p, "glass", "#cfe6ee"), undefined, 0.16);
+    const H = STOREY - 0.04;
+    const W = w - 0.06;
+    const D = d - 0.06;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box(frame, [sx * (W / 2 - 0.05), H / 2, sz * (D / 2 - 0.05)], [0.1, H, 0.1], { outline: 0.005 });
+    k.box(glass, [0, H / 2, -D / 2 + 0.03], [W - 0.2, H - 0.12, 0.02], { outline: false });
+    for (const sx of [-1, 1]) k.box(glass, [sx * (W / 2 - 0.03), H / 2, 0], [0.02, H - 0.12, D - 0.2], { outline: false });
+    // rails round the top and bottom, and the header over the doorway
+    for (const y of [0.04, H - 0.04]) {
+      k.box(frame, [0, y, -D / 2 + 0.05], [W - 0.2, 0.08, 0.06], { outline: 0.004 });
+      for (const sx of [-1, 1]) k.box(frame, [sx * (W / 2 - 0.05), y, 0], [0.06, 0.08, D - 0.2], { outline: 0.004 });
+    }
+    k.box(frame, [0, (LIFT_DOOR_H + H) / 2, D / 2 - 0.05], [W - 0.2, H - LIFT_DOOR_H, 0.1], { outline: 0.005 });
+    k.box(frame, [0, 0.02, D / 2 - 0.05], [W - 0.2, 0.04, 0.1], { outline: false });
+  },
+
   fridge: (k, w, d, p, m) => {
     const body = m(str(p, "body", "#dfe7e4"), "paint");
     const D = 0.68;
@@ -554,6 +612,9 @@ function hashString(s: string) {
 const built = new Map<string, BuiltMesh[]>();
 
 /** Shared meshes; active table variants omit loose props now held by players or replaced by dealt cards. */
+/** How tall a lift's doorway is (its doors are drawn by Lifts.tsx). */
+export const LIFT_DOOR_H = 2.2;
+
 export function modelFor(item: FurnitureItem, ghost: "ok" | "bad" | null = null, active = false): BuiltMesh[] {
   const key = `${item.id}|${ghost ?? ""}|${active}`;
   let out = built.get(key);

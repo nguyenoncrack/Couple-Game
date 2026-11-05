@@ -69,7 +69,7 @@ export function serveSocket(room: HouseRoom, memberId: string, io: SocketIO) {
           room.hold(peer, msg.objectId);
           break;
         case "presence":
-          room.setPresence(peer, { cursor: msg.cursor, tool: msg.tool, drag: msg.drag });
+          room.setPresence(peer, { cursor: msg.cursor, tool: msg.tool, drag: msg.drag, ...(msg.level ? { level: msg.level } : {}) });
           break;
         case "life":
           room.act(peer, msg.intent);
