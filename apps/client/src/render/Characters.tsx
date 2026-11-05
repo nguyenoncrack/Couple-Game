@@ -344,6 +344,12 @@ function SpeechBubble({ memberId }: { memberId: string }) {
 }
 
 function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner: Avatar | null; member: MemberInfo; mine: boolean }) {
+  // The frame loop owns position after mounting. Updating this prop with each server path
+  // resets its animated height and makes floor-follow briefly switch downstairs.
+  const [initialPosition] = useState<[number, number, number]>(() => {
+    const p = positionAt(avatar, serverNow());
+    return [p.x, FLOOR_Y + p.y, p.z];
+  });
   const looks = useMemo(() => member.appearance ? customizedLooks(normalizeAppearance(member.appearance)) : looksFor(member.id, member.color), [member.id, member.color, member.appearance]);
   const live = useGame((s) => s.mode === "live");
   // in first person you're behind your own eyes, so your body is out of the way
@@ -489,7 +495,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
   };
 
   return (
-    <group ref={root} position={[avatar.path[0]![0], FLOOR_Y, avatar.path[0]![1]]} onPointerDown={clickable ? pick : undefined}>
+    <group ref={root} position={initialPosition} onPointerDown={clickable ? pick : undefined}>
       {clickable && (
         <mesh visible={false} position={[0, 0.9, 0]}>
           <cylinderGeometry args={[0.3, 0.3, 1.8, 8]} />
