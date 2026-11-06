@@ -1,0 +1,562 @@
+[
+  {
+    "id": "nesting_tables",
+    "name": "Pebble nesting tables",
+    "category": "living",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 280,
+    "tags": [
+      "coffee",
+      "nested",
+      "round",
+      "accent"
+    ],
+    "model": {
+      "kind": "nestingtables",
+      "wood": "#b67942",
+      "stone": "#eee0c2"
+    }
+  },
+  {
+    "id": "electric_fireplace",
+    "name": "Amber electric fireplace",
+    "category": "living",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 790,
+    "tags": [
+      "hearth",
+      "mantel",
+      "fire",
+      "decorative"
+    ],
+    "model": {
+      "kind": "fireplace",
+      "stone": "#c8bda8",
+      "wood": "#9a6136"
+    }
+  },
+  {
+    "id": "woven_room_divider",
+    "name": "Woven folding divider",
+    "category": "living",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 340,
+    "tags": [
+      "privacy",
+      "screen",
+      "rattan",
+      "partition"
+    ],
+    "model": {
+      "kind": "divider",
+      "wood": "#8a5433",
+      "fabric": "#dac693"
+    }
+  },
+  {
+    "id": "bedroom_bench",
+    "name": "Boucl\u00e9 bedroom bench",
+    "category": "bedroom",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 390,
+    "tags": [
+      "seat",
+      "ottoman",
+      "boucle",
+      "end",
+      "bed"
+    ],
+    "model": {
+      "kind": "bedbench",
+      "fabric": "#dca46a",
+      "wood": "#825436"
+    },
+    "interactions": [
+      {
+        "action": "sit",
+        "slots": [
+          {
+            "stand": [
+              [
+                0,
+                1
+              ]
+            ],
+            "pose": [
+              0.55,
+              0.52
+            ],
+            "y": 0.46,
+            "face": 0
+          },
+          {
+            "stand": [
+              [
+                1,
+                1
+              ]
+            ],
+            "pose": [
+              1.45,
+              0.52
+            ],
+            "y": 0.46,
+            "face": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dressing_vanity",
+    "name": "Arched dressing vanity",
+    "category": "bedroom",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 620,
+    "tags": [
+      "makeup",
+      "mirror",
+      "beauty",
+      "dressing"
+    ],
+    "model": {
+      "kind": "dressingvanity",
+      "wood": "#b7794f",
+      "accent": "#dfa29b"
+    }
+  },
+  {
+    "id": "blanket_ladder",
+    "name": "Blanket ladder",
+    "category": "bedroom",
+    "footprint": [
+      1,
+      1
+    ],
+    "layer": "floor",
+    "price": 125,
+    "tags": [
+      "linen",
+      "throw",
+      "towels",
+      "rack"
+    ],
+    "model": {
+      "kind": "blanketladder",
+      "wood": "#b08a56",
+      "fabric": "#4d9f9a"
+    }
+  },
+  {
+    "id": "island_butcher",
+    "name": "Butcher-block kitchen island",
+    "category": "kitchen",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 740,
+    "tags": [
+      "prep",
+      "counter",
+      "chopping",
+      "storage"
+    ],
+    "model": {
+      "kind": "kitchenisland",
+      "wood": "#c69455",
+      "body": "#388e88",
+      "height": 0.9
+    },
+    "interactions": [
+      {
+        "action": "prep",
+        "slots": [
+          {
+            "stand": [
+              [
+                0,
+                1
+              ]
+            ],
+            "pose": [
+              0.5,
+              1.3
+            ],
+            "y": 0,
+            "face": 2
+          },
+          {
+            "stand": [
+              [
+                1,
+                1
+              ]
+            ],
+            "pose": [
+              1.5,
+              1.3
+            ],
+            "y": 0,
+            "face": 2
+          }
+        ],
+        "station": "counter"
+      }
+    ],
+    "surface": true
+  },
+  {
+    "id": "bar_cart",
+    "name": "Brass serving trolley",
+    "category": "kitchen",
+    "footprint": [
+      1,
+      1
+    ],
+    "layer": "floor",
+    "price": 260,
+    "tags": [
+      "drinks",
+      "tea",
+      "bar",
+      "cart",
+      "trolley"
+    ],
+    "model": {
+      "kind": "barcart",
+      "wood": "#9b6541",
+      "metal": "#c5a654"
+    }
+  },
+  {
+    "id": "double_vanity",
+    "name": "Twin-basin vanity",
+    "category": "bathroom",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 860,
+    "tags": [
+      "sink",
+      "wash",
+      "double",
+      "basin",
+      "bath"
+    ],
+    "model": {
+      "kind": "doublevanity",
+      "body": "#3b8e9a",
+      "stone": "#ece6d8"
+    },
+    "interactions": [
+      {
+        "action": "wash",
+        "slots": [
+          {
+            "stand": [
+              [
+                0,
+                1
+              ]
+            ],
+            "pose": [
+              0.5,
+              1.25
+            ],
+            "y": 0,
+            "face": 2
+          },
+          {
+            "stand": [
+              [
+                1,
+                1
+              ]
+            ],
+            "pose": [
+              1.5,
+              1.25
+            ],
+            "y": 0,
+            "face": 2
+          }
+        ],
+        "seconds": 8
+      }
+    ]
+  },
+  {
+    "id": "laundry_washer",
+    "name": "Front-load laundry washer",
+    "category": "bathroom",
+    "footprint": [
+      1,
+      1
+    ],
+    "layer": "floor",
+    "price": 540,
+    "tags": [
+      "washing",
+      "machine",
+      "laundry",
+      "decorative"
+    ],
+    "model": {
+      "kind": "washer",
+      "body": "#c6ddd7"
+    }
+  },
+  {
+    "id": "towel_stand",
+    "name": "Freestanding towel warmer",
+    "category": "bathroom",
+    "footprint": [
+      1,
+      1
+    ],
+    "layer": "floor",
+    "price": 170,
+    "tags": [
+      "towels",
+      "rail",
+      "rack",
+      "bath"
+    ],
+    "model": {
+      "kind": "towelstand",
+      "metal": "#bcaa79",
+      "fabric": "#de8b6a"
+    }
+  },
+  {
+    "id": "ergonomic_chair",
+    "name": "Ergonomic swivel chair",
+    "category": "office",
+    "footprint": [
+      1,
+      1
+    ],
+    "layer": "floor",
+    "price": 360,
+    "tags": [
+      "desk",
+      "seat",
+      "work",
+      "mesh",
+      "computer"
+    ],
+    "model": {
+      "kind": "officechair",
+      "fabric": "#247e91",
+      "metal": "#424c55"
+    },
+    "interactions": [
+      {
+        "action": "sit",
+        "slots": [
+          {
+            "stand": [
+              [
+                0,
+                1
+              ]
+            ],
+            "pose": [
+              0.5,
+              0.54
+            ],
+            "y": 0.48,
+            "face": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "drafting_table",
+    "name": "Architect drafting table",
+    "category": "office",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 690,
+    "tags": [
+      "studio",
+      "drawing",
+      "work",
+      "design",
+      "desk"
+    ],
+    "model": {
+      "kind": "draftingtable",
+      "wood": "#bc8d52",
+      "metal": "#426e72"
+    }
+  },
+  {
+    "id": "arcade_cabinet",
+    "name": "Starlight arcade cabinet",
+    "category": "entertainment",
+    "footprint": [
+      1,
+      1
+    ],
+    "layer": "floor",
+    "price": 980,
+    "tags": [
+      "retro",
+      "games",
+      "joystick",
+      "decorative"
+    ],
+    "model": {
+      "kind": "arcade",
+      "body": "#7659b7",
+      "accent": "#e9b63b"
+    }
+  },
+  {
+    "id": "foosball_table",
+    "name": "Tournament foosball table",
+    "category": "entertainment",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 820,
+    "tags": [
+      "table",
+      "football",
+      "soccer",
+      "games",
+      "decorative"
+    ],
+    "model": {
+      "kind": "foosball",
+      "wood": "#a86b38",
+      "field": "#298c68"
+    }
+  },
+  {
+    "id": "vinyl_console",
+    "name": "Hi-fi vinyl listening console",
+    "category": "entertainment",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 760,
+    "tags": [
+      "record",
+      "turntable",
+      "music",
+      "stereo",
+      "speakers"
+    ],
+    "model": {
+      "kind": "vinylconsole",
+      "wood": "#945d38",
+      "fabric": "#b3a188"
+    }
+  },
+  {
+    "id": "hanging_egg_chair",
+    "name": "Wicker egg chair",
+    "category": "outdoor",
+    "footprint": [
+      2,
+      2
+    ],
+    "layer": "floor",
+    "price": 650,
+    "tags": [
+      "hanging",
+      "swing",
+      "seat",
+      "rattan",
+      "garden"
+    ],
+    "model": {
+      "kind": "eggchair",
+      "wood": "#b4834f",
+      "fabric": "#e29a5f",
+      "metal": "#3d5860"
+    },
+    "interactions": [
+      {
+        "action": "sit",
+        "slots": [
+          {
+            "stand": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "pose": [
+              1,
+              1.04
+            ],
+            "y": 0.48,
+            "face": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "potting_bench",
+    "name": "Garden potting station",
+    "category": "outdoor",
+    "footprint": [
+      2,
+      1
+    ],
+    "layer": "floor",
+    "price": 420,
+    "tags": [
+      "plants",
+      "tools",
+      "soil",
+      "workbench",
+      "garden"
+    ],
+    "model": {
+      "kind": "pottingbench",
+      "wood": "#9e7f4e",
+      "body": "#478b75"
+    }
+  }
+]

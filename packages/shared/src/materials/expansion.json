@@ -1,0 +1,14 @@
+{
+  "wallStyles": [
+    {"id":"wallpaper_botanical","name":"Botanical wallpaper","color":"#ece4c8","finish":"plaster","surface":"botanical","description":"Sage leaves and coral buds on warm paper, repeating every 40 cm."},
+    {"id":"wainscot_teal","name":"Teal painted wainscoting","color":"#369590","finish":"wood","surface":"wainscot","description":"Raised teal panels below a 1 m chair rail, with warm plaster above."},
+    {"id":"slats_walnut","name":"Walnut acoustic slats","color":"#a47145","finish":"wood","surface":"slats","description":"Narrow 4 cm timber slats on a dark acoustic backing."},
+    {"id":"shiplap_white","name":"Whitewashed shiplap","color":"#dfdcd0","finish":"wood","surface":"shiplap","description":"Horizontal 16 cm boards with recessed joints and subtle whitewashed grain."}
+  ],
+  "floorMaterials": [
+    {"id":"terrazzo_confetti","name":"Confetti terrazzo","color":"#e1d7bb","finish":"concrete","surface":"terrazzo","description":"Polished ivory terrazzo with irregular coral, teal and ochre mineral chips."},
+    {"id":"slate_charcoal","name":"Charcoal slate flagstones","color":"#50636a","finish":"stone","surface":"slate","description":"Staggered 60 × 40 cm slate slabs, fine grout and natural cleft texture."},
+    {"id":"terracotta_hex","name":"Hexagonal terracotta","color":"#cf7950","finish":"checker","surface":"terracotta","description":"Warm fired-clay hexagons, 26 cm across, with pale sand grout."},
+    {"id":"cement_cobalt","name":"Cobalt encaustic tile","color":"#ecddbd","finish":"checker","surface":"encaustic","description":"A blue-and-ochre geometric rosette in repeating 40 cm cement tiles."}
+  ]
+}

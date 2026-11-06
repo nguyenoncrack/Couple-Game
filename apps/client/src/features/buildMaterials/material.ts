@@ -4,8 +4,8 @@ import { pencilMaterial } from "../../render/pencil";
 import { buildSurfaceGlsl } from "./surfaceShader";
 
 export type MaterialKind = "wall" | "floor";
-const profiles: Record<BuildSurface, number> = { plaster: 1, panels: 2, brick: 3, stone: 4, tile: 5, concrete: 6, glass: 7, oak: 8, walnut: 9, parquet: 10, marble: 11, carpet: 12, decking: 13, pavers: 14 };
-const gloss: Partial<Record<BuildSurface, [number, number]>> = { panels: [.12, 26], oak: [.15, 32], walnut: [.2, 40], parquet: [.2, 40], tile: [.35, 65], marble: [.42, 85], glass: [.7, 110], concrete: [.08, 24] };
+const profiles: Record<BuildSurface, number> = { plaster: 1, panels: 2, brick: 3, stone: 4, tile: 5, concrete: 6, glass: 7, oak: 8, walnut: 9, parquet: 10, marble: 11, carpet: 12, decking: 13, pavers: 14, botanical: 15, wainscot: 16, slats: 17, shiplap: 18, terrazzo: 19, slate: 20, terracotta: 21, encaustic: 22 };
+const gloss: Partial<Record<BuildSurface, [number, number]>> = { panels: [.12, 26], oak: [.15, 32], walnut: [.2, 40], parquet: [.2, 40], tile: [.35, 65], marble: [.42, 85], glass: [.7, 110], concrete: [.08, 24], wainscot: [.15, 32], slats: [.12, 26], shiplap: [.08, 20], terrazzo: [.35, 65], slate: [.07, 18], terracotta: [.1, 24], encaustic: [.15, 35] };
 const cache = new Map<string, THREE.ShaderMaterial>();
 
 export function materialDefinition(kind: MaterialKind, id: string) {

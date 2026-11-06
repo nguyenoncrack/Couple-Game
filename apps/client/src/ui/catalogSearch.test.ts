@@ -20,7 +20,7 @@ describe("catalog search", () => {
     expect(ids("cozy sofa")).toEqual(ids("sofa cozy"));
   });
   it("searches category names and requires every word", () => {
-    expect(ids("bathroom sink")).toEqual(["bath_sink"]);
+    expect(ids("bathroom sink")).toEqual(["bath_sink", "double_vanity"]);
     expect(ids("bathroom sofa")).toEqual([]);
   });
   it("clears back to the entire collection without changing its order", () => {

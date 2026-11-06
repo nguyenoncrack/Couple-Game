@@ -2,6 +2,7 @@ import { z } from "zod";
 import { surfaceMetadata, withBuildMaterials } from "../materials/catalog";
 import furnitureData from "./furniture.json";
 import furnitureMoreData from "./furniture-more.json";
+import furnitureExpansionData from "./furniture-expansion.json";
 import openingsData from "./openings.json";
 import piecesData from "./pieces.json";
 import recipesData from "./recipes.json";
@@ -47,7 +48,7 @@ const Interaction = z
 const FurnitureItem = z.object({
   id: z.string(),
   name: z.string(),
-  category: z.enum(["living", "bedroom", "kitchen", "bathroom", "decor", "outdoor", "entertainment"]),
+  category: z.enum(["living", "bedroom", "kitchen", "bathroom", "decor", "outdoor", "entertainment", "office"]),
   tags: z.array(z.string().trim().min(1).max(32)).max(12).optional(),
   price: z.number().int().nonnegative(),
   footprint: z.tuple([z.number().int().min(1).max(6), z.number().int().min(1).max(6)]),
@@ -177,4 +178,4 @@ export function loadCatalog(raw: { furniture: unknown; openings: unknown; pieces
   };
 }
 
-export const catalog: Catalog = loadCatalog({ furniture: [...furnitureData, ...furnitureMoreData], openings: openingsData, pieces: withBuildMaterials(piecesData), recipes: recipesData });
+export const catalog: Catalog = loadCatalog({ furniture: [...furnitureData, ...furnitureMoreData, ...furnitureExpansionData], openings: openingsData, pieces: withBuildMaterials(piecesData), recipes: recipesData });

@@ -4,6 +4,7 @@ import { Kit, type BuiltMesh } from "./kit";
 import { BOTANICAL_BUILDERS } from "./botanicalModels";
 import { ENTERTAINMENT_BUILDERS } from "./entertainmentModels";
 import { FURNITURE_BUILDERS } from "./furnitureModels";
+import { EXPANSION_BUILDERS } from "../features/furnitureExpansion/models";
 import { pencilMaterial, type Finish } from "./pencil";
 
 /**
@@ -118,6 +119,7 @@ const BUILDERS: Record<string, Builder> = {
   ...ENTERTAINMENT_BUILDERS,
   ...BOTANICAL_BUILDERS,
   ...FURNITURE_BUILDERS,
+  ...EXPANSION_BUILDERS,
   sofa: sofaLike(),
   armchair: sofaLike(1),
 

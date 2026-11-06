@@ -1,3 +1,5 @@
+import { expansionSurfaceGlsl } from "./expansionShader";
+
 /** All coordinates are metres in the floor's frame, independent of wall runs / tile mesh boundaries. */
 export const buildSurfaceGlsl = /* glsl */ `
   vec2 bq = p;
@@ -82,9 +84,10 @@ export const buildSurfaceGlsl = /* glsl */ `
     lines = weave * 0.38;
     pigment = (noise(surface * 7.0) - 0.5) * 0.09;
     relief = weave * 0.0009;
+  ${expansionSurfaceGlsl}
   #endif
   tone *= 1.0 + pigment;
-  #if BUILD_SURFACE == 3 || BUILD_SURFACE == 4 || BUILD_SURFACE == 5 || BUILD_SURFACE == 14
+  #if BUILD_SURFACE == 3 || BUILD_SURFACE == 4 || BUILD_SURFACE == 5 || BUILD_SURFACE == 14 || BUILD_SURFACE == 20 || BUILD_SURFACE == 21 || BUILD_SURFACE == 22
     tone = mix(tone, uJointTone, joints * 0.75);
   #else
     tone *= 1.0 - joints * 0.45;

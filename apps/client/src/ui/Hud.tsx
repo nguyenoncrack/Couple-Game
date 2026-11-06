@@ -399,6 +399,7 @@ const CATEGORIES: { id: Category; label: string }[] = [
   { id: "decor", label: "Decor" },
   { id: "outdoor", label: "Outdoor" },
   { id: "entertainment", label: "Entertainment" },
+  { id: "office", label: "Office" },
   { id: "openings", label: "Doors & windows" },
 ];
 
@@ -554,7 +555,7 @@ function ToolPanel() {
               : category === "openings"
                 ? "Pick a door or window, then click on a wall."
                 : category === "entertainment"
-                  ? "Switch to Live mode to play. Leave space around tables for both players."
+                  ? "Some pieces are decorative. Switch to Live for supported activities; leave space around game tables."
                   : "Pick something, then click on the lot."}
         </p>
       </Floating>

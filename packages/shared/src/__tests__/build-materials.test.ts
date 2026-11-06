@@ -17,7 +17,7 @@ function rooms() {
 }
 
 it("offers every requested family while retaining old saved IDs", () => {
-  expect(new Set([...catalog.wallStyles.values()].map((v) => v.surface))).toEqual(new Set(["plaster", "panels", "brick", "stone", "tile", "concrete", "glass"]));
+  expect([...catalog.wallStyles.values()].map((v) => v.surface)).toEqual(expect.arrayContaining(["plaster", "panels", "brick", "stone", "tile", "concrete", "glass"]));
   for (const surface of ["oak", "walnut", "parquet", "tile", "marble", "carpet", "concrete", "decking"]) expect([...catalog.floorMaterials.values()].some((v) => v.surface === surface)).toBe(true);
   for (const id of ["oak", "walnut", "tile_white", "tile_blue", "carpet_sand", "stone", "concrete"]) expect(catalog.floorMaterials.has(id)).toBe(true);
   for (const id of ["plaster_cream", "plaster_sage", "plaster_blush", "plaster_sky", "brick_red", "wood_panel"]) expect(catalog.wallStyles.has(id)).toBe(true);
