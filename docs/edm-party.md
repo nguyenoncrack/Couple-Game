@@ -23,7 +23,7 @@ A "Party" category of furniture, a compact party panel, dancing, and a shared Yo
 
 **Lights**: on/off, brightness, presets (Sunset, Neon, Chill, Aurora), one colour, Steady light, laser spread. One shared state for the house, kept with life state and saved with it. Patterns are slow drifts (no preset is quicker than 10 s a cycle), a change of preset dips and returns, steady holds everything still, and a device that asks for reduced motion is held steady. Lights follow a schedule on the server clock; they do **not** react to the sound.
 
-**Music**: paste a YouTube link (watch, youtu.be, embed, shorts, live, music.youtube.com; a `t=` start is honoured; playlists and channels are refused). Either player can add, play now, pause, seek ±10 s, skip and remove. Each screen plays it in YouTube's own embedded player (IFrame API), kept in step with the shared state; volume and mute are per player (this device).
+**Music**: paste a YouTube link (watch, youtu.be, embed, shorts, live, music.youtube.com; a `t=` start is honoured; playlists and channels are refused). Either player can add, play now, pause, seek ±10 s, skip and remove. Each screen plays it in YouTube's own embedded player (IFrame API), kept in step with the shared state; volume and mute are per player (this device). The sound comes from the speakers: the player's volume is scaled by how far that player's character stands from the nearest speaker, DJ booth or music player (full within 2 m, about a third at 6 m, never below 5%, and a floor up or down counts as 7 m more). YouTube's player only exposes a volume, so there is no left/right panning; a "Fade" switch in the music dock turns the fading off.
 
 ## How it's built
 

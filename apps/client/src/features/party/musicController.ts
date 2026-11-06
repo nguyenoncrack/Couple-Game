@@ -36,6 +36,8 @@ export class MusicController {
   private loadedAt = 0;
   /** The browser won't make sound until it's had a click: the player is held muted (so it still plays) until then. */
   private blocked = false;
+  /** How near the speakers this player's character is (0..1); it scales the chosen volume. */
+  private mix = 1;
   private dead = false;
   private state: number = YT_STATE.unstarted;
   private attaching = 0;
@@ -139,10 +141,22 @@ export class MusicController {
     });
   }
 
+  /** Walking about: the loudness this far from the speakers. */
+  setMix(mix: number) {
+    if (mix === this.mix) return;
+    this.mix = mix;
+    const { volume } = usePartyUi.getState();
+    try {
+      if (this.player && this.ready) this.player.setVolume(Math.round(volume * this.mix));
+    } catch {
+      // the player was torn down
+    }
+  }
+
   setVolume(volume: number, muted: boolean) {
     if (!this.player || !this.ready) return;
     try {
-      this.player.setVolume(Math.round(volume));
+      this.player.setVolume(Math.round(volume * this.mix));
       if (muted || this.blocked) this.player.mute();
       else this.player.unMute();
     } catch {
@@ -159,7 +173,7 @@ export class MusicController {
     this.ownUntil = performance.now() + OWN_MS;
     const { volume, muted } = usePartyUi.getState();
     try {
-      this.player?.setVolume(Math.round(volume));
+      this.player?.setVolume(Math.round(volume * this.mix));
       if (!muted) this.player?.unMute();
       if (this.music?.current && this.music.playing) this.player?.playVideo();
     } catch {

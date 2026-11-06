@@ -276,7 +276,7 @@ function MusicTab({ gear }: { gear: Record<PartyRole, boolean> }) {
           ))}
         </ol>
       )}
-      <p className="hint party-note">Videos play in YouTube's own player, which stays on screen while it plays. Everyone hears the same thing at the same point. Lights don't react to the sound.</p>
+      <p className="hint party-note">Videos play in YouTube's own player, which stays on screen while it plays. Everyone hears the same thing at the same point, louder beside the speakers and quieter as you walk away (switch that off with Fade). Lights don't react to the sound.</p>
     </div>
   );
 }

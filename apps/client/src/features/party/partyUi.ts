@@ -14,29 +14,31 @@ interface PartyUi {
   message: string | null;
   volume: number;
   muted: boolean;
+  /** The music gets quieter the further your character is from the speakers (on by default). */
+  fade: boolean;
 }
 
 /** (not "cg.music": that one is the lo-fi background music switch) */
 const KEY = "cg.party.music";
 
-function loadPrefs(): Pick<PartyUi, "volume" | "muted"> {
+function loadPrefs(): Pick<PartyUi, "volume" | "muted" | "fade"> {
   try {
-    const p = JSON.parse(localStorage.getItem(KEY) ?? "null") as { volume?: number; muted?: boolean } | null;
-    if (p) return { volume: Number.isFinite(p.volume) ? Math.min(100, Math.max(0, p.volume!)) : 60, muted: Boolean(p.muted) };
+    const p = JSON.parse(localStorage.getItem(KEY) ?? "null") as { volume?: number; muted?: boolean; fade?: boolean } | null;
+    if (p) return { volume: Number.isFinite(p.volume) ? Math.min(100, Math.max(0, p.volume!)) : 60, muted: Boolean(p.muted), fade: p.fade !== false };
   } catch {
     // no saved settings, or no storage here
   }
-  return { volume: 60, muted: false };
+  return { volume: 60, muted: false, fade: true };
 }
 
 export const usePartyUi = create<PartyUi>(() => ({ open: false, tab: "lights", listening: false, status: "off", message: null, ...loadPrefs() }));
 
 /** Each player keeps their own volume and mute, on this device. */
-export function setMusicPrefs(prefs: Partial<Pick<PartyUi, "volume" | "muted">>) {
+export function setMusicPrefs(prefs: Partial<Pick<PartyUi, "volume" | "muted" | "fade">>) {
   usePartyUi.setState(prefs);
-  const { volume, muted } = usePartyUi.getState();
+  const { volume, muted, fade } = usePartyUi.getState();
   try {
-    localStorage.setItem(KEY, JSON.stringify({ volume, muted }));
+    localStorage.setItem(KEY, JSON.stringify({ volume, muted, fade }));
   } catch {
     // only a convenience
   }

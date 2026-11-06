@@ -1,9 +1,11 @@
+import { positionAt } from "@cg/shared";
 import { useEffect, useMemo, useRef } from "react";
 import { holdAmbient } from "../../state/music";
-import { partyCmd, useGame } from "../../state/game";
+import { partyCmd, serverNow, useGame } from "../../state/game";
 import { MusicController } from "./musicController";
 import { statusText } from "./PartyPanel";
 import { resetPartyUi, setMusicPrefs, usePartyUi } from "./partyUi";
+import { easeGain, levelAtHeight, musicGain, musicSources } from "./spatialMix";
 
 /**
  * Where the shared music plays on this screen. YouTube's own player sits here in full, with its controls, and
@@ -18,6 +20,7 @@ export function MusicDock() {
   const message = usePartyUi((s) => s.message);
   const volume = usePartyUi((s) => s.volume);
   const muted = usePartyUi((s) => s.muted);
+  const fade = usePartyUi((s) => s.fade);
   const host = useRef<HTMLDivElement>(null);
   const ctrl = useMemo(() => new MusicController(partyCmd), []);
   if (import.meta.env.DEV) Object.assign(window, { __music: ctrl });
@@ -30,6 +33,27 @@ export function MusicDock() {
   }, [showPlayer, ctrl]);
   useEffect(() => ctrl.follow(music), [music, ctrl]);
   useEffect(() => ctrl.setVolume(volume, muted), [volume, muted, ctrl]);
+  // the sound comes from the speakers: it's full beside them and fades as this player's character walks away
+  const view = useGame((s) => s.view);
+  const sources = useMemo(() => (view ? musicSources(view) : []), [view]);
+  useEffect(() => {
+    if (!showPlayer) return;
+    let gain = 1;
+    const step = () => {
+      const { me, life } = useGame.getState();
+      const avatar = me && life ? Object.values(life.avatars).find((a) => a.memberId === me) : undefined;
+      let target = 1;
+      if (fade && avatar) {
+        const at = positionAt(avatar, serverNow());
+        target = musicGain(sources, at.x, at.z, levelAtHeight(at.y));
+      }
+      gain = easeGain(gain, target);
+      ctrl.setMix(gain);
+    };
+    step();
+    const timer = setInterval(step, 250);
+    return () => clearInterval(timer);
+  }, [showPlayer, fade, sources, ctrl]);
   // the lo-fi background music steps aside while this screen plays the party's
   const playing = Boolean(listening && music?.current && music.playing);
   useEffect(() => {
@@ -68,6 +92,9 @@ export function MusicDock() {
         )}
         <button className="btn" onClick={() => setMusicPrefs({ muted: !muted })} aria-pressed={muted}>
           {muted ? "Unmute" : "Mute"}
+        </button>
+        <button className="btn" onClick={() => setMusicPrefs({ fade: !fade })} aria-pressed={fade} title="The music comes from the speakers and gets quieter the further you walk from them">
+          Fade: {fade ? "on" : "off"}
         </button>
         <button className="btn" onClick={() => usePartyUi.setState({ listening: false })}>
           Leave
