@@ -26,6 +26,10 @@ const single = [
   z.object({ t: z.literal("object.place"), level, id: Id, catalogId: z.string().max(40), x: coord, z: coord, rot }),
   z.object({ t: z.literal("object.move"), level, id: Id, x: coord, z: coord, rot }),
   z.object({ t: z.literal("object.remove"), level, id: Id }),
+  /** Sell a piece of furniture: it goes, and its resale value (a share of the price) comes back. */
+  z.object({ t: z.literal("object.sell"), level, id: Id }),
+  /** Buy back what was just sold (what Undo does after a sale) at the price it fetched. */
+  z.object({ t: z.literal("object.restore"), level, id: Id, catalogId: z.string().max(40), x: coord, z: coord, rot }),
   z.object({ t: z.literal("opening.place"), level, id: Id, catalogId: z.string().max(40), dir, x: coord, z: coord, flip: z.boolean() }),
   z.object({ t: z.literal("opening.move"), level, id: Id, dir, x: coord, z: coord, flip: z.boolean() }),
   z.object({ t: z.literal("opening.remove"), level, id: Id }),

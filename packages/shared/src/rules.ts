@@ -152,6 +152,13 @@ export function openingProblem(level: Level, item: OpeningItem, at: Pick<PlacedO
   return null;
 }
 
+/** The share of its price that furniture sells for. */
+export const RESALE = 0.75;
+/** What a piece of furniture sells for. */
+export const resaleValue = (item: Pick<FurnitureItem, "price">) => Math.floor(item.price * RESALE);
+/** How many recent sales are remembered for Undo. */
+const SOLD_KEPT = 40;
+
 const idTaken = (bp: Blueprint, id: string) => bp.levels.some((l) => l.objects[id] || l.openings[id]);
 
 /** Is there anything at all on this floor? */
@@ -277,6 +284,33 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
       return { ok: true, blueprint: withLevel(bp, op.level, { ...level, objects }, -(cat.furniture.get(gone.catalogId)?.price ?? 0)) };
     }
 
+    case "object.sell": {
+      const gone = level.objects[op.id];
+      if (!gone) return fail("not-found");
+      const item = cat.furniture.get(gone.catalogId);
+      if (!item) return fail("unknown-item");
+      const objects = { ...level.objects };
+      delete objects[op.id];
+      const sold = Object.entries({ ...bp.sold, [op.id]: gone.catalogId }).slice(-SOLD_KEPT);
+      const next = withLevel(bp, op.level, { ...level, objects }, -resaleValue(item));
+      return { ok: true, blueprint: { ...next, sold: Object.fromEntries(sold) } };
+    }
+
+    case "object.restore": {
+      // only what was really sold, and only once
+      if (bp.sold?.[op.id] !== op.catalogId) return fail("not-found");
+      const item = cat.furniture.get(op.catalogId);
+      if (!item) return fail("unknown-item");
+      if (idTaken(bp, op.id)) return fail("id-taken");
+      const problem = placementProblem(bp, level, item, op, null, cat);
+      if (problem) return fail(problem);
+      const placed: PlacedObject = { id: op.id, catalogId: op.catalogId, x: op.x, z: op.z, rot: op.rot };
+      const next = withLevel(bp, op.level, { ...level, objects: { ...level.objects, [op.id]: placed } }, resaleValue(item));
+      const { [op.id]: _bought, ...sold } = bp.sold ?? {};
+      const { sold: _old, ...rest } = next;
+      return { ok: true, blueprint: Object.keys(sold).length ? { ...rest, sold } : rest };
+    }
+
     case "opening.place": {
       const item = cat.openings.get(op.catalogId);
       if (!item) return fail("unknown-item");
@@ -309,7 +343,7 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
 }
 
 /**
- * Apply an edit. Furniture, doors and windows cost their catalog price and give it back when they go (walls,
+ * Apply an edit. Furniture, doors and windows cost their catalog price and give it back when they go (furniture that's sold fetches its resale value instead; walls,
  * floors and roofs are free), and an edit that spends more than the house has is turned down. `accepted` is for
  * edits from the log, which the server already took: they always go through, even if a price changed since.
  */

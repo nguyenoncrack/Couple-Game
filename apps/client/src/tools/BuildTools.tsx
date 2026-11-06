@@ -8,6 +8,7 @@ import {
   newId,
   openingProblem,
   placementProblem,
+  resaleValue,
   rotatedSize,
   STOREY,
   cellKey,
@@ -283,8 +284,15 @@ export function deleteSelected() {
   if (!s.selection) return;
   const id = s.selection;
   select(null);
-  if (s.view?.levels[floorNow()]?.openings[id]) submit({ t: "opening.remove", level: floorNow(), id });
-  else submit({ t: "object.remove", level: floorNow(), id });
+  const level = s.view?.levels[floorNow()];
+  if (level?.openings[id]) {
+    submit({ t: "opening.remove", level: floorNow(), id });
+    return;
+  }
+  // furniture is sold, for a share of its price (Undo buys it back for the same)
+  const item = catalog.furniture.get(level?.objects[id]?.catalogId ?? "");
+  if (item && submit({ t: "object.sell", level: floorNow(), id })) toast(`Sold ${item.name} for ${resaleValue(item).toLocaleString()} coins.`);
+  else if (!item) submit({ t: "object.remove", level: floorNow(), id });
 }
 
 export function BuildTools() {

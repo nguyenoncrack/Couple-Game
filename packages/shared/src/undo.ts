@@ -77,6 +77,12 @@ function inverseSingle(bp: Blueprint, op: SingleOp, cat: Catalog): SingleOp[] {
       const o = level.objects[op.id];
       return o ? [{ t: "object.place", level: L, ...o }] : [];
     }
+    case "object.sell": {
+      const o = level.objects[op.id];
+      return o ? [{ t: "object.restore", level: L, ...o }] : [];
+    }
+    case "object.restore":
+      return [{ t: "object.sell", level: L, id: op.id }];
     case "opening.place":
       return [{ t: "opening.remove", level: L, id: op.id }];
     case "opening.move": {
@@ -135,6 +141,8 @@ export function undoCheck(bp: Blueprint, op: Op, cat: Catalog = defaultCatalog):
       case "object.place":
       case "object.move":
       case "object.remove":
+      case "object.sell":
+      case "object.restore":
         parts.push(level.objects[s.id] ?? null);
         break;
       case "opening.place":
