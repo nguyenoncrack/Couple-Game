@@ -70,6 +70,11 @@ export interface Blueprint {
   levels: Level[];
   /** The household's coins: furniture, doors and windows cost their price and give it back when they go. */
   funds: number;
+  /**
+   * Furniture sold lately (its ID and what it was), so that Undo can buy it back for what it sold for, and only
+   * that. The last few dozen; missing in houses that have never sold anything.
+   */
+  sold?: Record<string, string>;
 }
 
 export const emptyLevel = (): Level => ({ walls: {}, tiles: {}, objects: {}, openings: {}, roofs: {} });

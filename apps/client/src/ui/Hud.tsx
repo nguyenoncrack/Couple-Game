@@ -1,4 +1,4 @@
-import { catalog, cookingDone, costOf, enclosedCells, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
+import { catalog, cookingDone, costOf, enclosedCells, RESALE, resaleValue, starterHouseOp, type FurnitureItem, type OpeningItem } from "@cg/shared";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { WallMode } from "../render/House";
@@ -575,6 +575,8 @@ function SelectionCard() {
   if (!selection || !o) return null;
   const opening = catalog.openings.get(o.catalogId);
   const item = opening ?? catalog.furniture.get(o.catalogId);
+  // doors and windows come back at full price; furniture sells for its resale value
+  const back = item ? (opening ? item.price : resaleValue(item)) : 0;
   return (
     <Floating id="selection" title={item?.name ?? "Selected"} className="selection-card">
       <div className="sel-head">
@@ -596,8 +598,9 @@ function SelectionCard() {
             </>
           )}
         </button>
-        <button className="btn danger" onClick={deleteSelected} title={item ? `Gives back ${item.price.toLocaleString()} coins` : undefined}>
-          <Icon.trash /> Remove{item ? <span className="refund">+{item.price.toLocaleString()}</span> : null} <kbd>Del</kbd>
+        <button className="btn danger" onClick={deleteSelected} title={item ? `${opening ? "Gives back" : `Sells for ${Math.round(RESALE * 100)}% of the price:`} ${back.toLocaleString()} coins` : undefined}>
+          <Icon.trash /> {opening ? "Remove" : "Sell"}
+          {item ? <span className="refund">+{back.toLocaleString()}</span> : null} <kbd>Del</kbd>
         </button>
       </div>
     </Floating>

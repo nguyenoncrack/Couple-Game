@@ -267,6 +267,45 @@ describe("shared building", () => {
     expect((await b.next("applied")).version).toBe(2);
   });
 
+  it("sells furniture for its resale value, tells the partner, and lets Undo buy it back for the same", async () => {
+    const { a, b } = await couple();
+    await a.connect();
+    await b.connect();
+    a.op("opA0000001", { t: "object.place", level: 0, id: "sofa000001", catalogId: "sofa_cozy", x: 2, z: 2, rot: 0 });
+    await b.next("applied");
+    a.op("opA0000002", { t: "object.sell", level: 0, id: "sofa000001" });
+    expect((await b.next("applied", (m) => m.clientOpId === "opA0000002")).op.t).toBe("object.sell");
+    // a second sale of the same thing is turned down
+    a.op("opA0000003", { t: "object.sell", level: 0, id: "sofa000001" });
+    expect((await a.next("rejected")).reason).toBe("not-found");
+    // buying back what was never sold is turned down
+    a.op("opA0000004", { t: "object.restore", level: 0, id: "never000001", catalogId: "sofa_cozy", x: 6, z: 6, rot: 0 });
+    expect((await a.next("rejected")).reason).toBe("not-found");
+    // Undo: the sofa is back, for what it sold for
+    a.op("opA0000005", { t: "object.restore", level: 0, id: "sofa000001", catalogId: "sofa_cozy", x: 2, z: 2, rot: 0 });
+    await b.next("applied", (m) => m.clientOpId === "opA0000005");
+    await a.disconnect();
+    // bought for 650, sold for 487, bought back for 487: the house is out only the original price, and it's all saved
+    const again = new Player(`${base.replace("http", "ws")}/ws`, a.houseId, a.cookie);
+    const welcome = await again.connect();
+    if (welcome.sync.kind !== "snapshot") throw new Error("expected a snapshot");
+    expect(welcome.sync.state.blueprint.funds).toBe(STARTING_FUNDS - 650);
+    expect(welcome.sync.state.blueprint.levels[0]!.objects["sofa000001"]).toBeDefined();
+    await again.disconnect();
+  });
+
+  it("won't let one player sell what the other is holding", async () => {
+    const { a, b } = await couple();
+    await a.connect();
+    await b.connect();
+    a.op("opA0000001", { t: "object.place", level: 0, id: "chair00001", catalogId: "armchair_reading", x: 2, z: 2, rot: 0 });
+    await b.next("applied");
+    a.send({ type: "hold", objectId: "chair00001" });
+    await b.next("holds");
+    b.op("opB0000001", { t: "object.sell", level: 0, id: "chair00001" });
+    expect((await b.next("rejected")).reason).toBe("held");
+  });
+
   it("guards a held door however an edit reaches it: in a batch, or by knocking down its wall", async () => {
     const { a, b } = await couple();
     await a.connect();
