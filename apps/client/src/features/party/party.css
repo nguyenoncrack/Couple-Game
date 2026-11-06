@@ -1,0 +1,265 @@
+/* Party panel, button and music dock. */
+.party-button {
+  position: fixed;
+  right: 14px;
+  top: calc(var(--topbar-bottom, 70px) + 10px);
+  z-index: 25;
+  pointer-events: auto;
+  height: 40px;
+}
+.party-button.on {
+  background: linear-gradient(120deg, #ff9ae2, #8ad7ff);
+}
+
+.party-panel {
+  position: fixed;
+  top: calc(var(--topbar-bottom, 70px) + 10px);
+  right: 14px;
+  width: min(340px, calc(100vw - 28px));
+  max-height: calc(100dvh - var(--topbar-bottom, 70px) - 130px);
+  overflow-y: auto;
+  pointer-events: auto;
+  z-index: 26;
+}
+.party-tabs {
+  margin-bottom: 8px;
+}
+.party-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.party-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 15px;
+}
+.party-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: #c24bd6;
+}
+.party-switch {
+  justify-content: flex-start;
+}
+.party-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.party-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.party-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--glass-fill, rgb(255 255 255 / 0.4));
+  text-align: left;
+  font-size: 15px;
+}
+.party-preset.active {
+  border-color: var(--ink);
+  background: #fff3cc;
+}
+.party-preset-bar {
+  height: 8px;
+  border-radius: 4px;
+}
+.party-colors {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.party-color {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid rgb(23 33 43 / 0.35);
+  padding: 0;
+}
+.party-color.active {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--ink);
+}
+.party-dances {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.party-note {
+  margin: 4px 0 0;
+}
+.party-close {
+  margin-top: 10px;
+  width: 100%;
+}
+.party-listen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.party-status {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.party-status.playing {
+  color: #1f8f4e;
+}
+.party-status.blocked,
+.party-status.error {
+  color: #b3422f;
+}
+.party-problem {
+  margin: 0;
+  font-size: 14px;
+  color: #b3422f;
+}
+.party-add {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.party-add input {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 7px 12px;
+  border: var(--border);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.55);
+  font: inherit;
+}
+.party-now {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.party-now-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.party-transport {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.party-thumb {
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #222;
+}
+.party-thumb.small {
+  width: 56px;
+}
+.party-by {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.party-queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+.party-queue li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.party-queue-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+}
+.party-x {
+  padding: 2px 10px;
+}
+
+.party-enable {
+  position: fixed;
+  left: 14px;
+  bottom: 96px;
+  z-index: 25;
+  pointer-events: auto;
+  height: 40px;
+}
+.party-dock {
+  position: fixed;
+  left: 14px;
+  bottom: 96px;
+  z-index: 27;
+  width: min(400px, calc(100vw - 28px));
+  padding: 8px;
+  border: var(--border);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--glass-blur);
+  pointer-events: auto;
+}
+/* YouTube asks for at least 200 x 200 and room for the controls; nothing is ever drawn over this box */
+.party-player {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 200px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111;
+}
+.party-player iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+.party-dock-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.party-dock-bar .party-status {
+  flex: 1 1 100%;
+}
+.party-dock-bar .btn {
+  padding: 4px 12px;
+}
+.party-enable-now {
+  margin-top: 8px;
+  width: 100%;
+}
+
+/* (above the toolbar along the bottom of the screen, which is a little taller on a narrow one) */
+@media (max-width: 640px) {
+  .party-dock,
+  .party-enable {
+    bottom: 108px;
+  }
+}
+
+.party-idle {
+  margin: 4px 6px 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+}

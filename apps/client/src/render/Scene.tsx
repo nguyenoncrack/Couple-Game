@@ -11,6 +11,7 @@ import { PartnerPresence } from "./Partner";
 import { FOG } from "./pencil";
 import { Scenery } from "./Scenery";
 import { Lifts } from "./Lifts";
+import { PartyLights } from "./party/PartyLights";
 import { Storeys } from "./Storeys";
 import { Sunlight } from "./Sunlight";
 
@@ -39,6 +40,7 @@ export function Scene() {
       {mode === "live" ? <LiveTools /> : <BuildTools />}
       <Characters />
       <LifeProps />
+      <PartyLights />
       <PartnerPresence />
       <Sunlight w={lot.w} d={lot.d} />
     </Canvas>

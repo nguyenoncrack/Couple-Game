@@ -8,6 +8,7 @@ import { canSee, screenOf, seatsFacing, slotsFor, slotsOf, stationSlots, tvFacin
 import { gamingSpots } from "./gaming";
 import { dealBlackjack, finishBlackjack, playBlackjack, type BlackjackCommand } from "./blackjack";
 import { FreeWill } from "./autonomy";
+import { applyParty, isDance, partyGear, restoredParty, savedParty, type PartyCmd } from "../party";
 import { needsAt, START_NEEDS } from "./needs";
 import { buildNav, canStep, findRoute, levelOf, liftStops, linkBetween, linksOf, nearestWalkable, roomAt, slide, walkable, type Cell, type Point, type Spot } from "./nav";
 import {
@@ -105,6 +106,8 @@ const GAP: Record<keyof typeof TOGETHER_MS, number> = {
 };
 /** Quick things that are over by themselves after a while. */
 const brief = (u: Use | null | undefined) => u?.action === "toilet" || u?.action === "wash";
+/** Dancing where they stood, rather than on a dance floor: not kept when the house is saved. */
+const dancingInPlace = (u: Use | null | undefined) => u?.action === "groove" && !u.objectId;
 
 const center = ([x, z]: Cell): [number, number] => [x + 0.5, z + 0.5];
 /** The middle of a cell on a floor, as a path point (no height on the ground floor, as it always was). */
@@ -389,6 +392,39 @@ export class Life {
       return reachable.length ? this.goUse(a, bp, on(reachable, index), now) : "unreachable";
     }
     return this.goUse(a, bp, on(slotsOf(o, action, this.cat), index), now);
+  }
+
+  /**
+   * Dance: on a dance-floor tile (`objectId`), or right where you are. Already dancing there, it just changes the
+   * dance. Starting one ends whatever you were doing (a seat, the stove, the sink) like any other order.
+   */
+  dance(memberId: string, bp: Blueprint, objectId: string | null, move: string, now: number): LifeReject | null {
+    const a = this.state.avatars[memberId];
+    if (!a || !isDance(move)) return "nothing-to-do";
+    if (a.use?.ride?.on) return "in-lift";
+    if (objectId) {
+      const found = this.find(bp, objectId);
+      if (!found || !slotsOf(found.o, "groove", this.cat).length) return "nothing-to-do";
+      if (a.use?.action === "groove" && a.use.objectId === objectId) {
+        a.use = { ...a.use, move };
+        return null;
+      }
+      return this.goUse(a, bp, on(slotsOf(found.o, "groove", this.cat), found.index), now, { move });
+    }
+    if (a.use?.action === "groove") {
+      a.use = { ...a.use, move };
+      return null;
+    }
+    this.stop(memberId, now);
+    // right here: where the walk (if they were walking) ends
+    const end = a.path[a.path.length - 1]!;
+    a.use = { objectId: null, action: "groove", slot: 0, pose: { x: end[0], z: end[1], y: 0, face: a.face }, move };
+    return null;
+  }
+
+  /** A member of the house works the party panel: the lights, or the shared music. Not an order to anyone's character. */
+  party(memberId: string, bp: Blueprint, cmd: PartyCmd, now: number, gear = partyGear(bp, this.cat)) {
+    return applyParty(this.state, cmd, { memberId, now, newId: this.makeId, gear });
   }
 
   /** Card choices belong to an arrived table participant and the round currently visible to them. */
@@ -1202,6 +1238,8 @@ export class Life {
     const state: LifeState = { avatars: {}, cooking: null, dishes: (saved.dishes ?? []).map((d) => ({ ...d, servedAt: d.servedAt ?? now })) };
     if (saved.fridge) state.fridge = saved.fridge.map((l) => ({ ...l }));
     if (saved.blackjack) state.blackjack = structuredClone(saved.blackjack);
+    const party = restoredParty(saved.party);
+    if (party) state.party = party;
     // lifts stopped where they were going, doors shut; anyone in one carries on to their floor
     if (saved.lifts) state.lifts = Object.fromEntries(Object.entries(saved.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }]));
     for (const a of Object.values(saved.avatars ?? {})) {
@@ -1213,7 +1251,7 @@ export class Life {
           ? a.use.objectId
             ? { ...a.use, action: "sit" as const, dishId: undefined, until: undefined }
             : null
-          : together(a.use) || brief(a.use)
+          : together(a.use) || brief(a.use) || dancingInPlace(a.use)
             ? null
             : a.use;
       // the rest of a trip planned on the old clock is dropped: they get to their floor and stand
@@ -1241,7 +1279,7 @@ export class Life {
         ...a,
         path: [end],
         startedAt: 0,
-        use: together(a.use) || brief(a.use) ? null : settled || a.use?.action !== "eat" ? a.use : null,
+        use: together(a.use) || brief(a.use) || dancingInPlace(a.use) ? null : settled || a.use?.action !== "eat" ? a.use : null,
         ...(a.needs ? { needs: { v: needsAt(a, now), at: 0, live: false } } : {}),
         ...(a.auto ? { auto: { need: a.auto.need, since: 0 } } : {}),
       };
@@ -1254,6 +1292,7 @@ export class Life {
       dishes: this.state.dishes.map((d) => ({ ...d })),
       ...(this.state.fridge ? { fridge: this.state.fridge.map((l) => ({ ...l })) } : {}),
       ...(this.state.blackjack ? { blackjack: structuredClone(this.state.blackjack) } : {}),
+      ...(this.state.party ? { party: savedParty(this.state.party, now) } : {}),
       ...(this.state.lifts ? { lifts: Object.fromEntries(Object.entries(this.state.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }])) } : {}),
     };
   }
@@ -1264,7 +1303,7 @@ export class Life {
  * they stood, since from then on they go differently. One that's turned down, or finds nothing to do, puts them
  * back, so it leaves the state just as it was, like everything else it does.
  */
-const CHANGES = ["walk", "use", "cards", "move", "stop", "social", "cook", "help", "eat", "takeOut", "store", "ride", "tick", "onBlueprint"] as const;
+const CHANGES = ["walk", "use", "dance", "cards", "move", "stop", "social", "cook", "help", "eat", "takeOut", "store", "ride", "tick", "onBlueprint"] as const;
 for (const name of CHANGES) {
   const change = Life.prototype[name] as (this: Life, ...args: unknown[]) => LifeReject | boolean | null;
   Object.defineProperty(Life.prototype, name, {

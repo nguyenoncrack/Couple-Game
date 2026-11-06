@@ -20,6 +20,8 @@ import { Floating } from "./Floating";
 import { Phone } from "./Phone";
 import { MaterialPanel } from "../features/buildMaterials/MaterialPanel";
 import { FloorPicker } from "./FloorPicker";
+import { MusicDock } from "../features/party/MusicDock";
+import { PartyHud } from "../features/party/PartyPanel";
 import { colorsOf, familyOf, groupVariants, VariantSwatches } from "./VariantSwatches";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
@@ -46,6 +48,8 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       {firstPerson ? <FirstPersonHint /> : <CameraButtons />}
       {live ? <LiveBar /> : <Toolbar />}
       <ChatPanel />
+      <PartyHud />
+      <MusicDock />
       <WelcomeBack />
       <Toasts />
       {status === "asleep" && <Asleep onLeave={onLeave} />}
@@ -399,6 +403,7 @@ const CATEGORIES: { id: Category; label: string }[] = [
   { id: "decor", label: "Decor" },
   { id: "outdoor", label: "Outdoor" },
   { id: "entertainment", label: "Entertainment" },
+  { id: "party", label: "Party" },
   { id: "office", label: "Office" },
   { id: "openings", label: "Doors & windows" },
 ];

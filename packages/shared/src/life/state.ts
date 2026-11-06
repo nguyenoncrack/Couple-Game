@@ -3,6 +3,7 @@ import { STOREY } from "../blueprint";
 import type { Rot } from "../grid";
 import type { Auto } from "./autonomy";
 import type { BlackjackRound } from "./blackjack";
+import type { PartyState } from "../party/definitions";
 import type { Needs } from "./needs";
 import { levelOf, type Point, type Spot } from "./nav";
 
@@ -84,6 +85,8 @@ export interface Use {
   consoleId?: string;
   /** Taking the lift (objectId is the lift). */
   ride?: Ride;
+  /** Dancing: which dance (see party/definitions.ts). */
+  move?: string;
 }
 
 export interface Avatar {
@@ -146,6 +149,8 @@ export interface LifeState {
   blackjack?: Record<string, BlackjackRound>;
   /** Each lift's car, by the lift's id. Optional for old saves (and houses with no lift). */
   lifts?: Record<string, Lift>;
+  /** The party: lights and the shared music. Optional for old saves (and houses that never had one). */
+  party?: PartyState;
 }
 
 /**

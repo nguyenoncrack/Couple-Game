@@ -1,4 +1,4 @@
-import { actionsOf, catalog, floorOf, isLift, liftStops, positionAt, slotsOf, tvFacing, type Action, type Level, type Leftover, type PlacedObject, type Recipe, STOREY, type Together } from "@cg/shared";
+import { actionsOf, catalog, DANCES, floorOf, isLift, liftStops, positionAt, slotsOf, tvFacing, type Action, type Level, type Leftover, type PlacedObject, type Recipe, STOREY, type Together } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -7,6 +7,7 @@ import { cameraGestureActive } from "../render/CameraRig";
 import { FLOOR_Y, Furniture, objectTransform, Walls } from "../render/House";
 import { Roofs } from "../render/Roof";
 import { openRoofs } from "../render/Storeys";
+import { openParty } from "../features/party/partyUi";
 import { act, openChat, serverNow, sharePresence, useGame } from "../state/game";
 import { together } from "../state/together";
 import { floorName } from "../ui/FloorPicker";
@@ -31,8 +32,12 @@ const VERB: Record<Action, string> = {
   shower: "Take a shower",
   toilet: "Use the toilet",
   wash: "Wash your hands",
+  groove: "Dance",
+  dj: "Work the decks",
 };
 
+/** What an item does for a party (see party/definitions.ts). */
+const partyRoles = (o: PlacedObject) => catalog.furniture.get(o.catalogId)?.party ?? [];
 const isFridge = (o: PlacedObject) => Boolean(catalog.furniture.get(o.catalogId)?.fridge);
 const liftIs = (o: PlacedObject) => isLift(catalog.furniture.get(o.catalogId));
 
@@ -43,7 +48,7 @@ const offers = (level: Level, o: PlacedObject): Action[] => [...new Set(actionsO
 /** Open what you can do with a piece of furniture, if anything. True if there's a menu. */
 export function openObjectMenu(level: Level, id: string) {
   const o = level.objects[id];
-  if (!o || (!offers(level, o).length && !isFridge(o) && !liftIs(o))) return false;
+  if (!o || (!offers(level, o).length && !isFridge(o) && !liftIs(o) && !partyRoles(o).length)) return false;
   const { position, item } = objectTransform(o);
   const h = (item.model as { height?: unknown }).height;
   const base = useGame.getState().floor * STOREY;
@@ -196,7 +201,14 @@ function Menu() {
           ? { label: "Stop cuddling", run: () => act({ do: "social", action: "uncuddle" }) }
           : { label: "Cuddle up ♥", run: () => act({ do: "social", action: "cuddle" }) },
       );
+    // dance floors offer each dance; party gear opens the party panel
+    if (offers(level, o).includes("groove"))
+      for (const d of DANCES) options.push({ group: "Dance", label: d.name, run: () => act({ do: "dance", objectId: o.id, move: d.id }) });
+    const roles = partyRoles(o);
+    if (roles.includes("lights") || roles.includes("dance")) options.push({ group: "Party", label: "Light controls…", run: () => { useGame.setState({ menu: null }); openParty("lights"); } });
+    if (roles.includes("music")) options.push({ group: "Party", label: "Music…", run: () => { useGame.setState({ menu: null }); openParty("music"); } });
     for (const action of offers(level, o)) {
+      if (action === "groove") continue;
       if (action === "cook" || action === "prep") {
         if (life.cooking) {
           const name = catalog.recipes.get(life.cooking.recipeId)?.name ?? "the meal";

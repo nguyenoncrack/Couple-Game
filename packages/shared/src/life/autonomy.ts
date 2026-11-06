@@ -36,6 +36,7 @@ const MAX_MS: Partial<Record<LifeAction, number>> = {
   swim: 3 * 60_000,
   pingpong: 3 * 60_000,
   bathe: 2 * 60_000,
+  groove: 3 * 60_000,
 };
 /** How often a character at something checks whether to stop. */
 const CHECK_MS = 6000;
@@ -246,7 +247,15 @@ export class FreeWill {
       case "bladder":
         return use("toilet");
       case "fun":
-        return this.shuffle([use("watch"), use("play"), use("swim"), use("pingpong"), use("lounge"), this.withPartner(a, bp, FOR_FUN, now)]).flat();
+        // they only head for the dance floor when the party's on: lights up or music playing
+        const party = this.life.state.party;
+        const choices = [use("watch"), use("play"), use("swim"), use("pingpong"), use("lounge"), this.withPartner(a, bp, FOR_FUN, now)];
+        // (added only when it's there: a house without a party shuffles just as it always did)
+        if (party && (party.lights.on || party.music.playing)) {
+          const dancing = use("groove");
+          if (dancing.length) choices.push(dancing);
+        }
+        return this.shuffle(choices).flat();
       case "social":
         return this.withPartner(a, bp, FOR_COMPANY, now);
     }

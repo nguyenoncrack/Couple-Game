@@ -14,6 +14,8 @@ const KEY = "cg.music";
 
 let audio: HTMLAudioElement | null = null;
 let wanted = false;
+/** Held back while a shared party video is playing on this screen: two tunes at once helps nobody. */
+let held = false;
 let fade = 0;
 const listeners = new Set<() => void>();
 
@@ -43,7 +45,7 @@ function fadeTo(target: number, then?: () => void) {
 }
 
 function play() {
-  if (!wanted || !on) return;
+  if (!wanted || !on || held) return;
   if (!audio) {
     audio = new Audio(SRC);
     audio.loop = true;
@@ -80,6 +82,14 @@ export function wantMusic() {
     window.removeEventListener("keydown", kick);
     pause();
   };
+}
+
+/** Pause the lo-fi music while party music plays here, and bring it back after. */
+export function holdAmbient(hold: boolean) {
+  if (hold === held) return;
+  held = hold;
+  if (hold) pause();
+  else play();
 }
 
 export function setMusic(next: boolean) {

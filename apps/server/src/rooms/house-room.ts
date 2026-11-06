@@ -18,6 +18,9 @@ import {
   type Presence,
   type ServerMsg,
   type VisitResult,
+  pauseMusic,
+  PARTY_TEXT,
+  type PartyCmd,
 } from "@cg/shared";
 import type { HouseRow, HouseStore, MemberRow } from "../persistence/store";
 import { RateLimiter } from "../rate-limit";
@@ -75,6 +78,8 @@ export class HouseRoom {
   private presence = new Map<string, Presence>();
   /** Per member: a few messages in a row, then one every two seconds. */
   private chatLimit = new RateLimiter(6, 0.5);
+  /** The party panel: a slider can send a lot, but not a flood. */
+  private partyLimit = new RateLimiter(30, 6);
   private queue: Promise<unknown> = Promise.resolve();
   private members: MemberRow[] = [];
   private snapshotVersion: number;
@@ -227,7 +232,11 @@ export class HouseRoom {
     // their character carries on by itself while anyone's here (with nobody left, everything waits)
     if (this.lifeOnline()) this.lifeChanged();
     else this.scheduleLife();
-    if (this.peers.size === 0) this.stopLife();
+    if (this.peers.size === 0) {
+      // the music waits where it was for whoever comes back
+      if (pauseMusic(this.life.state, this.now()) && !this.lifeSave) this.lifeSave = setTimeout(() => void this.saveLife(), 0);
+      this.stopLife();
+    }
   }
 
   submit(peer: Peer, clientOpId: string, op: Op) {
@@ -333,6 +342,7 @@ export class HouseRoom {
     const now = this.now();
     const bp = this.blueprint;
     const id = peer.memberId;
+    if (intent.do === "party") return this.party(peer, intent.cmd, now);
     // walking into a wall in first person isn't worth a message; you just don't go anywhere
     let quiet = false;
     // an order: the character is the player's again, and anyone acting on their own makes way
@@ -367,6 +377,8 @@ export class HouseRoom {
           return this.life.store(bp, intent.dishId, now);
         case "social":
           return this.life.social(id, bp, intent.action, now);
+        case "dance":
+          return this.life.dance(id, bp, intent.objectId, intent.move, now);
       }
     });
     if (quiet) return;
@@ -375,6 +387,24 @@ export class HouseRoom {
       this.life.syncTableGames(bp);
       this.lifeChanged();
     }
+  }
+
+  /**
+   * A member works the party panel: lights, or the shared music. It's the house's, not an order to their character,
+   * so it doesn't take over what they're doing; the server checks the house has the gear and keeps the queue sane.
+   */
+  private party(peer: Peer, cmd: PartyCmd, now: number) {
+    if (!this.partyLimit.take(peer.memberId)) {
+      peer.send({ type: "error", code: "rate-limited", message: "Slow down a little." });
+      return;
+    }
+    this.life.freeWill?.noteInput(peer.memberId, now);
+    const { reject, changed } = this.life.party(peer.memberId, this.blueprint, cmd, now);
+    if (reject) {
+      peer.send({ type: "error", code: reject, message: PARTY_TEXT[reject] });
+      return;
+    }
+    if (changed) this.lifeChanged();
   }
 
   /**

@@ -10,6 +10,7 @@ import { HIP, THIGH, TORSO, SHOULDER, ARM, torso, arm, thigh, shin, looksFor, cu
 import { KitMesh } from "./KitMesh";
 import { controller, paddle } from "./entertainmentModels";
 import { pencilMaterial } from "./pencil";
+import { djPose, groovePose } from "./party/dancePoses";
 import { NeedThought } from "../ui/Needs";
 
 /**
@@ -58,7 +59,7 @@ const ease = (from: number, to: number, k: number) => from + (to - from) * k;
 const EYE = new THREE.Vector3(0, TORSO + 0.24, 0.05);
 const eyeAt = new THREE.Vector3();
 
-export function poseFor(activity: string, seatY: number | null, t: number, standingTarget: boolean, us: WithSomeone = { since: 0, lead: true }): Pose {
+export function poseFor(activity: string, seatY: number | null, t: number, standingTarget: boolean, us: WithSomeone = { since: 0, lead: true }, move?: string): Pose {
   const s = t / 1000;
   const since = us.since / 1000;
   switch (activity) {
@@ -74,6 +75,10 @@ export function poseFor(activity: string, seatY: number | null, t: number, stand
         roll: 0,
       };
     }
+    case "groove":
+      return groovePose(move, s);
+    case "dj":
+      return djPose(s);
     case "sit":
       return {
         hip: (seatY ?? 0.45) + 0.05,
@@ -431,7 +436,7 @@ function Character({ avatar, partner, member, mine }: { avatar: Avatar; partner:
     g.rotation.y = turnToward(g.rotation.y, yaw, snap ? 1 : 1 - Math.exp(-dt * 10));
 
     const u = avatar.use;
-    const pose = poseFor(activity, posed ? u!.pose!.y : null, t, !posed, { since: t - (u?.startsAt ?? t), lead: Boolean(u?.lead) });
+    const pose = poseFor(activity, posed ? u!.pose!.y : null, t, !posed, { since: t - (u?.startsAt ?? t), lead: Boolean(u?.lead) }, u?.move);
     if (activity === "pingpong" && avatar.use?.objectId) {
       const state = useGame.getState();
       const moment = state.life && pingPongMoment(state.life, avatar.use.objectId, t, new Set(state.members.filter((m) => m.online).map((m) => m.id)));

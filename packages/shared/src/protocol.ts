@@ -5,6 +5,7 @@ import { ACTIONS } from "./catalog";
 import type { Rot } from "./grid";
 import type { LifeReject } from "./life/engine";
 import { SOCIAL, type LifeState } from "./life/state";
+import { DANCE_IDS, PartyCmd } from "./party/definitions";
 import { Id, Op, type LoggedOp } from "./ops";
 import type { VisitResult } from "./visits";
 
@@ -44,6 +45,10 @@ export const LifeIntent = z.discriminatedUnion("do", [
   z.object({ do: z.literal("store"), dishId: Id }),
   /** Hug or kiss your partner, or cuddle up (and stop) when you're both in the same bed. */
   z.object({ do: z.literal("social"), action: z.enum(SOCIAL) }),
+  /** Dance on a dance-floor tile, or right where you are (objectId null); or change dance if you already are. */
+  z.object({ do: z.literal("dance"), objectId: Id.nullable(), move: z.enum(DANCE_IDS) }),
+  /** The party panel: lights, and the shared music queue. Not an order to your character. */
+  z.object({ do: z.literal("party"), cmd: PartyCmd }),
 ]);
 export type LifeIntent = z.infer<typeof LifeIntent>;
 

@@ -3,6 +3,8 @@ import { surfaceMetadata, withBuildMaterials } from "../materials/catalog";
 import furnitureData from "./furniture.json";
 import furnitureMoreData from "./furniture-more.json";
 import furnitureExpansionData from "./furniture-expansion.json";
+import partyData from "./party.json";
+import { PARTY_ROLES } from "../party/definitions";
 import openingsData from "./openings.json";
 import piecesData from "./pieces.json";
 import recipesData from "./recipes.json";
@@ -19,7 +21,7 @@ const hex = z.string().regex(/^#[0-9a-f]{6}$/i);
  * Things a character can do with a piece of furniture. Station actions are where recipe steps happen. Watching
  * is done from a seat facing a TV (or the floor in front of it, if there's none).
  */
-export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep", "watch", "play", "pingpong", "blackjack", "swim", "bathe", "shower", "toilet", "wash"] as const;
+export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep", "watch", "play", "pingpong", "blackjack", "swim", "bathe", "shower", "toilet", "wash", "groove", "dj"] as const;
 export const STATIONS = ["stove", "counter"] as const;
 
 /**
@@ -48,7 +50,7 @@ const Interaction = z
 const FurnitureItem = z.object({
   id: z.string(),
   name: z.string(),
-  category: z.enum(["living", "bedroom", "kitchen", "bathroom", "decor", "outdoor", "entertainment", "office"]),
+  category: z.enum(["living", "bedroom", "kitchen", "bathroom", "decor", "outdoor", "entertainment", "office", "party"]),
   tags: z.array(z.string().trim().min(1).max(32)).max(12).optional(),
   price: z.number().int().nonnegative(),
   footprint: z.tuple([z.number().int().min(1).max(6), z.number().int().min(1).max(6)]),
@@ -67,6 +69,8 @@ const FurnitureItem = z.object({
    * sofa's seats. Nothing else can be put there.
    */
   walkable: z.array(z.tuple([z.number().int().min(0).max(5), z.number().int().min(0).max(5)])).optional(),
+  /** What the item does for a party night (see party/definitions.ts); the party panel looks for these. */
+  party: z.array(z.enum(PARTY_ROLES)).optional(),
   /** Another colour of this item (its id): the catalog shows them together, as swatches on the one card. */
   variantOf: z.string().optional(),
   /** The colour of its swatch, when it's one of a few colours of an item. */
@@ -178,4 +182,4 @@ export function loadCatalog(raw: { furniture: unknown; openings: unknown; pieces
   };
 }
 
-export const catalog: Catalog = loadCatalog({ furniture: [...furnitureData, ...furnitureMoreData, ...furnitureExpansionData], openings: openingsData, pieces: withBuildMaterials(piecesData), recipes: recipesData });
+export const catalog: Catalog = loadCatalog({ furniture: [...furnitureData, ...furnitureMoreData, ...furnitureExpansionData, ...partyData], openings: openingsData, pieces: withBuildMaterials(piecesData), recipes: recipesData });

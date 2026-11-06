@@ -4,6 +4,7 @@ import { Kit, type BuiltMesh } from "./kit";
 import { BOTANICAL_BUILDERS } from "./botanicalModels";
 import { ENTERTAINMENT_BUILDERS } from "./entertainmentModels";
 import { FURNITURE_BUILDERS } from "./furnitureModels";
+import { PARTY_BUILDERS } from "./party/partyModels";
 import { EXPANSION_BUILDERS } from "../features/furnitureExpansion/models";
 import { pencilMaterial, type Finish } from "./pencil";
 
@@ -120,6 +121,7 @@ const BUILDERS: Record<string, Builder> = {
   ...BOTANICAL_BUILDERS,
   ...FURNITURE_BUILDERS,
   ...EXPANSION_BUILDERS,
+  ...PARTY_BUILDERS,
   sofa: sofaLike(),
   armchair: sofaLike(1),
 
@@ -628,7 +630,9 @@ export function modelFor(item: FurnitureItem, ghost: "ok" | "bad" | null = null,
     const k = new Kit();
     const m: Mat = (tone, finish, alpha) => pencilMaterial(tone, { finish, alpha, ghost: ghost ?? undefined });
     const build = BUILDERS[item.model.kind] ?? fallback;
-    build(k, item.footprint[0], item.footprint[1], active ? { ...item.model, inUse: true } : item.model as Params, m, hashString(item.id));
+    // (a placement preview tells party models to use plain tints for their shader-driven parts)
+    const params = (active || ghost ? { ...item.model, ...(active ? { inUse: true } : {}), ...(ghost ? { ghost: true } : {}) } : item.model) as Params;
+    build(k, item.footprint[0], item.footprint[1], params, m, hashString(item.id));
     out = k.build(Boolean(ghost));
     built.set(key, out);
   }

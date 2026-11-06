@@ -4,6 +4,7 @@ import {
   inverseOp,
   isTogether,
   LIFE_TEXT,
+  PARTY_TEXT,
   localDay,
   newId,
   REJECT_TEXT,
@@ -15,6 +16,7 @@ import {
   type LifeState,
   type MemberInfo,
   type Op,
+  type PartyCmd,
   type Presence,
   type Rot,
   type ServerMsg,
@@ -322,7 +324,7 @@ function handle(msg: ServerMsg) {
       break;
     }
     case "error":
-      if (msg.code === "rate-limited") toast(msg.message);
+      if (msg.code === "rate-limited" || msg.code in PARTY_TEXT) toast(msg.message);
       else console.warn("[server]", msg.code, msg.message);
       if (msg.code === "server") set({ dropReason: msg.message });
       break;
@@ -567,6 +569,11 @@ export function setTool(tool: Tool) {
 }
 
 /** Ask my character to do something; the server answers with new life (or a reason it can't). */
+/** The party panel's lights and shared music: a message to the house, not an order to my character. */
+export function partyCmd(cmd: PartyCmd) {
+  conn?.send({ type: "life", intent: { do: "party", cmd } });
+}
+
 export function act(intent: LifeIntent) {
   set({ menu: null });
   if (intent.do === "social") askedAt = performance.now();
