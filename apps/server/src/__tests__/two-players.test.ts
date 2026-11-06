@@ -1,5 +1,5 @@
 import type { AddressInfo } from "node:net";
-import { DAILY_COINS, DEFAULT_APPEARANCE, CLOSE, localDay, STARTING_FUNDS, STOREY, type ClientMsg, type HouseSummary, type Op, type ServerMsg } from "@cg/shared";
+import { DAILY_COINS, DEFAULT_APPEARANCE, CLOSE, localDay, STARTING_FUNDS, STOREY, needsAt, NEEDS, START_NEEDS, type ClientMsg, type HouseSummary, type Op, type ServerMsg } from "@cg/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createApp } from "../app";
@@ -379,6 +379,28 @@ describe("disconnects and saving", () => {
     expect((await again.next("visit")).visit).toBeNull();
     await again.disconnect();
     await crashed.close();
+  });
+
+  it("keeps both players' needs stable after walk messages with explicit or omitted floors", async () => {
+    const { a, b } = await couple();
+    const wa = await a.connect();
+    await b.connect();
+    for (const [i, level] of [0, undefined].entries()) {
+      a.send({ type: "life", intent: { do: "walk", x: 2 + i, z: 2, ...(level === undefined ? {} : { level }) } });
+      const matches = (m: Extract<ServerMsg, { type: "life" }>) => m.life.avatars[wa.memberId]!.path.at(-1)![0] === 2.5 + i;
+      const first = await a.next("life", matches), second = await b.next("life", matches);
+      expect(first.life).toEqual(second.life);
+      for (const avatar of Object.values(first.life.avatars)) {
+        expect(avatar.needs!.at).toBeGreaterThanOrEqual(wa.now);
+        expect(avatar.needs!.at).toBeLessThanOrEqual(first.now);
+        const values = needsAt(avatar, first.now);
+        for (const need of NEEDS) {
+          expect(Number.isFinite(values[need])).toBe(true);
+          expect(values[need]).toBeGreaterThan(START_NEEDS[need] - 1);
+        }
+      }
+    }
+    await a.disconnect(); await b.disconnect();
   });
 
   it("keeps an away player's character living while their partner's in, and says so in the welcome", async () => {

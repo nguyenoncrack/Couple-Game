@@ -1260,7 +1260,7 @@ export class Life {
 }
 
 /**
- * Everything that can change what someone's doing (each takes the time last) first writes down everyone's needs as
+ * Everything that can change what someone's doing first writes down everyone's needs as
  * they stood, since from then on they go differently. One that's turned down, or finds nothing to do, puts them
  * back, so it leaves the state just as it was, like everything else it does.
  */
@@ -1270,7 +1270,8 @@ for (const name of CHANGES) {
   Object.defineProperty(Life.prototype, name, {
     value(this: Life, ...args: unknown[]) {
       const before = Object.values(this.state.avatars).map((a) => [a, a.needs] as const);
-      const cameOrWent = this.settle(args[args.length - 1] as number);
+      // Walk's optional floor follows its clock. Every other method takes time last.
+      const cameOrWent = this.settle(args[name === "walk" ? 3 : args.length - 1] as number);
       const r = change.apply(this, args);
       if (cameOrWent) return r === false ? true : r;
       if (r !== null && r !== true) for (const [a, needs] of before) a.needs = needs;

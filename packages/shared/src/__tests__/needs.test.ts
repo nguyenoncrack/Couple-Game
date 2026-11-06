@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyBlueprint, type Blueprint } from "../blueprint";
+import { emptyBlueprint, STOREY, type Blueprint } from "../blueprint";
 import { Life } from "../life/engine";
 import { DECAY, moodName, moodOf, needsAt, NEEDS, START_NEEDS, worstNeed, type NeedValues } from "../life/needs";
 import { arrivalTime, emptyLife, EAT_MS } from "../life/state";
@@ -120,4 +120,44 @@ describe("needs", () => {
     expect(worstNeed(starving)).toBe("hunger");
     expect(moodName(moodOf(Object.fromEntries(NEEDS.map((n) => [n, 0])) as NeedValues))).toBe("Miserable");
   });
+});
+
+describe("movement timestamps", () => {
+  const NOW = 1_794_000_000_000;
+  it.each([0, 1, undefined] as const)("uses server time, not optional walk level %s, when settling needs", (level) => {
+    const bp = emptyBlueprint(8, 8);
+    bp.levels.push({ ...bp.levels[0]!, tiles: Object.fromEntries(Array.from({ length: 8 }, (_, x) => Array.from({ length: 8 }, (_, z) => [`${x}:${z}`, { material: "oak" }])).flat()), objects: {}, roofs: {} });
+    const life = new Life(emptyLife());
+    life.ensureAvatar("amy", bp, NOW);
+    const a = life.state.avatars.amy!;
+    a.path = [[2.5, 2.5, (level ?? 0) * STOREY]];
+    for (let i = 0; i < 5; i++) {
+      const now = NOW + i * 1000;
+      const before = needsAt(a, now);
+      expect(life.walk("amy", bp, [3 + i % 2, 3], now, level)).toBeNull();
+      expect(a.needs!.at).toBe(now);
+      for (const n of NEEDS) {
+        expect(Number.isFinite(a.needs!.v[n])).toBe(true);
+        expect(needsAt(a, now)[n]).toBeCloseTo(before[n], 1);
+        expect(needsAt(a, now + 1000)[n]).toBeGreaterThan(START_NEEDS[n] - 1);
+      }
+    }
+    // Another player action/tick must not turn a bad movement timestamp into permanently depleted bars.
+    life.tick(bp, NOW + 10_000);
+    for (const n of NEEDS) expect(needsAt(a, NOW + 10_000)[n]).toBeGreaterThan(START_NEEDS[n] - 1);
+  });
+});
+
+it("recovers non-finite/null saved needs without resetting valid low values", () => {
+  const { life, amy } = house();
+  amy().needs = { v: { ...START_NEEDS, hunger: 12, energy: NaN, hygiene: Infinity, bladder: 0 }, at: 0, live: true };
+  // The broken optional-floor clock can become undefined, and JSON stores NaN/Infinity as null.
+  amy().needs!.at = undefined as unknown as number;
+  const data = JSON.parse(JSON.stringify(life.state));
+  const restored = Life.restore(data, 1_794_000_000_000);
+  const values = needsAt(restored.state.avatars.amy!, 1_794_000_000_000);
+  expect(values).toMatchObject({ hunger: 12, energy: START_NEEDS.energy, hygiene: START_NEEDS.hygiene, bladder: 0 });
+  for (const n of NEEDS) expect(Number.isFinite(values[n])).toBe(true);
+  restored.settle(1_794_000_000_000);
+  expect(restored.state.avatars.amy!.needs!.v).toEqual(values);
 });

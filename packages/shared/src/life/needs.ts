@@ -81,7 +81,11 @@ function run(v: NeedValues, activity: Activity, ms: number): NeedValues {
 export function needsAt(a: Avatar, t: number): NeedValues {
   const n = a.needs;
   if (!n) return { ...START_NEEDS };
-  if (!n.live || t <= n.at) return { ...n.v };
+  // Old movement snapshots can contain NaN (saved as null) after using a floor as their clock.
+  // Recover only corrupt values; valid low needs still belong to the player's progress.
+  let v = { ...START_NEEDS };
+  for (const key of NEEDS) if (Number.isFinite(n.v?.[key])) v[key] = clamp(n.v[key]);
+  if (!n.live || !Number.isFinite(n.at) || !Number.isFinite(t) || t <= n.at) return v;
   const arrive = arrivalTime(a);
   const starts = Math.max(arrive, a.use?.startsAt ?? arrive);
   const ends = a.use ? Math.max(starts, a.use.until ?? Infinity) : starts;
@@ -92,7 +96,6 @@ export function needsAt(a: Avatar, t: number): NeedValues {
     [starts, ends, a.use?.action ?? "idle"],
     [ends, Infinity, "idle"],
   ];
-  let v = { ...n.v };
   for (const [from, to, activity] of spans) v = run(v, activity, Math.min(t, to) - Math.max(n.at, from));
   return v;
 }
