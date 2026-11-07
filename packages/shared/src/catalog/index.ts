@@ -5,6 +5,8 @@ import furnitureMoreData from "./furniture-more.json";
 import furnitureExpansionData from "./furniture-expansion.json";
 import partyData from "./party.json";
 import { PARTY_ROLES } from "../party/definitions";
+import { FORT_ROLES } from "../fort/definitions";
+import fortData from "./fort.json";
 import openingsData from "./openings.json";
 import piecesData from "./pieces.json";
 import recipesData from "./recipes.json";
@@ -21,7 +23,7 @@ const hex = z.string().regex(/^#[0-9a-f]{6}$/i);
  * Things a character can do with a piece of furniture. Station actions are where recipe steps happen. Watching
  * is done from a seat facing a TV (or the floor in front of it, if there's none).
  */
-export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep", "watch", "play", "pingpong", "blackjack", "swim", "bathe", "shower", "toilet", "wash", "groove", "dj"] as const;
+export const ACTIONS = ["sit", "sleep", "lounge", "cook", "prep", "watch", "play", "pingpong", "blackjack", "swim", "bathe", "shower", "toilet", "wash", "groove", "dj", "fort"] as const;
 export const STATIONS = ["stove", "counter"] as const;
 
 /**
@@ -50,12 +52,12 @@ const Interaction = z
 const FurnitureItem = z.object({
   id: z.string(),
   name: z.string(),
-  category: z.enum(["living", "bedroom", "kitchen", "bathroom", "decor", "outdoor", "entertainment", "office", "party"]),
+  category: z.enum(["living", "bedroom", "kitchen", "bathroom", "decor", "outdoor", "entertainment", "office", "party", "fort"]),
   tags: z.array(z.string().trim().min(1).max(32)).max(12).optional(),
   price: z.number().int().nonnegative(),
   footprint: z.tuple([z.number().int().min(1).max(6), z.number().int().min(1).max(6)]),
-  /** Floor items can't overlap each other; rugs go underneath them. */
-  layer: z.enum(["floor", "rug"]),
+  /** Floor items can't overlap each other; rugs go underneath them, and small decorations (on the same floor) are a layer of their own. */
+  layer: z.enum(["floor", "rug", "decor"]),
   /** Finished dishes are served on surfaces. */
   surface: z.boolean().optional(),
   /** Climbs a whole storey along its length, to the floor above (see stairs.ts). */
@@ -71,6 +73,8 @@ const FurnitureItem = z.object({
   walkable: z.array(z.tuple([z.number().int().min(0).max(5), z.number().int().min(0).max(5)])).optional(),
   /** What the item does for a party night (see party/definitions.ts); the party panel looks for these. */
   party: z.array(z.enum(PARTY_ROLES)).optional(),
+  /** What it is in the blanket fort kit: the frame, or a piece that snaps onto one (see fort/definitions.ts). */
+  fort: z.enum(FORT_ROLES).optional(),
   /** Another colour of this item (its id): the catalog shows them together, as swatches on the one card. */
   variantOf: z.string().optional(),
   /** The colour of its swatch, when it's one of a few colours of an item. */
@@ -182,4 +186,4 @@ export function loadCatalog(raw: { furniture: unknown; openings: unknown; pieces
   };
 }
 
-export const catalog: Catalog = loadCatalog({ furniture: [...furnitureData, ...furnitureMoreData, ...furnitureExpansionData, ...partyData], openings: openingsData, pieces: withBuildMaterials(piecesData), recipes: recipesData });
+export const catalog: Catalog = loadCatalog({ furniture: [...furnitureData, ...furnitureMoreData, ...furnitureExpansionData, ...partyData, ...fortData], openings: openingsData, pieces: withBuildMaterials(piecesData), recipes: recipesData });

@@ -3,6 +3,7 @@ import { STOREY } from "../blueprint";
 import type { Rot } from "../grid";
 import type { Auto } from "./autonomy";
 import type { BlackjackRound } from "./blackjack";
+import type { FortState } from "../fort/definitions";
 import type { PartyState } from "../party/definitions";
 import type { Needs } from "./needs";
 import { levelOf, type Point, type Spot } from "./nav";
@@ -151,6 +152,8 @@ export interface LifeState {
   lifts?: Record<string, Lift>;
   /** The party: lights and the shared music. Optional for old saves (and houses that never had one). */
   party?: PartyState;
+  /** The blanket forts' settings (pattern, name, sign, lights), by the frame's object id. Optional for old saves. */
+  forts?: Record<string, FortState>;
 }
 
 /**

@@ -19,7 +19,9 @@ import {
   type ServerMsg,
   type VisitResult,
   pauseMusic,
+  FORT_TEXT,
   PARTY_TEXT,
+  type FortCmd,
   type PartyCmd,
 } from "@cg/shared";
 import type { HouseRow, HouseStore, MemberRow } from "../persistence/store";
@@ -343,6 +345,7 @@ export class HouseRoom {
     const bp = this.blueprint;
     const id = peer.memberId;
     if (intent.do === "party") return this.party(peer, intent.cmd, now);
+    if (intent.do === "fort") return this.fort(peer, intent.id, intent.cmd, now);
     // walking into a wall in first person isn't worth a message; you just don't go anywhere
     let quiet = false;
     // an order: the character is the player's again, and anyone acting on their own makes way
@@ -387,6 +390,24 @@ export class HouseRoom {
       this.life.syncTableGames(bp);
       this.lifeChanged();
     }
+  }
+
+  /**
+   * A member changes a blanket fort: its pattern, name and sign, or its fairy lights. Like the party panel it's the
+   * house's, not an order to their character; the server checks the fort is there, and has lights, if they're asked for.
+   */
+  private fort(peer: Peer, id: string, cmd: FortCmd, now: number) {
+    if (!this.partyLimit.take(peer.memberId)) {
+      peer.send({ type: "error", code: "rate-limited", message: "Slow down a little." });
+      return;
+    }
+    this.life.freeWill?.noteInput(peer.memberId, now);
+    const { reject, changed } = this.life.fort(this.blueprint, id, cmd);
+    if (reject) {
+      peer.send({ type: "error", code: reject, message: FORT_TEXT[reject] });
+      return;
+    }
+    if (changed) this.lifeChanged();
   }
 
   /**

@@ -6,6 +6,7 @@ import { roofVisible, serverNow, useGame } from "../state/game";
 import type { Kit } from "./kit";
 import { KitMesh, Meshes } from "./KitMesh";
 import { doorParts, modelFor, openingModelFor, shade, type DoorLeaf } from "./models";
+import { FortDress } from "./fort/FortDress";
 import { DYNAMIC_KINDS } from "./party/partyLayout";
 import { buildingMaterial } from "../features/buildMaterials/material";
 import { buildWall } from "../features/buildMaterials/wallGeometry";
@@ -359,7 +360,9 @@ function Placed({ o, onDown }: { o: PlacedObject; onDown: (id: string, e: ThreeE
   const { item, f, position, rotationY } = objectTransform(o);
   // (a table in a game; or a light fixture whose moving parts are drawn live while the lights are on)
   const live = DYNAMIC_KINDS.has(String(item.model.kind));
-  const active = useGame((s) => (live && Boolean(s.life?.party?.lights.on)) || Object.values(s.life?.avatars ?? {}).some((a) => a.use?.objectId === o.id && (a.use.action === "pingpong" || a.use.action === "blackjack")));
+  // (a fort's blanket is always drawn live, by FortDress)
+  const isFrame = item.fort === "frame";
+  const active = useGame((s) => isFrame || (live && Boolean(s.life?.party?.lights.on)) || Object.values(s.life?.avatars ?? {}).some((a) => a.use?.objectId === o.id && (a.use.action === "pingpong" || a.use.action === "blackjack")));
   const meshes = modelFor(item, null, active);
   const shadow = useMemo(() => shadowMaterial(f.w + 0.1, f.d + 0.1, 0.32), [f.w, f.d]);
   return (
@@ -375,6 +378,7 @@ function Placed({ o, onDown }: { o: PlacedObject; onDown: (id: string, e: ThreeE
         }}
       >
         <Meshes meshes={meshes} />
+        {isFrame && <FortDress id={o.id} />}
       </group>
     </group>
   );

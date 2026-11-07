@@ -37,6 +37,7 @@ const MAX_MS: Partial<Record<LifeAction, number>> = {
   pingpong: 3 * 60_000,
   bathe: 2 * 60_000,
   groove: 3 * 60_000,
+  fort: 4 * 60_000,
 };
 /** How often a character at something checks whether to stop. */
 const CHECK_MS = 6000;
@@ -255,6 +256,9 @@ export class FreeWill {
           const dancing = use("groove");
           if (dancing.length) choices.push(dancing);
         }
+        // (and the fort, only in a house that has one)
+        const fort = use("fort");
+        if (fort.length) choices.push(fort);
         return this.shuffle(choices).flat();
       case "social":
         return this.withPartner(a, bp, FOR_COMPANY, now);

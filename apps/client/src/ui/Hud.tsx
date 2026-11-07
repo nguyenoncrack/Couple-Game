@@ -21,6 +21,7 @@ import { Phone } from "./Phone";
 import { MaterialPanel } from "../features/buildMaterials/MaterialPanel";
 import { FloorPicker } from "./FloorPicker";
 import { MusicDock } from "../features/party/MusicDock";
+import { FortHud } from "../features/fort/FortPanel";
 import { PartyHud } from "../features/party/PartyPanel";
 import { colorsOf, familyOf, groupVariants, VariantSwatches } from "./VariantSwatches";
 
@@ -49,6 +50,7 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       {live ? <LiveBar /> : <Toolbar />}
       <ChatPanel />
       <PartyHud />
+      <FortHud />
       <MusicDock />
       <WelcomeBack />
       <Toasts />
@@ -404,6 +406,7 @@ const CATEGORIES: { id: Category; label: string }[] = [
   { id: "outdoor", label: "Outdoor" },
   { id: "entertainment", label: "Entertainment" },
   { id: "party", label: "Party" },
+  { id: "fort", label: "Fort" },
   { id: "office", label: "Office" },
   { id: "openings", label: "Doors & windows" },
 ];
@@ -559,6 +562,8 @@ function ToolPanel() {
               ? "Click to place · R to turn · Esc to stop"
               : category === "openings"
                 ? "Pick a door or window, then click on a wall."
+                : category === "fort"
+                  ? "Place a Blanket fort first, then drop the other pieces on its marked spots."
                 : category === "entertainment"
                   ? "Some pieces are decorative. Switch to Live for supported activities; leave space around game tables."
                   : "Pick something, then click on the lot."}

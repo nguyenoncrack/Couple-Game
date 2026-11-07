@@ -1,0 +1,86 @@
+/* The blanket fort's panel and the bar shown while you're inside one. */
+.fort-panel {
+  position: fixed;
+  top: calc(var(--topbar-bottom, 70px) + 10px);
+  right: 14px;
+  width: min(320px, calc(100vw - 28px));
+  max-height: calc(100dvh - var(--topbar-bottom, 70px) - 130px);
+  overflow-y: auto;
+  pointer-events: auto;
+  z-index: 26;
+}
+.fort-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fort-patterns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.fort-pattern {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border: 1.5px solid var(--ink-soft, #8a8378);
+  border-radius: 10px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+}
+.fort-pattern.active {
+  border-color: var(--ink, #3a3631);
+  box-shadow: 0 0 0 2px #ffb65a;
+}
+.fort-swatch {
+  width: 100%;
+  height: 34px;
+  border-radius: 6px;
+  background-size: 64px 64px;
+}
+.fort-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fort-field input {
+  font: inherit;
+  font-family: var(--hand);
+  font-size: 17px;
+  padding: 6px 10px;
+  border: 1.5px solid var(--ink-soft, #8a8378);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  min-width: 0;
+}
+.fort-close {
+  align-self: flex-end;
+}
+.fort-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 28px);
+  padding: 8px 12px;
+  border-radius: 16px;
+  background: rgba(255, 244, 222, 0.92);
+  box-shadow: 0 4px 18px rgba(120, 70, 20, 0.25);
+  pointer-events: auto;
+  z-index: 26;
+}
+.fort-bar-title {
+  font-family: var(--hand);
+  font-size: 18px;
+}

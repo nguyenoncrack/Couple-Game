@@ -648,6 +648,65 @@ describe("living together", () => {
     await again.disconnect();
     await old.close();
   });
+
+  it("builds a blanket fort together: both sit inside, share its look and lights, and keep it through a restart", async () => {
+    const { a, b, houseId } = await couple();
+    const wa = await a.connect();
+    const wb = await b.connect();
+    // the frame and the kit's pieces, from two different players
+    a.op("opA0000001", { t: "object.place", level: 0, id: "fort0000001", catalogId: "fort_frame", x: 6, z: 6, rot: 0 });
+    await b.next("applied", (m) => m.clientOpId === "opA0000001");
+    // a piece that isn't on a snap point is turned down
+    b.op("opB0000001", { t: "object.place", level: 0, id: "cushion0001", catalogId: "fort_cushion", x: 7, z: 6, rot: 0 });
+    expect((await b.next("rejected")).reason).toBe("needs-fort");
+    b.op("opB0000002", { t: "batch", ops: [
+      { t: "object.place", level: 0, id: "cushion0001", catalogId: "fort_cushion", x: 6, z: 7, rot: 0 },
+      { t: "object.place", level: 0, id: "cushion0002", catalogId: "fort_cushion", x: 8, z: 7, rot: 0 },
+      { t: "object.place", level: 0, id: "lights00001", catalogId: "fort_fairy_lights", x: 7, z: 6, rot: 0 },
+    ] });
+    await a.next("applied", (m) => m.clientOpId === "opB0000002");
+
+    // lights can't be switched on until some are hung, and a bad request is told so
+    a.send({ type: "life", intent: { do: "fort", id: "nothing0001", cmd: { lit: true } } });
+    expect((await a.next("error")).code).toBe("no-fort");
+
+    // both players change it at the same time: both changes land, and both see the same thing
+    a.send({ type: "life", intent: { do: "fort", id: "fort0000001", cmd: { pattern: "stars", name: "  Bear   Den " } } });
+    b.send({ type: "life", intent: { do: "fort", id: "fort0000001", cmd: { sign: "knock first", lit: true } } });
+    const want = { name: "Bear Den", sign: "knock first", pattern: "stars", lit: true };
+    await a.next("life", (m) => JSON.stringify(m.life.forts?.["fort0000001"]) === JSON.stringify(want));
+    await b.next("life", (m) => JSON.stringify(m.life.forts?.["fort0000001"]) === JSON.stringify(want));
+
+    // both go in at once, one to a seat
+    a.send({ type: "life", intent: { do: "use", objectId: "fort0000001", action: "fort" } });
+    b.send({ type: "life", intent: { do: "use", objectId: "fort0000001", action: "fort" } });
+    const both = await a.next("life", (m) => m.life.avatars[wa.memberId]?.use?.action === "fort" && m.life.avatars[wb.memberId]?.use?.action === "fort");
+    expect(new Set([both.life.avatars[wa.memberId]!.use!.slot, both.life.avatars[wb.memberId]!.use!.slot]).size).toBe(2);
+
+    // one leaves (stop), the other switches to something else (a dance): the fort is clear
+    a.send({ type: "life", intent: { do: "stop" } });
+    b.send({ type: "life", intent: { do: "dance", objectId: null, move: "sway" } });
+    await b.next("life", (m) => m.life.avatars[wa.memberId]?.use === null && m.life.avatars[wb.memberId]?.use?.action === "groove");
+
+    // a player who reconnects late sees the same fort, lit
+    await b.disconnect();
+    const late = await b.connect();
+    expect(late.life.forts?.["fort0000001"]).toEqual(want);
+    await a.disconnect();
+    await b.disconnect();
+    await new Promise((r) => setTimeout(r, 50));
+
+    // a restart: the pattern, name, sign and lights are all still there
+    const old = app;
+    await startApp();
+    const again = new Player(`${base.replace("http", "ws")}/ws`, houseId, a.cookie);
+    const welcome = await again.connect();
+    expect(welcome.life.forts?.["fort0000001"]).toEqual(want);
+    if (welcome.sync.kind !== "snapshot") throw new Error("expected a snapshot");
+    expect(Object.keys(welcome.sync.state.blueprint.levels[0]!.objects).sort()).toEqual(["cushion0001", "cushion0002", "fort0000001", "lights00001"]);
+    await again.disconnect();
+    await old.close();
+  });
 });
 
 

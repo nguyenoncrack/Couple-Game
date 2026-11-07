@@ -8,6 +8,7 @@ import { canSee, screenOf, seatsFacing, slotsFor, slotsOf, stationSlots, tvFacin
 import { gamingSpots } from "./gaming";
 import { dealBlackjack, finishBlackjack, playBlackjack, type BlackjackCommand } from "./blackjack";
 import { FreeWill } from "./autonomy";
+import { applyFort, restoredForts, savedForts, tidyForts, type FortCmd } from "../fort";
 import { applyParty, isDance, partyGear, restoredParty, savedParty, type PartyCmd } from "../party";
 import { needsAt, START_NEEDS } from "./needs";
 import { buildNav, canStep, findRoute, levelOf, liftStops, linkBetween, linksOf, nearestWalkable, roomAt, slide, walkable, type Cell, type Point, type Spot } from "./nav";
@@ -427,6 +428,11 @@ export class Life {
     return applyParty(this.state, cmd, { memberId, now, newId: this.makeId, gear });
   }
 
+  /** A member of the house changes a blanket fort: its pattern, its name and sign, or its fairy lights. */
+  fort(bp: Blueprint, id: string, cmd: FortCmd) {
+    return applyFort(this.state, bp, id, cmd, this.cat);
+  }
+
   /** Card choices belong to an arrived table participant and the round currently visible to them. */
   cards(memberId: string, bp: Blueprint, objectId: string, roundId: string | null, command: BlackjackCommand, now: number): LifeReject | null {
     const a = this.state.avatars[memberId];
@@ -759,7 +765,7 @@ export class Life {
     }
 
     // a sitter gets up for a hug; someone cooking, eating or asleep is busy, unless they're only at it of their own accord
-    if (p.use && !this.givesWay(p, memberId) && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge" && p.use.action !== "watch" && p.use.action !== "play") return "partner-busy";
+    if (p.use && !this.givesWay(p, memberId) && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge" && p.use.action !== "fort" && p.use.action !== "watch" && p.use.action !== "play") return "partner-busy";
     // they stop where they are (the cell they're stepping into); you go beside them, with no wall in between
     const [px, pz, pl] = this.origin(p, now).cell;
     const nav = buildNav(bp, pl, this.cat);
@@ -1191,6 +1197,8 @@ export class Life {
       this.state.fridge = [];
       changed = true;
     }
+    // forts that are gone are forgotten, and one whose fairy lights came down goes dark
+    if (tidyForts(this.state, bp, this.cat)) changed = true;
     return this.syncTableGames(bp) || changed;
   }
 
@@ -1240,6 +1248,8 @@ export class Life {
     if (saved.blackjack) state.blackjack = structuredClone(saved.blackjack);
     const party = restoredParty(saved.party);
     if (party) state.party = party;
+    const forts = restoredForts(saved.forts);
+    if (forts) state.forts = forts;
     // lifts stopped where they were going, doors shut; anyone in one carries on to their floor
     if (saved.lifts) state.lifts = Object.fromEntries(Object.entries(saved.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }]));
     for (const a of Object.values(saved.avatars ?? {})) {
@@ -1293,6 +1303,7 @@ export class Life {
       ...(this.state.fridge ? { fridge: this.state.fridge.map((l) => ({ ...l })) } : {}),
       ...(this.state.blackjack ? { blackjack: structuredClone(this.state.blackjack) } : {}),
       ...(this.state.party ? { party: savedParty(this.state.party, now) } : {}),
+      ...(savedForts(this.state.forts) ? { forts: savedForts(this.state.forts) } : {}),
       ...(this.state.lifts ? { lifts: Object.fromEntries(Object.entries(this.state.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }])) } : {}),
     };
   }

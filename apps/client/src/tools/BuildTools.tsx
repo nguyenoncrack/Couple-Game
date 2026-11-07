@@ -5,11 +5,13 @@ import {
   cellsBetween,
   edgesBetween,
   footprintOf,
+  fortMoveOps,
   newId,
   openingProblem,
   placementProblem,
   resaleValue,
   rotatedSize,
+  snapPiece,
   STOREY,
   cellKey,
   flightOf,
@@ -113,6 +115,18 @@ function anchorUnder(p: [number, number], catalogId: string, rot: Rot): [number,
   return [Math.round(p[0] - w / 2), Math.round(p[1] - d / 2)];
 }
 
+/**
+ * Where an item carried under the pointer goes: under it, except a blanket fort's pieces, which snap to the nearest
+ * free marked spot on a fort nearby (and turn the way the fort does, where they must).
+ */
+function spotUnder(p: [number, number], catalogId: string, rot: Rot, ignore: string | null = null): { x: number; z: number; rot: Rot } {
+  const [x, z] = anchorUnder(p, catalogId, rot);
+  const item = catalog.furniture.get(catalogId);
+  const level = useGame.getState().view?.levels[floorNow()];
+  if (item?.fort && item.fort !== "frame" && level) return snapPiece(level, item, { x: p[0], z: p[1], rot } as { x: number; z: number }, catalog, ignore) ?? { x, z, rot };
+  return { x, z, rot };
+}
+
 /** The floor something goes on: the one you're looking at, but a lift always stands on the ground floor. */
 const levelFor = (catalogId: string) => (isLift(catalog.furniture.get(catalogId)) ? 0 : floorNow());
 
@@ -185,7 +199,17 @@ function finishMove() {
     return;
   }
   const o = level.objects[m.id];
-  if (o && (o.x !== m.x || o.z !== m.z || o.rot !== m.rot)) submit(withLanding({ t: "object.move", level: levelFor(o.catalogId), id: m.id, x: m.x, z: m.z, rot: m.rot }, o.catalogId));
+  if (o && (o.x !== m.x || o.z !== m.z || o.rot !== m.rot)) submit(moveOp(o, { x: m.x, z: m.z, rot: m.rot }));
+}
+
+/** The edit that moves (or turns) a piece of furniture: for a blanket fort, one that takes its pieces along. */
+function moveOp(o: { id: string; catalogId: string }, to: { x: number; z: number; rot: Rot }): Op {
+  const view = useGame.getState().view;
+  if (view && catalog.furniture.get(o.catalogId)?.fort === "frame") {
+    const ops = fortMoveOps(view, floorNow(), o.id, to, catalog);
+    if (ops.length > 1) return { t: "batch", ops };
+  }
+  return withLanding({ t: "object.move", level: levelFor(o.catalogId), id: o.id, x: to.x, z: to.z, rot: to.rot }, o.catalogId);
 }
 
 /**
@@ -204,8 +228,8 @@ function placeAt(p: [number, number]) {
     submit({ t: "opening.place", level: floorNow(), id: newId(), catalogId, ...spot, flip: rot % 2 === 1 });
     return;
   }
-  const [x, z] = anchorUnder(p, catalogId, rot);
-  submit(withLanding({ t: "object.place", level: levelFor(catalogId), id: newId(), catalogId, x, z, rot }, catalogId));
+  const at = spotUnder(p, catalogId, rot);
+  submit(withLanding({ t: "object.place", level: levelFor(catalogId), id: newId(), catalogId, x: at.x, z: at.z, rot: at.rot }, catalogId));
 }
 
 function finishPlace(e: PointerEvent) {
@@ -276,7 +300,7 @@ export function rotateSelected() {
   const f = footprintOf(item, o);
   const rot = ((o.rot + 1) % 4) as Rot;
   const [w, d] = rotatedSize(item.footprint[0], item.footprint[1], rot);
-  submit(withLanding({ t: "object.move", level: levelFor(o.catalogId), id: o.id, x: Math.round(f.x + f.w / 2 - w / 2), z: Math.round(f.z + f.d / 2 - d / 2), rot }, o.catalogId));
+  submit(moveOp(o, { x: Math.round(f.x + f.w / 2 - w / 2), z: Math.round(f.z + f.d / 2 - d / 2), rot }));
 }
 
 export function deleteSelected() {
@@ -366,8 +390,8 @@ export function BuildTools() {
         const spot = openingSpotAt(pointer, opening, null);
         drag = { catalogId: placing.catalogId, objectId: null, x: spot.x, z: spot.z, rot: openingToRot(spot.dir, placing.rot % 2 === 1) };
       } else {
-        const [x, z] = anchorUnder(pointer, placing.catalogId, placing.rot);
-        drag = { catalogId: placing.catalogId, objectId: null, x, z, rot: placing.rot };
+        const at = spotUnder(pointer, placing.catalogId, placing.rot);
+        drag = { catalogId: placing.catalogId, objectId: null, x: at.x, z: at.z, rot: at.rot };
       }
     }
     sharePresence({ cursor: pointer ? { x: pointer[0], z: pointer[1] } : null, tool, drag, level: floor });
@@ -401,9 +425,17 @@ export function BuildTools() {
       }
     } else if (move) {
       const c = cellAt(p);
-      const x = c[0] + move.offset[0];
-      const z = c[1] + move.offset[1];
-      if (x !== move.x || z !== move.z) setB({ move: { ...move, x, z, moved: true } });
+      let x = c[0] + move.offset[0];
+      let z = c[1] + move.offset[1];
+      let rot = move.rot;
+      const held = s.view?.levels[floorNow()]?.objects[move.id];
+      const heldItem = catalog.furniture.get(held?.catalogId ?? "");
+      // a fort's pieces snap to its marked spots as they're dragged
+      if (held && heldItem?.fort && heldItem.fort !== "frame") {
+        const to = spotUnder(p, held.catalogId, move.rot, move.id);
+        [x, z, rot] = [to.x, to.z, to.rot];
+      }
+      if (x !== move.x || z !== move.z || rot !== move.rot) setB({ move: { ...move, x, z, rot, moved: true } });
     }
   };
 
@@ -580,8 +612,8 @@ function Previews() {
       const spot = openingSpotAt(pointer, opening, null);
       out.push(<OpeningGhost key="placing" catalogId={placing.catalogId} {...spot} flip={placing.rot % 2 === 1} ignore={null} />);
     } else {
-      const [x, z] = anchorUnder(pointer, placing.catalogId, placing.rot);
-      out.push(<Ghost key="placing" catalogId={placing.catalogId} x={x} z={z} rot={placing.rot} ignore={null} />);
+      const at = spotUnder(pointer, placing.catalogId, placing.rot);
+      out.push(<Ghost key="placing" catalogId={placing.catalogId} x={at.x} z={at.z} rot={at.rot} ignore={null} />);
     }
   }
 

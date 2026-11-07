@@ -1,0 +1,182 @@
+[
+  {
+    "id": "fort_frame",
+    "name": "Blanket fort",
+    "category": "fort",
+    "tags": [
+      "fort",
+      "blanket",
+      "tent",
+      "cozy",
+      "pillow",
+      "den",
+      "canopy",
+      "kids",
+      "play"
+    ],
+    "price": 450,
+    "footprint": [
+      3,
+      2
+    ],
+    "layer": "floor",
+    "fort": "frame",
+    "model": {
+      "kind": "fortframe",
+      "pole": "#b08a5e"
+    },
+    "interactions": [
+      {
+        "action": "fort",
+        "slots": [
+          {
+            "stand": [
+              [
+                1,
+                2
+              ],
+              [
+                0,
+                2
+              ]
+            ],
+            "pose": [
+              0.55,
+              1.35
+            ],
+            "y": 0.12,
+            "face": 3
+          },
+          {
+            "stand": [
+              [
+                1,
+                2
+              ],
+              [
+                2,
+                2
+              ]
+            ],
+            "pose": [
+              2.45,
+              1.35
+            ],
+            "y": 0.12,
+            "face": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "fort_mat",
+    "name": "Quilted fort mat",
+    "category": "fort",
+    "tags": [
+      "fort",
+      "mat",
+      "quilt",
+      "quilted",
+      "rug",
+      "floor",
+      "cozy",
+      "blanket"
+    ],
+    "price": 180,
+    "footprint": [
+      3,
+      3
+    ],
+    "layer": "rug",
+    "fort": "mat",
+    "model": {
+      "kind": "fortmat",
+      "base": "#f1dfc4",
+      "stitch": "#c9a97a",
+      "edge": "#d98a72"
+    }
+  },
+  {
+    "id": "fort_cushion",
+    "name": "Fort cushion",
+    "category": "fort",
+    "tags": [
+      "fort",
+      "cushion",
+      "pillow",
+      "seat",
+      "floor",
+      "cozy",
+      "soft"
+    ],
+    "price": 60,
+    "footprint": [
+      1,
+      1
+    ],
+    "layer": "decor",
+    "fort": "cushion",
+    "model": {
+      "kind": "fortcushion",
+      "color": "#e8a6a0",
+      "trim": "#fff1e0"
+    }
+  },
+  {
+    "id": "fort_plush",
+    "name": "Plush bear mascot",
+    "category": "fort",
+    "tags": [
+      "fort",
+      "plush",
+      "bear",
+      "teddy",
+      "mascot",
+      "toy",
+      "stuffed",
+      "cozy"
+    ],
+    "price": 90,
+    "footprint": [
+      1,
+      1
+    ],
+    "layer": "decor",
+    "fort": "plush",
+    "model": {
+      "kind": "fortplush",
+      "fur": "#c99a6b",
+      "belly": "#f0dcc0",
+      "scarf": "#e57f93"
+    }
+  },
+  {
+    "id": "fort_fairy_lights",
+    "name": "Fort fairy lights",
+    "category": "fort",
+    "tags": [
+      "fort",
+      "fairy",
+      "lights",
+      "string",
+      "twinkle",
+      "warm",
+      "lamp",
+      "cozy",
+      "led"
+    ],
+    "price": 120,
+    "footprint": [
+      1,
+      1
+    ],
+    "layer": "decor",
+    "fort": "lights",
+    "model": {
+      "kind": "fairylights",
+      "wire": "#4a3f35",
+      "glow": "#ffcf70"
+    }
+  }
+]

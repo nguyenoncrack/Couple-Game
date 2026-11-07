@@ -3,6 +3,7 @@ import {
   catalog,
   inverseOp,
   isTogether,
+  FORT_TEXT,
   LIFE_TEXT,
   PARTY_TEXT,
   localDay,
@@ -10,6 +11,7 @@ import {
   REJECT_TEXT,
   type Blueprint,
   type ChatMessage,
+  type FortCmd,
   type HouseState,
   type HouseSummary,
   type LifeIntent,
@@ -324,7 +326,7 @@ function handle(msg: ServerMsg) {
       break;
     }
     case "error":
-      if (msg.code === "rate-limited" || msg.code in PARTY_TEXT) toast(msg.message);
+      if (msg.code === "rate-limited" || msg.code in PARTY_TEXT || msg.code in FORT_TEXT) toast(msg.message);
       else console.warn("[server]", msg.code, msg.message);
       if (msg.code === "server") set({ dropReason: msg.message });
       break;
@@ -572,6 +574,11 @@ export function setTool(tool: Tool) {
 /** The party panel's lights and shared music: a message to the house, not an order to my character. */
 export function partyCmd(cmd: PartyCmd) {
   conn?.send({ type: "life", intent: { do: "party", cmd } });
+}
+
+/** A change to a blanket fort (its pattern, name, sign or lights): a message to the house, not an order to my character. */
+export function fortCmd(id: string, cmd: FortCmd) {
+  conn?.send({ type: "life", intent: { do: "fort", id, cmd } });
 }
 
 export function act(intent: LifeIntent) {

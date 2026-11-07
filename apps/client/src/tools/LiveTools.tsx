@@ -1,4 +1,4 @@
-import { actionsOf, catalog, DANCES, floorOf, isLift, liftStops, positionAt, slotsOf, tvFacing, type Action, type Level, type Leftover, type PlacedObject, type Recipe, STOREY, type Together } from "@cg/shared";
+import { actionsOf, catalog, DANCES, floorOf, isLift, liftStops, positionAt, slotsOf, snapUnder, tvFacing, type Action, type Level, type Leftover, type PlacedObject, type Recipe, STOREY, type Together } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -7,8 +7,9 @@ import { cameraGestureActive } from "../render/CameraRig";
 import { FLOOR_Y, Furniture, objectTransform, Walls } from "../render/House";
 import { Roofs } from "../render/Roof";
 import { openRoofs } from "../render/Storeys";
+import { openFort } from "../features/fort/fortUi";
 import { openParty } from "../features/party/partyUi";
-import { act, openChat, serverNow, sharePresence, useGame } from "../state/game";
+import { act, fortCmd, openChat, serverNow, sharePresence, useGame } from "../state/game";
 import { together } from "../state/together";
 import { floorName } from "../ui/FloorPicker";
 
@@ -34,10 +35,17 @@ const VERB: Record<Action, string> = {
   wash: "Wash your hands",
   groove: "Dance",
   dj: "Work the decks",
+  fort: "Enter fort",
 };
 
 /** What an item does for a party (see party/definitions.ts). */
 const partyRoles = (o: PlacedObject) => catalog.furniture.get(o.catalogId)?.party ?? [];
+/** The blanket fort a piece belongs to: the frame itself, or the frame a kit piece snaps onto. */
+function fortFrameOf(level: Level, o: PlacedObject): PlacedObject | null {
+  const role = catalog.furniture.get(o.catalogId)?.fort;
+  if (!role) return null;
+  return role === "frame" ? o : (snapUnder(level, role, o, catalog)?.frame ?? null);
+}
 const isFridge = (o: PlacedObject) => Boolean(catalog.furniture.get(o.catalogId)?.fridge);
 const liftIs = (o: PlacedObject) => isLift(catalog.furniture.get(o.catalogId));
 
@@ -48,7 +56,7 @@ const offers = (level: Level, o: PlacedObject): Action[] => [...new Set(actionsO
 /** Open what you can do with a piece of furniture, if anything. True if there's a menu. */
 export function openObjectMenu(level: Level, id: string) {
   const o = level.objects[id];
-  if (!o || (!offers(level, o).length && !isFridge(o) && !liftIs(o) && !partyRoles(o).length)) return false;
+  if (!o || (!offers(level, o).length && !isFridge(o) && !liftIs(o) && !partyRoles(o).length && !fortFrameOf(level, o))) return false;
   const { position, item } = objectTransform(o);
   const h = (item.model as { height?: unknown }).height;
   const base = useGame.getState().floor * STOREY;
@@ -192,7 +200,7 @@ function Menu() {
     const out = mine?.use?.action === "bathe" || mine?.use?.action === "shower" || mine?.use?.action === "swim";
     const playing = mine?.use?.action === "play" && (mine.use.consoleId === o.id || mine.use.tv === o.id || using);
     if (playing) options.push({ label: "Stop playing", run: () => act({ do: "stop" }) });
-    else if (using) options.push({ label: mine?.use?.action === "pingpong" || mine?.use?.action === "blackjack" ? "Leave table" : out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });
+    else if (using) options.push({ label: mine?.use?.action === "pingpong" || mine?.use?.action === "blackjack" ? "Leave table" : mine?.use?.action === "fort" ? "Leave fort" : out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });
     // watching this TV from a seat across the room
     else if (mine?.use?.tv === o.id) options.push({ label: "Stop watching", run: () => act({ do: "stop" }) });
     if (us.inBed && us.here && mine?.use?.objectId === o.id)
@@ -204,6 +212,14 @@ function Menu() {
     // dance floors offer each dance; party gear opens the party panel
     if (offers(level, o).includes("groove"))
       for (const d of DANCES) options.push({ group: "Dance", label: d.name, run: () => act({ do: "dance", objectId: o.id, move: d.id }) });
+    // blanket forts (and the pieces on them): lights, and the panel for the blanket, name and sign
+    const frame = fortFrameOf(level, o);
+    if (frame) {
+      const fort = life.forts?.[frame.id];
+      options.push({ group: "Fort", label: fort?.lit ? "Fairy lights off" : "Fairy lights on", run: () => { useGame.setState({ menu: null }); fortCmd(frame.id, { lit: !fort?.lit }); } });
+      options.push({ group: "Fort", label: "Blanket, name & sign…", run: () => { useGame.setState({ menu: null }); openFort(frame.id); } });
+      if (fort?.name) title = fort.name;
+    }
     const roles = partyRoles(o);
     if (roles.includes("lights") || roles.includes("dance")) options.push({ group: "Party", label: "Light controls…", run: () => { useGame.setState({ menu: null }); openParty("lights"); } });
     if (roles.includes("music")) options.push({ group: "Party", label: "Music…", run: () => { useGame.setState({ menu: null }); openParty("music"); } });

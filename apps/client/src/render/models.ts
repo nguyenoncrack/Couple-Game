@@ -4,6 +4,7 @@ import { Kit, type BuiltMesh } from "./kit";
 import { BOTANICAL_BUILDERS } from "./botanicalModels";
 import { ENTERTAINMENT_BUILDERS } from "./entertainmentModels";
 import { FURNITURE_BUILDERS } from "./furnitureModels";
+import { FORT_BUILDERS } from "./fort/fortModels";
 import { PARTY_BUILDERS } from "./party/partyModels";
 import { EXPANSION_BUILDERS } from "../features/furnitureExpansion/models";
 import { pencilMaterial, type Finish } from "./pencil";
@@ -122,6 +123,7 @@ const BUILDERS: Record<string, Builder> = {
   ...FURNITURE_BUILDERS,
   ...EXPANSION_BUILDERS,
   ...PARTY_BUILDERS,
+  ...FORT_BUILDERS,
   sofa: sofaLike(),
   armchair: sofaLike(1),
 

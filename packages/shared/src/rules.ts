@@ -2,6 +2,7 @@ import { emptyLevel, MAX_LEVELS, STARTING_FUNDS, type Blueprint, type Level, typ
 import { catalog as defaultCatalog, type Catalog, type FurnitureItem, type OpeningItem } from "./catalog";
 import { cellInLot, cellKey, edgeInLot, interiorEdges, openingEdges, parseCell, parseEdge, rotatedSize, type Rot } from "./grid";
 import type { LoggedOp, SingleOp } from "./ops";
+import { snapUnder, strayFortPiece } from "./fort/kit";
 import { brokenLifts, isLift, liftClearance, liftProblem } from "./lifts";
 import { brokenStairs, isStairs, stairsClearance, stairsProblem } from "./stairs";
 
@@ -38,6 +39,7 @@ export type RejectReason =
   | "lift-ground"
   | "lift-no-stop"
   | "blocks-lift"
+  | "needs-fort"
   | "cant-afford";
 
 /** Short, friendly explanations for the UI. */
@@ -66,6 +68,7 @@ export const REJECT_TEXT: Record<RejectReason | "held" | "rate-limited" | "inval
   "lift-ground": "Lifts stand on the ground floor; the shaft goes up through every floor above.",
   "lift-no-stop": "The lift needs floor laid in front of its doors on a floor above, to stop at.",
   "blocks-lift": "That would block the lift.",
+  "needs-fort": "That snaps onto a blanket fort. Put it on one of the fort's marked spots.",
   "cant-afford": "Not enough coins for that yet. Dropping by each day earns more.",
   held: "Your partner is moving that right now.",
   "rate-limited": "Slow down a little.",
@@ -87,6 +90,8 @@ export function placementProblem(
   at: { x: number; z: number; rot: Rot },
   ignoreId: string | null,
   cat: Catalog = defaultCatalog,
+  /** False inside `applyOp`, which checks it once an edit (or batch) is done. */
+  checkSnap = true,
 ): RejectReason | null {
   const f = footprintOf(item, at);
   if (f.x < 0 || f.z < 0 || f.x + f.w > bp.lot.w || f.z + f.d > bp.lot.d) return "out-of-lot";
@@ -101,6 +106,8 @@ export function placementProblem(
     const g = footprintOf(oi, other);
     if (f.x < g.x + g.w && g.x < f.x + f.w && f.z < g.z + g.d && g.z < f.z + f.d) return "overlaps";
   }
+  // the kit's pieces go on a fort's snap points and nowhere else
+  if (checkSnap && item.fort && item.fort !== "frame" && !snapUnder(level, item.fort, at, cat)) return "needs-fort";
   const index = bp.levels.indexOf(level);
   if (index < 0) return null;
   // out of the way of stairs (rugs are fine), and stairs themselves need somewhere to go
@@ -259,7 +266,7 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
       const item = cat.furniture.get(op.catalogId);
       if (!item) return fail("unknown-item");
       if (idTaken(bp, op.id)) return fail("id-taken");
-      const problem = placementProblem(bp, level, item, op, null, cat);
+      const problem = placementProblem(bp, level, item, op, null, cat, false);
       if (problem) return fail(problem);
       const placed: PlacedObject = { id: op.id, catalogId: op.catalogId, x: op.x, z: op.z, rot: op.rot };
       return { ok: true, blueprint: withLevel(bp, op.level, { ...level, objects: { ...level.objects, [op.id]: placed } }, item.price) };
@@ -270,7 +277,7 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
       if (!current) return fail("not-found");
       const item = cat.furniture.get(current.catalogId);
       if (!item) return fail("unknown-item");
-      const problem = placementProblem(bp, level, item, op, op.id, cat);
+      const problem = placementProblem(bp, level, item, op, op.id, cat, false);
       if (problem) return fail(problem);
       const moved: PlacedObject = { ...current, x: op.x, z: op.z, rot: op.rot };
       return { ok: true, blueprint: withLevel(bp, op.level, { ...level, objects: { ...level.objects, [op.id]: moved } }) };
@@ -302,7 +309,7 @@ function applySingle(bp: Blueprint, op: SingleOp, cat: Catalog): ApplyResult {
       const item = cat.furniture.get(op.catalogId);
       if (!item) return fail("unknown-item");
       if (idTaken(bp, op.id)) return fail("id-taken");
-      const problem = placementProblem(bp, level, item, op, null, cat);
+      const problem = placementProblem(bp, level, item, op, null, cat, false);
       if (problem) return fail(problem);
       const placed: PlacedObject = { id: op.id, catalogId: op.catalogId, x: op.x, z: op.z, rot: op.rot };
       const next = withLevel(bp, op.level, { ...level, objects: { ...level.objects, [op.id]: placed } }, resaleValue(item));
@@ -368,6 +375,7 @@ export function applyOp(bp: Blueprint, op: LoggedOp, cat: Catalog = defaultCatal
   if (!accepted) {
     const broken = brokenStairs(bp, cur, cat) ?? brokenLifts(bp, cur, cat);
     if (broken) return fail(broken);
+    if (strayFortPiece(bp, cur, cat)) return fail("needs-fort");
   }
   if (!accepted && cur.funds < 0 && cur.funds < (bp.funds ?? STARTING_FUNDS)) return fail("cant-afford");
   return { ok: true, blueprint: cur };

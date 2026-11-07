@@ -121,6 +121,11 @@ export function poseFor(activity: string, seatY: number | null, t: number, stand
         spread: 0.18,
         roll: 0,
       };
+    case "fort": {
+      // cross-legged on a cushion, leaning in a little, with a gentle sway
+      const sway = Math.sin(s * 0.9) * 0.025;
+      return { hip: (seatY ?? 0.12) + 0.05, lean: -0.08 + sway, thighs: [-1.2, -1.2], knees: [1.9, 1.9], arms: [-0.75, -0.75], spread: 0.55, roll: 0, twist: sway * 2 };
+    }
     case "lounge":
       return {
         hip: (seatY ?? 0.36) + 0.12,

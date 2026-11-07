@@ -50,12 +50,14 @@ describe("catalog model geometry", () => {
     valid(meshes);
     const box = bounds(meshes);
     expect(box.min.y).toBeGreaterThanOrEqual(-0.00001);
-    expect(box.min.y).toBeLessThanOrEqual(0.025);
+    // (a string of fairy lights hangs from the fort's ridge, across the whole fort, from a one-cell snap point)
+    const hung = item.model.kind === "fairylights";
+    if (!hung) expect(box.min.y).toBeLessThanOrEqual(0.025);
     for (let turn = 0; turn < 4; turn++) {
       const rotated = box.clone().applyMatrix4(new THREE.Matrix4().makeRotationY(turn * Math.PI / 2));
       const [width, depth] = turn % 2 ? [item.footprint[1], item.footprint[0]] : item.footprint;
       // The parasol intentionally shades neighboring cells; only its base occupies one cell.
-      if (item.model.kind !== "parasol") {
+      if (item.model.kind !== "parasol" && !hung) {
         expect(rotated.min.x).toBeGreaterThanOrEqual(-width / 2 - 0.00001);
         expect(rotated.max.x).toBeLessThanOrEqual(width / 2 + 0.00001);
         expect(rotated.min.z).toBeGreaterThanOrEqual(-depth / 2 - 0.00001);
