@@ -10,6 +10,7 @@ import { Waterbirds } from "./Waterbirds";
 import { Groundcover } from "./Groundcover";
 import { Meadow } from "./Meadow";
 import { Ambient } from "./Ambient";
+import { Wildlife } from "./wildlife/Wildlife";
 import { Folk } from "./Folk";
 import { Traffic } from "./Traffic";
 import { Scenes } from "./Scenes";
@@ -95,6 +96,7 @@ export function Scenery({ w, d }: { w: number; d: number }) {
       <Waterbirds w={w} />
       <Scenes w={w} d={d} />
       <Ambient w={w} d={d} />
+      <Wildlife w={w} d={d} />
       <Yard w={w} d={d} />
       <Folk w={w} d={d} />
       <Traffic w={w} d={d} />
