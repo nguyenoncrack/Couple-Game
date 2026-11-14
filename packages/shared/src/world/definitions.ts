@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { rainAt, wetAt } from "./weather";
 
 /**
  * The world's clock and weather: one shared day for the whole house. Everything here is a pure function of the
@@ -21,9 +22,13 @@ export interface WorldState {
 }
 
 export interface ForcedWeather {
-  mode: "rain" | "clear";
-  /** When it was forced (server ms), so the rain eases in or out from there rather than switching. */
+  /** Rain or clear skies by hand; "auto" is the hand-back, easing to the natural pattern from whatever it was. */
+  mode: "rain" | "clear" | "auto";
+  /** When it was set (server ms), so the rain eases in or out from there rather than switching. */
   at: number;
+  /** The rain and the ground's wetness at that moment (0..1), so nothing jumps and puddles outlast a forced stop. */
+  from?: number;
+  wet?: number;
 }
 
 export const emptyWorld = (): WorldState => ({ dayShift: 0 });
@@ -78,7 +83,11 @@ export function restoredWorld(saved: unknown): WorldState | null {
   const s = saved as Partial<WorldState>;
   const dayShift = typeof s.dayShift === "number" && Number.isFinite(s.dayShift) ? ((s.dayShift % DAY_MS) + DAY_MS) % DAY_MS : 0;
   const w = s.weather;
-  const weather = w && (w.mode === "rain" || w.mode === "clear") && typeof w.at === "number" && Number.isFinite(w.at) ? { mode: w.mode, at: w.at } : undefined;
+  const unit = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : undefined);
+  const weather: ForcedWeather | undefined =
+    w && (w.mode === "rain" || w.mode === "clear" || w.mode === "auto") && typeof w.at === "number" && Number.isFinite(w.at)
+      ? { mode: w.mode, at: w.at, ...(unit(w.from) !== undefined ? { from: unit(w.from) } : {}), ...(unit(w.wet) !== undefined ? { wet: unit(w.wet) } : {}) }
+      : undefined;
   if (!dayShift && !weather) return null;
   return { dayShift, ...(weather ? { weather } : {}) };
 }
@@ -86,16 +95,16 @@ export function restoredWorld(saved: unknown): WorldState | null {
 /** Apply a command to the house's world. Returns whether anything changed. */
 export function applyWorld(world: WorldState, cmd: WorldCmd, now: number): boolean {
   if (cmd.cmd === "time") {
-    const before = dayPhase(now, world);
-    world.dayShift = shiftFor(DAY_MOMENTS[cmd.at], now);
-    return Math.abs(dayPhase(now, world) - before) > 1e-9;
+    // (asking for the moment it already is, to within a second or so, changes nothing)
+    const target = DAY_MOMENTS[cmd.at];
+    const gap = Math.abs(dayPhase(now, world) - target);
+    if (Math.min(gap, 1 - gap) < 0.002) return false;
+    world.dayShift = shiftFor(target, now);
+    return true;
   }
-  if (cmd.set === "auto") {
-    const had = Boolean(world.weather);
-    delete world.weather;
-    return had;
-  }
-  if (world.weather?.mode === cmd.set) return false;
-  world.weather = { mode: cmd.set, at: now };
+  const mode = world.weather?.mode ?? "auto";
+  if (mode === cmd.set) return false;
+  // the new setting starts from how it is right now, so the rain eases and the puddles stay
+  world.weather = { mode: cmd.set, at: now, from: rainAt(now, world), wet: wetAt(now, world) };
   return true;
 }

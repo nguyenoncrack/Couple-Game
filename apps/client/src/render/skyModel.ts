@@ -82,3 +82,31 @@ function norm(v: [number, number, number]): [number, number, number] {
   const l = Math.hypot(v[0], v[1], v[2]) || 1;
   return [v[0] / l, v[1] / l, v[2] / l];
 }
+
+const grey = (c: RGB, k: number): RGB => {
+  const l = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
+  return mix3(c, [l * 0.96, l, l * 1.06], k);
+};
+
+/**
+ * The same sky under rain cloud (`rain`: 0 clear, 1 pouring): the sun is mostly blocked, so light is soft and shadows
+ * faint; colours go grey and a little darker; the haze closes in grey; and the golden hour is lost behind the cloud.
+ */
+export function overcast(sky: Sky, rain: number): Sky {
+  if (rain <= 0.001) return sky;
+  const g = Math.min(1, rain);
+  const dim = 1 - 0.2 * g;
+  const grey3 = (c: RGB, k: number) => scale3(grey(c, k), dim);
+  const fogRgb = hexToRgb(sky.fog);
+  const fogGrey = scale3(grey(fogRgb, 0.65 * g), 1 - 0.18 * g * sky.day);
+  const zenRgb = hexToRgb(sky.zenith);
+  return {
+    ...sky,
+    sun: scale3(sky.sun, 1 - 0.72 * g),
+    sky: grey3(sky.sky, 0.55 * g),
+    bounce: grey3(sky.bounce, 0.4 * g),
+    fog: rgbToHex(fogGrey),
+    zenith: rgbToHex(scale3(grey(zenRgb, 0.75 * g), 1 - 0.3 * g * sky.day)),
+    gold: sky.gold * (1 - 0.85 * g),
+  };
+}

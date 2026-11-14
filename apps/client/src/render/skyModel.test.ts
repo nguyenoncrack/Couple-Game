@@ -55,3 +55,29 @@ describe("the sky through the day", () => {
     expect(skyAt(0.55).night).toBeGreaterThan(0.6);
   });
 });
+
+import { overcast } from "./skyModel";
+
+describe("rain cloud", () => {
+  it("dims and greys the day, loses the golden hour, and leaves a clear sky alone", () => {
+    const clear = skyAt(0.25);
+    expect(overcast(clear, 0)).toBe(clear);
+    const wet = overcast(clear, 1);
+    expect(lum(wet.sun)).toBeLessThan(lum(clear.sun) * 0.4);
+    expect(lum(wet.sky)).toBeLessThan(lum(clear.sky));
+    // greyer: less spread between the colour channels
+    const spread = (c: RGB) => Math.max(...c) - Math.min(...c);
+    expect(spread(wet.sky)).toBeLessThan(spread(clear.sky));
+    const dusk = skyAt(0.46);
+    expect(overcast(dusk, 1).gold).toBeLessThan(dusk.gold * 0.3);
+  });
+
+  it("eases in with the rain, in small steps", () => {
+    let prev = overcast(skyAt(0.25), 0);
+    for (let r = 0.02; r <= 1.0001; r += 0.02) {
+      const s = overcast(skyAt(0.25), r);
+      expect(Math.abs(lum(s.sun) - lum(prev.sun))).toBeLessThan(0.05);
+      prev = s;
+    }
+  });
+});

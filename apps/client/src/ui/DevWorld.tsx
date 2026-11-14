@@ -41,7 +41,7 @@ export function DevWorld() {
       </div>
       <div className="dev-world-row">
         {WEATHER.map((t) => (
-          <button key={t.set} className={world?.weather?.mode === t.set || (t.set === "auto" && !world?.weather) ? "on" : ""} onClick={() => worldCmd({ cmd: "weather", set: t.set })}>
+          <button key={t.set} className={(world?.weather?.mode ?? "auto") === t.set ? "on" : ""} onClick={() => worldCmd({ cmd: "weather", set: t.set })}>
             {t.label}
           </button>
         ))}

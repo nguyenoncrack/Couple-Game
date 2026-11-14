@@ -1,11 +1,12 @@
-import { dayPhase } from "@cg/shared";
+import { dayPhase, rainAt, wetAt } from "@cg/shared";
 import { useFrame } from "@react-three/fiber";
 import { useMemo } from "react";
 import * as THREE from "three";
 import { serverNow, useGame } from "../state/game";
 import { lampSpots } from "./lamps";
 import { fogUniform, LAMPS, lighting, SUN_DIR, skyDome } from "./pencil";
-import { skyAt } from "./skyModel";
+import { overcast, skyAt } from "./skyModel";
+import { weatherNow } from "./weatherState";
 
 /**
  * The day, drawn: each frame it works out where the shared clock has the sun (see skyModel.ts and the shared world
@@ -23,12 +24,20 @@ export function Sky() {
 
   useFrame(({ camera, scene }) => {
     const world = useGame.getState().life?.world;
-    const sky = skyAt(dayPhase(serverNow(), world));
+    const now = serverNow();
+    const rain = rainAt(now, world);
+    weatherNow.rain = rain;
+    weatherNow.wet = wetAt(now, world);
+    lighting.wet.value = weatherNow.wet;
+    skyDome.overcast.value = rain;
+    // under rain cloud the day's light is soft and grey
+    const sky = overcast(skyAt(dayPhase(now, world)), rain);
     SUN_DIR.set(...sky.lightDir);
     lighting.sun.value.set(...sky.sun);
     lighting.skyLight.value.set(...sky.sky);
     lighting.bounce.value.set(...sky.bounce);
-    lighting.night.value = sky.night;
+    // (heavy rain dims the day enough for lamps and windows to start glowing)
+    lighting.night.value = Math.max(sky.night, rain * 0.45);
     // a cool, slightly dimmer cast over everything at night (the pictures drawn in withDaylight() don't see it)
     lighting.tint.value.setRGB(1 - 0.3 * (1 - sky.day), 1 - 0.2 * (1 - sky.day), 1 - 0.02 * (1 - sky.day));
     fogUniform.value.set(sky.fog).convertLinearToSRGB();

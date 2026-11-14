@@ -63,6 +63,8 @@ export const lighting = {
   /** Up to eight lamps near the view: x, y, z and the radius of their pool of light (0 radius: unused). */
   lamps: { value: Array.from({ length: LAMPS }, () => new THREE.Vector4(0, 0, 0, 0)) },
   lampColor: { value: new THREE.Vector3(1.0, 0.66, 0.32) },
+  /** How wet the outdoors is (0 dry, 1 soaked): the ground and plants go a little darker and glossier. */
+  wet: { value: 0 },
   /** How hard the breeze blows on plants that sway (0 holds them still, for people who'd rather less motion). */
   wind: { value: 1 },
 };
@@ -242,6 +244,7 @@ const pencilFragment = /* glsl */ `
   uniform vec4 uLamps[${LAMPS}];
   uniform vec3 uLampColor;
   uniform float uGlow;
+  uniform float uWet;
   #define SUN uSun
   #define SKY uSkyLight
   #define BOUNCE uBounce
@@ -544,6 +547,9 @@ const pencilFragment = /* glsl */ `
     #else
       // Surface marks are material relief, with no graphite contours or crosshatching.
       col *= 1.0 - lines * 0.16;
+      // rain-soaked: everything outdoors a touch darker and richer
+      col = mix(col, col * col * 1.2, uWet * 0.22);
+      col *= 1.0 - uWet * 0.08;
     #endif
 
     // Grading: lift the softer colours (not the already-bold ones), keep shadows slightly cool, and let
@@ -662,6 +668,7 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
         uLamps: lighting.lamps,
         uLampColor: lighting.lampColor,
         uGlow: { value: opts.glow ?? 0 },
+        uWet: lighting.wet,
       },
       transparent: Boolean(ghost) || (opts.alpha ?? 1) < 1,
       depthWrite: !ghost && (opts.alpha ?? 1) >= 1,

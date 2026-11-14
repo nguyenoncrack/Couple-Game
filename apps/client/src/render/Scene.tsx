@@ -13,6 +13,9 @@ import { Scenery } from "./Scenery";
 import { Lifts } from "./Lifts";
 import { PartyLights } from "./party/PartyLights";
 import { Sky } from "./Sky";
+import { Puddles } from "./weather/Puddles";
+import { Rain } from "./weather/Rain";
+import { RainSound } from "./weather/RainSound";
 import { Storeys } from "./Storeys";
 import { Sunlight } from "./Sunlight";
 
@@ -44,6 +47,9 @@ export function Scene() {
       <PartyLights />
       <PartnerPresence />
       <Sky />
+      <Puddles w={lot.w} d={lot.d} />
+      <Rain />
+      <RainSound />
       <Sunlight w={lot.w} d={lot.d} />
     </Canvas>
   );

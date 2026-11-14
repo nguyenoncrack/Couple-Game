@@ -1,5 +1,5 @@
 import type { AddressInfo } from "node:net";
-import { dayPhase, type ClientMsg, type HouseSummary, type LifeIntent, type LifeState, type ServerMsg } from "@cg/shared";
+import { dayPhase, rainAt, type ClientMsg, type HouseSummary, type LifeIntent, type LifeState, type ServerMsg } from "@cg/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createApp } from "../app";
@@ -136,5 +136,47 @@ describe("the shared day, over the wire", () => {
     await new Promise((r) => setTimeout(r, 200));
     expect(JSON.stringify(a.last!.world)).toBe(before);
     await a.disconnect();
+  });
+
+  it("syncs forced rain to both players without moving the clock, and keeps it through reconnects and a restart", async () => {
+    const { a, b, houseId, ana } = await couple();
+    await a.connect();
+    await b.connect();
+    a.intent({ do: "world", cmd: { cmd: "time", at: "midnight" } });
+    await b.next("life", (m) => m.life.world !== undefined);
+    const midnightShift = a.last!.world?.dayShift ?? (await a.next("life", (m) => m.life.world !== undefined)).life.world!.dayShift;
+
+    // rain at night, forced by one of them: both see the same, and the day's clock is exactly where it was
+    b.intent({ do: "world", cmd: { cmd: "weather", set: "rain" } });
+    const seen = await a.next("life", (m) => m.life.world?.weather?.mode === "rain");
+    await b.next("life", (m) => m.life.world?.weather?.mode === "rain");
+    expect(seen.life.world!.dayShift).toBe(midnightShift);
+    expect(dayPhase(seen.now, seen.life.world)).toBeCloseTo(0.75, 1);
+    expect(a.last!.world).toEqual(b.last!.world);
+    expect(rainAt(seen.now + 8000, seen.life.world)).toBeGreaterThan(0.99);
+
+    // a refresh lands in the same rain, at the same hour
+    await b.disconnect();
+    const again = await b.connect();
+    expect(again.life.world?.weather?.mode).toBe("rain");
+    expect(dayPhase(again.now, again.life.world)).toBeCloseTo(0.75, 1);
+    expect(rainAt(again.now + 8000, again.life.world)).toBeGreaterThan(0.99);
+
+    // clearing it by hand, then a server restart: still clear, still night
+    a.intent({ do: "world", cmd: { cmd: "weather", set: "clear" } });
+    await b.next("life", (m) => m.life.world?.weather?.mode === "clear");
+    await new Promise((r) => setTimeout(r, 2200));
+    await a.disconnect();
+    await b.disconnect();
+    await new Promise((r) => setTimeout(r, 100));
+    const old = app;
+    await startApp();
+    const back = new Player(`${base.replace("http", "ws")}/ws`, houseId, ana);
+    const w = await back.connect();
+    expect(w.life.world?.weather?.mode).toBe("clear");
+    expect(rainAt(w.now + 8000, w.life.world)).toBeLessThan(0.01);
+    expect(dayPhase(w.now, w.life.world)).toBeCloseTo(0.75, 1);
+    await back.disconnect();
+    await old.close();
   });
 });
