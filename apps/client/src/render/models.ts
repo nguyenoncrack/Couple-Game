@@ -4,6 +4,7 @@ import { Kit, type BuiltMesh } from "./kit";
 import { BOTANICAL_BUILDERS } from "./botanicalModels";
 import { ENTERTAINMENT_BUILDERS } from "./entertainmentModels";
 import { FURNITURE_BUILDERS } from "./furnitureModels";
+import { COZY_BUILDERS } from "./cozy/cozyModels";
 import { FORT_BUILDERS } from "./fort/fortModels";
 import { PARTY_BUILDERS } from "./party/partyModels";
 import { EXPANSION_BUILDERS } from "../features/furnitureExpansion/models";
@@ -124,6 +125,7 @@ const BUILDERS: Record<string, Builder> = {
   ...EXPANSION_BUILDERS,
   ...PARTY_BUILDERS,
   ...FORT_BUILDERS,
+  ...COZY_BUILDERS,
   sofa: sofaLike(),
   armchair: sofaLike(1),
 
@@ -772,15 +774,20 @@ const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
     // a sill ledge that sticks out on both sides, more on the outside
     k.box(m(shade(frameColor, 0.95)), [0, sill - 0.02, 0.04], [W + 0.16, 0.045, T + 0.18], { outline: 0.008 });
     // (the panes glow with the warm light of the rooms inside after dark)
-    k.box(m("#cfe2ea", undefined, 0.38, 0.95), [0, sill + h / 2, 0], [W - 0.1, h - 0.1, 0.02], { outline: false });
+    const frosted = p.frosted === true;
+    // frosted glass is nearly opaque and milky: light comes in, but nothing can be seen through it
+    k.box(frosted ? m("#e9f0ee", undefined, 0.93, 0.7) : m("#cfe2ea", undefined, 0.38, 0.95), [0, sill + h / 2, 0], [W - 0.1, h - 0.1, 0.02], { outline: false });
+    if (frosted) for (let i = 1; i < 6 * W; i++) k.box(m("#f7faf8", undefined, 0.5), [-W / 2 + 0.05 + ((W - 0.1) / (6 * W)) * i, sill + h / 2, 0.012], [0.012, h - 0.12, 0.004], { outline: false });
     const panes = Math.max(1, Math.round(num(p, "panes", 2)));
     for (let i = 1; i < panes; i++) k.box(frame, [-W / 2 + 0.05 + ((W - 0.1) / panes) * i, sill + h / 2, 0], [0.035, h - 0.1, 0.05], { outline: 0.005 });
     k.box(frame, [0, sill + h * 0.62, 0], [W - 0.1, 0.035, 0.05], { outline: 0.005 });
     trims(k, frame, W, sill, top, false);
-    // curtains tied back inside
-    const curtain = m(str(p, "curtain", "#efe0c8"), "fabric");
-    for (const sx of [-1, 1]) k.add("soft", curtain, [sx * (W / 2 + 0.02), sill + h / 2 + 0.06, -T / 2 - 0.07], [0.2, h + 0.12, 0.07]);
-    k.box(m("#8a6a4c", "timber"), [0, top + 0.16, -T / 2 - 0.07], [W + 0.5, 0.035, 0.035], { outline: 0.004 });
+    // curtains tied back inside (a framed frosted window is left bare)
+    if (!frosted) {
+      const curtain = m(str(p, "curtain", "#efe0c8"), "fabric");
+      for (const sx of [-1, 1]) k.add("soft", curtain, [sx * (W / 2 + 0.02), sill + h / 2 + 0.06, -T / 2 - 0.07], [0.2, h + 0.12, 0.07]);
+      k.box(m("#8a6a4c", "timber"), [0, top + 0.16, -T / 2 - 0.07], [W + 0.5, 0.035, 0.035], { outline: 0.004 });
+    }
     if (p.box === true) {
       // a flower box under the outside sill
       k.box(m("#a57a50", "timber"), [0, sill - 0.14, T / 2 + 0.14], [W - 0.1, 0.18, 0.2], { outline: 0.008 });

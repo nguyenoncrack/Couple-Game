@@ -13,6 +13,10 @@
     "model": { "kind": "window", "frame": "#f4efe4", "panes": 2 } },
   { "id": "window_wide", "name": "Wide window", "kind": "window", "price": 220, "width": 2, "sill": 0.85, "top": 2.05,
     "model": { "kind": "window", "frame": "#f4efe4", "panes": 3, "box": true } },
+  { "id": "window_frosted", "name": "Frosted glass window", "kind": "window", "price": 190, "width": 1, "sill": 0.95, "top": 2.0,
+    "model": { "kind": "window", "frame": "#5a4535", "panes": 2, "frosted": true } },
+  { "id": "window_frosted_wide", "name": "Framed frosted window", "kind": "window", "price": 340, "width": 2, "sill": 0.85, "top": 2.05,
+    "model": { "kind": "window", "frame": "#5a4535", "panes": 3, "frosted": true } },
   { "id": "window_tall", "name": "Tall window", "kind": "window", "price": 260, "width": 1, "sill": 0.35, "top": 2.2,
     "model": { "kind": "window", "frame": "#f4efe4", "panes": 2 } }
 ]

@@ -409,6 +409,7 @@ const CATEGORIES: { id: Category; label: string }[] = [
   { id: "entertainment", label: "Entertainment" },
   { id: "party", label: "Party" },
   { id: "fort", label: "Fort" },
+  { id: "cozy", label: "Cozy" },
   { id: "office", label: "Office" },
   { id: "openings", label: "Doors & windows" },
 ];
@@ -566,6 +567,8 @@ function ToolPanel() {
                 ? "Pick a door or window, then click on a wall."
                 : category === "fort"
                   ? "Place a Blanket fort first, then drop the other pieces on its marked spots."
+                : category === "cozy"
+                  ? "Cedar walls and rain slate floors are in the Walls and Floor tools; frosted windows are under Doors & windows. Put the window bench against a window wall."
                 : category === "entertainment"
                   ? "Some pieces are decorative. Switch to Live for supported activities; leave space around game tables."
                   : "Pick something, then click on the lot."}

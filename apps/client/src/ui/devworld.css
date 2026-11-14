@@ -1,7 +1,7 @@
 .dev-world {
   position: fixed;
-  left: 12px;
-  top: 74px;
+  right: 72px;
+  top: 8px;
   z-index: 30;
   display: grid;
   gap: 4px;

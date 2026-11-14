@@ -1,0 +1,9 @@
+{
+  "wallStyles": [
+    {"id":"frosted_glass_framed","name":"Framed frosted glass","color":"#e3ecea","finish":"plaster","surface":"frosted","description":"Milky frosted glass in slim charcoal frames: daylight and lamplight pass through, but nothing can be seen."},
+    {"id":"cedar_planks","name":"Cedar plank walls","color":"#b4764a","finish":"wood","surface":"shiplap","description":"Warm red-brown cedar boards, 16 cm wide, with soft grain and tight joints."}
+  ],
+  "floorMaterials": [
+    {"id":"slate_rain","name":"Rain slate flagstones","color":"#6c7f8c","finish":"stone","surface":"slate","description":"Blue-grey slate slabs, cool underfoot and darker where the rain has been."}
+  ]
+}

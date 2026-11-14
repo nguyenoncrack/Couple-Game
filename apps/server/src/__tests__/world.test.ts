@@ -1,5 +1,5 @@
 import type { AddressInfo } from "node:net";
-import { dayPhase, rainAt, type ClientMsg, type HouseSummary, type LifeIntent, type LifeState, type ServerMsg } from "@cg/shared";
+import { cellsBetween, dayPhase, edgesBetween, rainAt, type ClientMsg, type HouseSummary, type LifeIntent, type LifeState, type Op, type ServerMsg } from "@cg/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createApp } from "../app";
@@ -32,6 +32,9 @@ class Player {
   }
   intent(intent: LifeIntent) {
     this.send({ type: "life", intent });
+  }
+  op(id: string, op: Op) {
+    this.send({ type: "op", clientOpId: id, op });
   }
   async next<T extends ServerMsg["type"]>(type: T, match: (m: Extract<ServerMsg, { type: T }>) => boolean = () => true) {
     const deadline = Date.now() + 3000;
@@ -176,6 +179,57 @@ describe("the shared day, over the wire", () => {
     expect(w.life.world?.weather?.mode).toBe("clear");
     expect(rainAt(w.now + 8000, w.life.world)).toBeLessThan(0.01);
     expect(dayPhase(w.now, w.life.world)).toBeCloseTo(0.75, 1);
+    await back.disconnect();
+    await old.close();
+  });
+});
+
+describe("the cozy catalog, over the wire", () => {
+  it("saves, syncs and reloads cedar walls, rain slate, frosted windows and every cozy piece", async () => {
+    const { a, b, houseId, ana } = await couple();
+    await a.connect();
+    await b.connect();
+    const ops: Op[] = [
+      ...[
+        [4, 4, 12, 4],
+        [12, 4, 12, 10],
+        [12, 10, 4, 10],
+        [4, 10, 4, 4],
+      ].map(([x1, z1, x2, z2]) => ({ t: "walls.add" as const, level: 0, edges: edgesBetween(x1!, z1!, x2!, z2!), style: "cedar_planks" })),
+      { t: "floor.paint", level: 0, cells: cellsBetween(4, 4, 11, 9), material: "slate_rain" },
+      { t: "opening.place", level: 0, id: "frostwin001", catalogId: "window_frosted_wide", dir: "h", x: 7, z: 4, flip: false },
+      { t: "object.place", level: 0, id: "benchcozy01", catalogId: "window_bench", x: 6, z: 5, rot: 0 },
+      { t: "object.place", level: 0, id: "lampcozy001", catalogId: "reading_lamp", x: 10, z: 8, rot: 0 },
+      { t: "object.place", level: 0, id: "basketcozy1", catalogId: "blanket_basket", x: 5, z: 8, rot: 0 },
+      { t: "object.place", level: 0, id: "umbrellacz1", catalogId: "umbrella_stand", x: 9, z: 5, rot: 0 },
+      { t: "object.place", level: 0, id: "teasetcozy1", catalogId: "tea_set_two", x: 8, z: 8, rot: 0 },
+      { t: "object.place", level: 0, id: "rugcozy0001", catalogId: "rug_patterned", x: 6, z: 6, rot: 0 },
+    ];
+    ops.forEach((op, i) => a.op(`cozyop${String(i).padStart(4, "0")}`, op));
+    for (let i = 0; i < ops.length; i++) await b.next("applied");
+
+    // a refresh sees it all, with nothing rejected on the way
+    await b.disconnect();
+    const again = await b.connect();
+    expect(again.sync.kind).toBe("snapshot");
+    const bp = again.sync.kind === "snapshot" ? again.sync.state.blueprint : null;
+    expect(Object.values(bp!.levels[0]!.objects).map((o) => o.catalogId).sort()).toEqual(["blanket_basket", "reading_lamp", "rug_patterned", "tea_set_two", "umbrella_stand", "window_bench"]);
+    expect(Object.values(bp!.levels[0]!.openings).map((o) => o.catalogId)).toEqual(["window_frosted_wide"]);
+    expect(Object.values(bp!.levels[0]!.walls).every((w) => w.style === "cedar_planks")).toBe(true);
+    expect(Object.values(bp!.levels[0]!.tiles).every((t) => t.material === "slate_rain")).toBe(true);
+
+    // and so does a server restart, which replays them from disk
+    await new Promise((r) => setTimeout(r, 300));
+    await a.disconnect();
+    await b.disconnect();
+    await new Promise((r) => setTimeout(r, 100));
+    const old = app;
+    await startApp();
+    const back = new Player(`${base.replace("http", "ws")}/ws`, houseId, ana);
+    const w = await back.connect();
+    const restored = w.sync.kind === "snapshot" ? w.sync.state.blueprint : null;
+    expect(Object.keys(restored!.levels[0]!.objects)).toHaveLength(6);
+    expect(Object.keys(restored!.levels[0]!.openings)).toHaveLength(1);
     await back.disconnect();
     await old.close();
   });
