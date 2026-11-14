@@ -12,6 +12,7 @@ import {
   type Blueprint,
   type ChatMessage,
   type FortCmd,
+  type WorldCmd,
   type HouseState,
   type HouseSummary,
   type LifeIntent,
@@ -581,6 +582,11 @@ export function fortCmd(id: string, cmd: FortCmd) {
   conn?.send({ type: "life", intent: { do: "fort", id, cmd } });
 }
 
+/** Move the day to a moment, or force the weather: the world's, shared by both of you, not an order to my character. */
+export function worldCmd(cmd: WorldCmd) {
+  conn?.send({ type: "life", intent: { do: "world", cmd } });
+}
+
 export function act(intent: LifeIntent) {
   set({ menu: null });
   if (intent.do === "social") askedAt = performance.now();
@@ -603,4 +609,4 @@ export function setFirstPerson(on: boolean) {
 }
 
 // Handy for poking at the game from the console while developing.
-if (import.meta.env.DEV) Object.assign(window, { __game: useGame, __submit: submit, __undo: undo, __redo: redo, __act: act });
+if (import.meta.env.DEV) Object.assign(window, { __game: useGame, __submit: submit, __undo: undo, __redo: redo, __act: act, __world: worldCmd });

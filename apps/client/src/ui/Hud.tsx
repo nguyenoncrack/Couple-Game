@@ -16,6 +16,7 @@ import { useFirstPersonMouse } from "../input/firstPersonMouse";
 import { TableGamePanel } from "./TableGamePanel";
 import { NeedsPanel } from "./Needs";
 import { ClockPill, WelcomeBack } from "./Calendar";
+import { DevWorld } from "./DevWorld";
 import { Floating } from "./Floating";
 import { Phone } from "./Phone";
 import { MaterialPanel } from "../features/buildMaterials/MaterialPanel";
@@ -96,6 +97,7 @@ function TopBar({ onLeave }: { onLeave: () => void }) {
       <div className="topbar-right">
         <Phone onInvite={() => setInviteOpen(true)} onHelp={() => setHelpOpen(true)} />
       </div>
+      {import.meta.env.DEV && <DevWorld />}
       {inviteOpen && house && <InviteCard code={house.inviteCode} full={Boolean(partner)} onClose={() => setInviteOpen(false)} />}
       {helpOpen && <HelpCard onClose={() => setHelpOpen(false)} />}
     </div>

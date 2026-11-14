@@ -24,3 +24,4 @@ export * from "./life/pingpong";
 export * from "./appearance";
 export * from "./materials/catalog";
 export * from "./materials/rooms";
+export * from "./world";

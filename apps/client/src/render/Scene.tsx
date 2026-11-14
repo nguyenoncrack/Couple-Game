@@ -12,6 +12,7 @@ import { FOG } from "./pencil";
 import { Scenery } from "./Scenery";
 import { Lifts } from "./Lifts";
 import { PartyLights } from "./party/PartyLights";
+import { Sky } from "./Sky";
 import { Storeys } from "./Storeys";
 import { Sunlight } from "./Sunlight";
 
@@ -42,6 +43,7 @@ export function Scene() {
       <LifeProps />
       <PartyLights />
       <PartnerPresence />
+      <Sky />
       <Sunlight w={lot.w} d={lot.d} />
     </Canvas>
   );

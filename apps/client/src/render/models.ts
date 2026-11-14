@@ -15,7 +15,7 @@ import { pencilMaterial, type Finish } from "./pencil";
  * the origin, standing on y = 0 and facing +z. New catalog items reuse these by kind with their own colours.
  */
 
-type Mat = (tone: string, finish?: Finish, alpha?: number) => THREE.Material;
+type Mat = (tone: string, finish?: Finish, alpha?: number, glow?: number) => THREE.Material;
 type Params = Record<string, unknown>;
 type Builder = (k: Kit, w: number, d: number, p: Params, m: Mat, seed: number) => void;
 
@@ -225,8 +225,8 @@ const BUILDERS: Record<string, Builder> = {
     const metal = m("#6f6a60", "metal");
     k.add("cyl", metal, [0, 0.02, 0], [0.32, 0.04, 0.32]);
     k.add("cyl8", metal, [0, 0.8, 0], [0.03, 1.56, 0.03]);
-    k.add("cone", m(str(p, "shade", "#f2dca8"), "fabric"), [0, 1.58, 0], [0.42, 0.34, 0.42]);
-    k.add("sphere", m("#fff6d8"), [0, 1.45, 0], 0.07, { outline: false });
+    k.add("cone", m(str(p, "shade", "#f2dca8"), "fabric", undefined, 0.85), [0, 1.58, 0], [0.42, 0.34, 0.42]);
+    k.add("sphere", m("#fff6d8", undefined, undefined, 1), [0, 1.45, 0], 0.07, { outline: false });
   },
 
   plant: (k, _w, _d, p, m, seed) => {
@@ -630,7 +630,7 @@ export function modelFor(item: FurnitureItem, ghost: "ok" | "bad" | null = null,
   let out = built.get(key);
   if (!out) {
     const k = new Kit();
-    const m: Mat = (tone, finish, alpha) => pencilMaterial(tone, { finish, alpha, ghost: ghost ?? undefined });
+    const m: Mat = (tone, finish, alpha, glow) => pencilMaterial(tone, { finish, alpha, glow, ghost: ghost ?? undefined });
     const build = BUILDERS[item.model.kind] ?? fallback;
     // (a placement preview tells party models to use plain tints for their shader-driven parts)
     const params = (active || ghost ? { ...item.model, ...(active ? { inUse: true } : {}), ...(ghost ? { ghost: true } : {}) } : item.model) as Params;
@@ -771,7 +771,8 @@ const OPENING_BUILDERS: Record<string, OpeningBuilder> = {
     k.box(frame, [0, sill + 0.035, 0], [W, 0.07, T + 0.02], { outline: 0.008 });
     // a sill ledge that sticks out on both sides, more on the outside
     k.box(m(shade(frameColor, 0.95)), [0, sill - 0.02, 0.04], [W + 0.16, 0.045, T + 0.18], { outline: 0.008 });
-    k.box(m("#cfe2ea", undefined, 0.38), [0, sill + h / 2, 0], [W - 0.1, h - 0.1, 0.02], { outline: false });
+    // (the panes glow with the warm light of the rooms inside after dark)
+    k.box(m("#cfe2ea", undefined, 0.38, 0.95), [0, sill + h / 2, 0], [W - 0.1, h - 0.1, 0.02], { outline: false });
     const panes = Math.max(1, Math.round(num(p, "panes", 2)));
     for (let i = 1; i < panes; i++) k.box(frame, [-W / 2 + 0.05 + ((W - 0.1) / panes) * i, sill + h / 2, 0], [0.035, h - 0.1, 0.05], { outline: 0.005 });
     k.box(frame, [0, sill + h * 0.62, 0], [W - 0.1, 0.035, 0.05], { outline: 0.005 });
@@ -821,7 +822,7 @@ export function doorParts(item: OpeningItem): { frame: BuiltMesh[]; leaves: Door
   if (item.model.kind !== "door") return null;
   let out = builtDoors.get(item.id);
   if (!out) {
-    const m: Mat = (tone, finish, alpha) => pencilMaterial(tone, { finish, alpha });
+    const m: Mat = (tone, finish, alpha, glow) => pencilMaterial(tone, { finish, alpha, glow });
     const k = new Kit();
     OPENING_BUILDERS.door!(k, item, item.model as Params, m, null, false);
     out = {
@@ -845,7 +846,7 @@ export function openingModelFor(item: OpeningItem, ghost: "ok" | "bad" | null = 
   let out = builtOpenings.get(key);
   if (!out) {
     const k = new Kit();
-    const m: Mat = (tone, finish, alpha) => pencilMaterial(tone, { finish, alpha, ghost: ghost ?? undefined });
+    const m: Mat = (tone, finish, alpha, glow) => pencilMaterial(tone, { finish, alpha, glow, ghost: ghost ?? undefined });
     (OPENING_BUILDERS[item.model.kind] ?? OPENING_BUILDERS.door!)(k, item, item.model as Params, m, low);
     out = k.parts.length ? k.build(Boolean(ghost)) : [];
     builtOpenings.set(key, out);

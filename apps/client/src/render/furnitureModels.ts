@@ -8,7 +8,7 @@ import type { Finish } from "./pencil";
  * the origin, standing on y = 0 and facing +z, inside the item's footprint (w across x, d across z).
  */
 
-type Mat = (tone: string, finish?: Finish, alpha?: number) => THREE.Material;
+type Mat = (tone: string, finish?: Finish, alpha?: number, glow?: number) => THREE.Material;
 type Params = Record<string, unknown>;
 type Builder = (k: Kit, w: number, d: number, p: Params, m: Mat, seed: number) => void;
 
@@ -290,8 +290,8 @@ export const FURNITURE_BUILDERS: Record<string, Builder> = {
     const curve = new THREE.CatmullRomCurve3(pts);
     k.add(new THREE.TubeGeometry(curve, 24, 0.016, 6), metal, [0, 0, 0], 1, { outline: 0.004, normals: true });
     const end = pts[pts.length - 1]!;
-    k.add("half", m(str(p, "shade", "#f6f0e2"), "metal"), [end.x, end.y - 0.18, 0], [0.4, 0.2, 0.4], { normals: true });
-    k.add("sphere", m("#fff6d8"), [end.x, end.y - 0.2, 0], 0.07, { outline: false });
+    k.add("half", m(str(p, "shade", "#f6f0e2"), "metal", undefined, 0.6), [end.x, end.y - 0.18, 0], [0.4, 0.2, 0.4], { normals: true });
+    k.add("sphere", m("#fff6d8", undefined, undefined, 1), [end.x, end.y - 0.2, 0], 0.07, { outline: false });
   },
 
   // A round rug with a border ring and a smaller ring inside.

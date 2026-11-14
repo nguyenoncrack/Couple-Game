@@ -9,6 +9,7 @@ import { gamingSpots } from "./gaming";
 import { dealBlackjack, finishBlackjack, playBlackjack, type BlackjackCommand } from "./blackjack";
 import { FreeWill } from "./autonomy";
 import { applyFort, restoredForts, savedForts, tidyForts, type FortCmd } from "../fort";
+import { applyWorld, emptyWorld, restoredWorld, type WorldCmd } from "../world";
 import { applyParty, isDance, partyGear, restoredParty, savedParty, type PartyCmd } from "../party";
 import { needsAt, START_NEEDS } from "./needs";
 import { buildNav, canStep, findRoute, levelOf, liftStops, linkBetween, linksOf, nearestWalkable, roomAt, slide, walkable, type Cell, type Point, type Spot } from "./nav";
@@ -426,6 +427,11 @@ export class Life {
   /** A member of the house works the party panel: the lights, or the shared music. Not an order to anyone's character. */
   party(memberId: string, bp: Blueprint, cmd: PartyCmd, now: number, gear = partyGear(bp, this.cat)) {
     return applyParty(this.state, cmd, { memberId, now, newId: this.makeId, gear });
+  }
+
+  /** A member moves the day or forces the weather. Returns whether anything changed. */
+  world(cmd: WorldCmd, now: number): boolean {
+    return applyWorld((this.state.world ??= emptyWorld()), cmd, now);
   }
 
   /** A member of the house changes a blanket fort: its pattern, its name and sign, or its fairy lights. */
@@ -1250,6 +1256,8 @@ export class Life {
     if (party) state.party = party;
     const forts = restoredForts(saved.forts);
     if (forts) state.forts = forts;
+    const world = restoredWorld(saved.world);
+    if (world) state.world = world;
     // lifts stopped where they were going, doors shut; anyone in one carries on to their floor
     if (saved.lifts) state.lifts = Object.fromEntries(Object.entries(saved.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }]));
     for (const a of Object.values(saved.avatars ?? {})) {
@@ -1304,6 +1312,7 @@ export class Life {
       ...(this.state.blackjack ? { blackjack: structuredClone(this.state.blackjack) } : {}),
       ...(this.state.party ? { party: savedParty(this.state.party, now) } : {}),
       ...(savedForts(this.state.forts) ? { forts: savedForts(this.state.forts) } : {}),
+      ...(this.state.world ? { world: structuredClone(this.state.world) } : {}),
       ...(this.state.lifts ? { lifts: Object.fromEntries(Object.entries(this.state.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }])) } : {}),
     };
   }
