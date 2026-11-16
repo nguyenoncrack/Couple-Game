@@ -1,0 +1,765 @@
+/* The DJ console: a chunky toy deck in the game's ink-outlined sticker style, dark so its lights read. */
+
+.dj,
+.dj-bar {
+  --dj-body: #24212c;
+  --dj-body-2: #1a1820;
+  --dj-well: #0e0d13;
+  --dj-line: #0b0a0f;
+  --dj-text: #f3ede0;
+  --dj-soft: #a59fb2;
+  --dj-play: #8dff3a;
+  --dj-echo: #18e0e8;
+  --dj-drop: #ff3d9a;
+  position: fixed;
+  left: 14px;
+  bottom: 96px;
+  z-index: 27;
+  pointer-events: auto;
+  color: var(--dj-text);
+  font-family: var(--logo);
+}
+
+.dj {
+  width: min(660px, calc(100vw - 28px));
+  padding: 8px 12px 10px;
+  border: var(--border);
+  border-radius: 22px;
+  background:
+    radial-gradient(120% 60% at 50% 0%, #ffffff10, transparent 60%),
+    linear-gradient(180deg, var(--dj-body), var(--dj-body-2));
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.4s;
+}
+.dj.is-drop {
+  box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--a) 70%, transparent), 0 0 28px color-mix(in srgb, var(--a) 45%, transparent);
+}
+
+/* header */
+.dj-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.dj-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.dj-led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #4a4555;
+  box-shadow: inset 0 0 0 1.5px var(--dj-line);
+}
+.is-playing .dj-led {
+  background: var(--dj-play);
+  box-shadow: 0 0 8px var(--dj-play);
+}
+.dj-on {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dj-soft);
+}
+.dj-mini {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--dj-line);
+  background: #3a3646;
+  color: var(--dj-text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dj-mini:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* decks and screen */
+.dj-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+.dj-table {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #2e2a38, #24212c);
+  box-shadow: inset 0 0 0 2px var(--dj-line), inset 0 2px 0 #ffffff12;
+  opacity: 0.72;
+  transition: opacity 0.3s;
+}
+.dj-table.live {
+  opacity: 1;
+}
+.dj-a {
+  --c: var(--a);
+  --lv: var(--lv-a, 0);
+}
+.dj-b {
+  --c: var(--b);
+  --lv: var(--lv-b, 0);
+}
+.dj-platter {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #3d3948, #2a2733);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+  display: grid;
+  place-items: center;
+}
+.dj-vinyl {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background:
+    conic-gradient(from 20deg, #ffffff00 0 40deg, #ffffff22 55deg, #ffffff00 70deg 220deg, #ffffff18 235deg, #ffffff00 250deg),
+    repeating-radial-gradient(circle, #141218 0 1.5px, #1d1a22 1.5px 3px);
+  box-shadow: 0 0 0 2px var(--dj-line), 0 3px 0 #00000055;
+  display: grid;
+  place-items: center;
+}
+.dj-label-dot {
+  width: 32%;
+  height: 32%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--dj-line) 0 9%, var(--c, var(--a)) 10% 100%);
+  box-shadow: 0 0 0 1.5px var(--dj-line);
+}
+.dj-label-dot::after {
+  content: "";
+  display: block;
+  width: 26%;
+  height: 12%;
+  margin: 18% 0 0 48%;
+  border-radius: 2px;
+  background: #ffffffaa;
+}
+.dj-vinyl.spin {
+  animation: dj-spin var(--spin, 1.8s) linear infinite;
+}
+@keyframes dj-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.dj-arm {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 6px;
+  height: 52px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #d8d4de, #9d98a8);
+  box-shadow: 0 0 0 1.5px var(--dj-line);
+  transform-origin: 50% 4px;
+  transform: rotate(18deg);
+  transition: transform 0.5s;
+}
+.is-playing .live .dj-arm {
+  transform: rotate(30deg);
+}
+
+/* level meter: eight cells that light up to the deck's level */
+.dj-meter {
+  display: flex;
+  gap: 3px;
+}
+.dj-meter i {
+  width: 9px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--dj-play);
+  opacity: clamp(0.14, calc(var(--lv) * 9 - var(--i)), 1);
+}
+.dj-meter i:nth-child(n + 6) {
+  background: #ffd166;
+}
+.dj-meter i:nth-child(n + 8) {
+  background: var(--dj-drop);
+}
+.dj-track {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  line-height: 1.15;
+  min-width: 0;
+}
+.dj-track b {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--c) 45%, transparent);
+}
+.dj-track span {
+  font-size: 11px;
+  color: var(--dj-soft);
+}
+.dj-deck-name {
+  font-family: var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.dj-table.cued .dj-track span:last-child {
+  color: #ffd166;
+}
+
+.dj-screen {
+  position: relative;
+  width: 210px;
+  min-height: 170px;
+  border-radius: 14px;
+  background: var(--dj-well);
+  box-shadow: inset 0 0 0 2px var(--dj-line), inset 0 0 24px #00000099;
+  overflow: hidden;
+}
+/* YouTube asks for at least 200 x 200 and its controls in view; nothing is drawn over its player */
+.dj-screen.yt {
+  width: 356px;
+  min-height: 200px;
+  display: grid;
+}
+.dj-yt {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  aspect-ratio: auto;
+  border-radius: 12px;
+}
+.dj-yt-enable {
+  position: absolute;
+  left: 50%;
+  bottom: -46px;
+}
+
+.dj-vis {
+  height: 100%;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px 10px;
+  text-align: center;
+}
+.dj-air {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--dj-soft);
+  text-transform: uppercase;
+}
+.dj-section {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--a);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--a) 55%, transparent);
+}
+.dj-section.s-break,
+.dj-section.s-intro {
+  color: #b7c7ff;
+  text-shadow: none;
+}
+.dj-section.s-build {
+  color: #ffd166;
+}
+.dj-section.s-drop {
+  color: var(--dj-drop);
+  text-shadow: 0 0 16px var(--dj-drop);
+}
+.dj-beats {
+  display: flex;
+  gap: 8px;
+}
+.dj-beats i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #2c2935;
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+  transition: background 0.06s;
+}
+.dj[data-beat="0"] .dj-beats i[data-i="0"],
+.dj[data-beat="1"] .dj-beats i[data-i="1"],
+.dj[data-beat="2"] .dj-beats i[data-i="2"],
+.dj[data-beat="3"] .dj-beats i[data-i="3"] {
+  background: var(--a);
+  box-shadow: inset 0 0 0 2px var(--dj-line), 0 0 10px var(--a);
+}
+.dj[data-beat="0"] .dj-beats i[data-i="0"] {
+  background: var(--dj-play);
+  box-shadow: inset 0 0 0 2px var(--dj-line), 0 0 10px var(--dj-play);
+}
+.dj-phrase {
+  width: 80%;
+  height: 6px;
+  border-radius: 3px;
+  background: #2c2935;
+  overflow: hidden;
+}
+.dj-phrase i {
+  display: block;
+  height: 100%;
+  width: calc(var(--phrase, 0) * 100%);
+  background: linear-gradient(90deg, var(--a), var(--b));
+}
+.dj-fx {
+  display: flex;
+  gap: 6px;
+  min-height: 16px;
+}
+.dj-fx span {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  color: var(--dj-well);
+  background: var(--dj-echo);
+  text-transform: uppercase;
+}
+.dj-yt-chip {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 9px;
+  border-radius: 9px;
+  border: 2px solid var(--dj-line);
+  background: #e0453c;
+  color: #fff;
+  font: 600 11px var(--logo);
+  cursor: pointer;
+}
+
+/* mixer */
+.dj-mixer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: #1b1921;
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+}
+.dj-pad {
+  --glow: #8a84a0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 64px;
+  height: 46px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 2px solid var(--dj-line);
+  background: linear-gradient(180deg, #45404f, #322e3b);
+  box-shadow: 0 4px 0 var(--dj-line), inset 0 2px 0 #ffffff1c;
+  color: var(--dj-text);
+  font: 600 14px var(--logo);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    transform 0.06s,
+    box-shadow 0.06s,
+    background 0.2s;
+}
+.dj-pad:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--dj-line), inset 0 2px 0 #ffffff1c;
+}
+.dj-pad:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.dj-pad.on {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--glow) 92%, white), var(--glow));
+  color: var(--dj-well);
+  box-shadow: 0 4px 0 var(--dj-line), 0 0 16px color-mix(in srgb, var(--glow) 60%, transparent);
+}
+.dj-play {
+  --glow: var(--dj-play);
+  min-width: 92px;
+}
+.dj-echo {
+  --glow: var(--dj-echo);
+}
+.dj-drop {
+  --glow: var(--dj-drop);
+  color: color-mix(in srgb, var(--dj-drop) 70%, white);
+}
+/* the build fills the pad up over its two bars; the drop holds it lit */
+.dj-drop.build {
+  opacity: 1;
+  color: var(--dj-well);
+  background: linear-gradient(0deg, var(--dj-drop) 0 50%, #322e3b 50%);
+  background-size: 100% 200%;
+  animation: dj-charge var(--build, 3.9s) linear forwards;
+}
+.dj-drop.drop {
+  opacity: 1;
+  color: var(--dj-well);
+  background: var(--dj-drop);
+  box-shadow: 0 4px 0 var(--dj-line), 0 0 18px var(--dj-drop);
+}
+@keyframes dj-charge {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 100%;
+  }
+}
+
+/* crossfader */
+.dj-fader {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 120px;
+}
+.dj-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dj-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.dj-fader input,
+.dj-vol input {
+  flex: 1;
+  appearance: none;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--a), #2c2935 40% 60%, var(--b));
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+  cursor: pointer;
+}
+.dj-fader input::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 32px;
+  border-radius: 6px;
+  border: 2px solid var(--dj-line);
+  background: linear-gradient(90deg, #cfcad8 0 45%, #2a2733 45% 55%, #cfcad8 55%);
+  box-shadow: 0 3px 0 var(--dj-line);
+}
+.dj-fader input::-moz-range-thumb {
+  width: 22px;
+  height: 32px;
+  border-radius: 6px;
+  border: 2px solid var(--dj-line);
+  background: #cfcad8;
+}
+
+/* filter knob */
+.dj-knob-wrap {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+.dj-knob {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, transparent 55%, var(--dj-body-2) 56%),
+    conic-gradient(from -135deg, #6f9eff, #2c2935 135deg, #ffd166 270deg, transparent 270deg);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+  display: grid;
+  place-items: center;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.dj-knob:focus-visible {
+  outline: 2px solid var(--dj-echo);
+  outline-offset: 2px;
+}
+.dj-knob-cap {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--dj-line);
+  background: radial-gradient(circle at 40% 35%, #5a5566, #34303e);
+  position: relative;
+}
+.dj-knob-cap::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 3px;
+  height: 9px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--dj-text);
+}
+
+/* tempo */
+.dj-tempo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dj-nudge {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 2px solid var(--dj-line);
+  background: #3a3646;
+  color: var(--dj-text);
+  font: 600 15px var(--logo);
+  cursor: pointer;
+}
+.dj-nudge:disabled {
+  opacity: 0.4;
+}
+.dj-bpm {
+  display: grid;
+  justify-items: center;
+  min-width: 46px;
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: var(--dj-well);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+  color: var(--dj-play);
+  font: 600 17px var(--mono);
+  line-height: 1;
+}
+.dj-bpm small {
+  font-size: 8px;
+  color: var(--dj-soft);
+  letter-spacing: 0.1em;
+}
+
+/* record crate */
+.dj-crate {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.dj-sleeve {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 1px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 2px solid var(--dj-line);
+  background: #2b2834;
+  color: var(--dj-text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
+}
+.dj-sleeve:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 0 var(--dj-line);
+}
+.dj-sleeve.loaded {
+  box-shadow: 0 0 0 2px var(--c);
+}
+.dj-sleeve-art {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.6;
+  border-radius: 7px;
+  background:
+    radial-gradient(circle at 78% 50%, #141218 0 34%, transparent 35%),
+    repeating-linear-gradient(135deg, var(--c) 0 6px, color-mix(in srgb, var(--c) 70%, black) 6px 12px);
+  box-shadow: inset 0 0 0 1.5px var(--dj-line);
+  margin-bottom: 3px;
+}
+.dj-sleeve-name {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.dj-sleeve-style {
+  font-size: 10px;
+  color: var(--dj-soft);
+}
+.dj-sleeve-tag {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--dj-text);
+  color: var(--dj-well);
+  font: 600 10px var(--mono);
+}
+
+/* this player's own settings */
+.dj-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+.dj-vol {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 200px;
+  color: var(--dj-soft);
+}
+.dj-vol input {
+  background: linear-gradient(90deg, var(--dj-play), #2c2935);
+}
+.dj-vol input::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--dj-line);
+  background: var(--dj-text);
+}
+.dj-chip {
+  padding: 3px 10px;
+  border-radius: 10px;
+  border: 2px solid var(--dj-line);
+  background: #3a3646;
+  color: var(--dj-text);
+  font: 600 12px var(--logo);
+  cursor: pointer;
+}
+.dj-chip.on {
+  background: var(--dj-text);
+  color: var(--dj-well);
+}
+.dj-note {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dj-soft);
+  text-transform: uppercase;
+}
+.dj-leave {
+  background: transparent;
+  color: var(--dj-soft);
+}
+
+.dj-hear {
+  position: absolute;
+  inset: auto 50% 50% auto;
+  transform: translate(50%, 50%);
+  padding: 12px 22px;
+  border-radius: 16px;
+  border: var(--border);
+  background: var(--yellow);
+  color: var(--ink);
+  font: 600 16px var(--logo);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+/* the deck made small */
+.dj-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 16px 0 7px;
+  border: var(--border);
+  border-radius: 26px;
+  background: linear-gradient(180deg, var(--dj-body), var(--dj-body-2));
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  text-align: left;
+}
+.dj-vinyl.small {
+  width: 38px;
+  height: 38px;
+  --c: var(--a);
+}
+.dj-bar-text {
+  display: grid;
+  line-height: 1.15;
+}
+.dj-bar-text b {
+  font-size: 14px;
+}
+.dj-bar-text span {
+  font-size: 11px;
+  color: var(--dj-soft);
+}
+.dj-bar.is-playing .dj-bar-text b {
+  color: var(--a);
+}
+
+/* a narrow screen: the screen goes on top, the decks side by side under it */
+@media (max-width: 640px) {
+  .dj,
+  .dj-bar {
+    bottom: 108px;
+  }
+  .dj {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+  }
+  .dj-top {
+    grid-template-columns: 1fr 1fr;
+  }
+  .dj-screen,
+  .dj-screen.yt {
+    grid-column: 1 / -1;
+    order: -1;
+    width: 100%;
+  }
+  .dj-screen {
+    min-height: 130px;
+  }
+  .dj-platter {
+    width: 84px;
+    height: 84px;
+  }
+  .dj-vinyl:not(.small) {
+    width: 70px;
+    height: 70px;
+  }
+  .dj-mixer {
+    flex-wrap: wrap;
+  }
+  .dj-fader {
+    order: 5;
+    flex-basis: 100%;
+  }
+  .dj-crate {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dj-vinyl.spin,
+  .dj-drop.build {
+    animation: none;
+  }
+  .dj-sleeve,
+  .dj-arm {
+    transition: none;
+  }
+}

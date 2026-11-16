@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Id } from "../ops";
+import { DECK_TRACK_IDS, DEFAULT_DECK, MAX_BPM, MIN_BPM, type Deck } from "./deck";
 import { isVideoId } from "./youtube";
 
 /**
@@ -99,9 +100,11 @@ export interface Music {
 export interface PartyState {
   lights: PartyLights;
   music: Music;
+  /** The DJ deck's built-in music (missing in homes saved before it). Only one of it and the YouTube music plays. */
+  deck?: Deck;
 }
 
-export const emptyParty = (): PartyState => ({ lights: { ...DEFAULT_LIGHTS }, music: { queue: [], current: null, playing: false, at: 0 } });
+export const emptyParty = (): PartyState => ({ lights: { ...DEFAULT_LIGHTS }, music: { queue: [], current: null, playing: false, at: 0 }, deck: { ...DEFAULT_DECK } });
 
 export const MAX_QUEUE = 20;
 /** The longest a video can run: a position beyond it is a mistake. */
@@ -143,6 +146,24 @@ export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("ended"), trackId: TrackId }),
   /** A screen reports YouTube won't play it (private, removed, not embeddable). */
   z.object({ cmd: z.literal("error"), trackId: TrackId, code: z.number().int().min(0).max(1000) }),
+  /** Work the DJ deck: records, crossfader, tempo, filter, echo, play and pause. */
+  z.object({
+    cmd: z.literal("deck"),
+    set: z
+      .object({
+        a: z.enum(DECK_TRACK_IDS),
+        b: z.enum(DECK_TRACK_IDS),
+        xfade: z.number().min(0).max(1),
+        bpm: z.number().int().min(MIN_BPM).max(MAX_BPM),
+        filter: z.number().min(-1).max(1),
+        echo: z.boolean(),
+        playing: z.boolean(),
+      })
+      .partial()
+      .strict(),
+  }),
+  /** Start a build-up on the next bar; the drop lands two bars later. */
+  z.object({ cmd: z.literal("drop") }),
 ]);
 export type PartyCmd = z.infer<typeof PartyCmd>;
 

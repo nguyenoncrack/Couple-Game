@@ -2,16 +2,27 @@ import * as THREE from "three";
 import type { Kit } from "../kit";
 import type { Finish } from "../pencil";
 import { BALL_Y, HEAD_AT, HEAD_Y } from "./partyLayout";
-import { glowMaterial, mirrorBallMaterial, platterMaterial, tileMaterial } from "./partyMaterials";
+import { equaliserMaterial, glowMaterial, levelLightsMaterial, mirrorBallMaterial, platterMaterial, tileMaterial } from "./partyMaterials";
 
 /**
  * The party items' models, drawn like the rest of the furniture (centred on the origin, standing on y = 0, facing
  * +z, inside the footprint). The glowing parts use the shared party materials, so they follow the lights panel; a
  * placement preview (`ghost`) swaps those for the usual pencil tint. Fixtures whose moving parts are drawn live
  * (moving heads, the disco ball) leave them out while the lights are on (`inUse`).
+ *
+ * While music plays the music gear moves with it: speaker cones thump out on the kick (a `push` material), the
+ * music player's display is an equaliser, and the DJ booth's records turn and its mixer's level lights dance.
  */
 
-type Mat = (tone: string, finish?: Finish, alpha?: number) => THREE.Material;
+type Mat = (tone: string, finish?: Finish, alpha?: number, glow?: number, push?: number) => THREE.Material;
+
+/** The music player's display, and the booth mixer's level lights (one material each, shared by every copy). */
+const PLAYER_DISPLAY: [number, number] = [0.44, 0.14];
+const playerEq = equaliserMaterial(PLAYER_DISPLAY);
+const LEVEL_FIRST = -0.02;
+const LEVEL_STEP = 0.03;
+const LEVEL_LAMPS = 5;
+const mixerLevels = levelLightsMaterial(LEVEL_FIRST, LEVEL_STEP, LEVEL_LAMPS);
 type Params = Record<string, unknown>;
 type Builder = (k: Kit, w: number, d: number, p: Params, m: Mat, seed: number) => void;
 
@@ -97,7 +108,9 @@ export const PARTY_BUILDERS: Record<string, Builder> = {
     }
     k.box(m("#0b0b0f"), [0, top + 0.042, 0.2], [0.26, 0.004, 0.012], { outline: false });
     k.box(m("#e8e6ee", "paint"), [0.04, top + 0.05, 0.2], [0.05, 0.014, 0.032], { outline: 0.003 });
-    for (const sx of [-1, 1]) for (let i = 0; i < 5; i++) k.box(glow, [sx * 0.19, top + 0.043, -0.02 + i * 0.03], [0.014, 0.006, 0.02], { outline: false });
+    // level lights, deck A's on the left and B's on the right, that dance with the music
+    const levels = lit(p, m, mixerLevels);
+    for (const sx of [-1, 1]) for (let i = 0; i < LEVEL_LAMPS; i++) k.box(levels, [sx * 0.19, top + 0.043, LEVEL_FIRST + i * LEVEL_STEP], [0.014, 0.006, 0.02], { outline: false });
     // a laptop on one end, headphones on the other
     k.box(m("#c4c8c8", "metal"), [-W / 2 + 0.2, top + 0.012, 0.04], [0.28, 0.02, 0.2], { outline: 0.004 });
     k.box(m("#c4c8c8", "metal"), [-W / 2 + 0.2, top + 0.11, -0.07], [0.28, 0.2, 0.012], { rot: [-0.25, 0, 0], outline: 0.004 });
@@ -182,15 +195,15 @@ export const PARTY_BUILDERS: Record<string, Builder> = {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add("cyl", m(DARK, "rubber"), [sx * 0.24, 0.035, sz * 0.18], [0.07, 0.07, 0.07], { outline: 0.004 });
     k.add("roundbox", cab, [0, 0.07 + H / 2, 0], [0.68, H, D], { outline: 0.008 });
     const front = D / 2;
-    // woofer
+    // woofer: the cone and its cap thump out on the kick
     k.add("cyl", glow, [0, 0.42, front + 0.004], [0.52, 0.008, 0.52], { rot: [Math.PI / 2, 0, 0], outline: false });
     k.add("cyl", m("#101014", "rubber"), [0, 0.42, front + 0.008], [0.46, 0.012, 0.46], { rot: [Math.PI / 2, 0, 0], outline: 0.004 });
-    k.add("cone", m("#1a1a20", "rubber"), [0, 0.42, front + 0.03], [0.34, 0.05, 0.34], { rot: [Math.PI / 2, 0, 0], outline: 0.004 });
-    k.add("sphere", m("#2a2a33", "metal"), [0, 0.42, front + 0.052], 0.12, { outline: 0.004 });
-    // tweeter
+    k.add("cone", m("#1a1a20", "rubber", undefined, undefined, 0.035), [0, 0.42, front + 0.03], [0.34, 0.05, 0.34], { rot: [Math.PI / 2, 0, 0], outline: 0.004 });
+    k.add("sphere", m("#2a2a33", "metal", undefined, undefined, 0.045), [0, 0.42, front + 0.052], 0.12, { outline: 0.004 });
+    // tweeter (a smaller flick)
     k.add("cyl", glow, [0, 0.98, front + 0.004], [0.3, 0.008, 0.3], { rot: [Math.PI / 2, 0, 0], outline: false });
     k.add("cyl", m("#101014", "rubber"), [0, 0.98, front + 0.008], [0.26, 0.012, 0.26], { rot: [Math.PI / 2, 0, 0], outline: 0.004 });
-    k.add("sphere", m("#2a2a33", "metal"), [0, 0.98, front + 0.03], 0.1, { outline: 0.004 });
+    k.add("sphere", m("#2a2a33", "metal", undefined, undefined, 0.014), [0, 0.98, front + 0.03], 0.1, { outline: 0.004 });
     k.box(m(trim, "paint"), [0, 0.7, front + 0.003], [0.5, 0.025, 0.006], { outline: false });
     // handle and corner caps
     for (const sx of [-1, 1]) k.box(m(METAL, "metal"), [sx * 0.09, 1.28, 0], [0.025, 0.04, 0.12], { outline: 0.003 });
@@ -209,13 +222,13 @@ export const PARTY_BUILDERS: Record<string, Builder> = {
     k.add("cyl", cab, [0, 1.05, 0], [0.7, 0.2, D], { rot: [0, 0, 0], outline: 0.008 });
     for (const sx of [-1, 1]) k.box(m("#3a3631", "metal"), [sx * 0.27, 0.04, 0.15], [0.07, 0.08, 0.07], { outline: 0.004 });
     const front = D / 2 + 0.004;
-    // the display with a glowing line of light, and bars like a level meter
+    // the display: an equaliser that jumps with the music (a still pattern in a placement preview)
     k.box(m("#101014", "paint"), [0, 0.88, front], [0.5, 0.2, 0.012], { outline: 0.004 });
-    k.box(glow, [0, 0.88, front + 0.008], [0.44, 0.14, 0.004], { outline: false });
-    for (let i = 0; i < 7; i++) k.box(m("#101014", "paint"), [-0.18 + i * 0.06, 0.86 + (i % 3) * 0.015, front + 0.011], [0.026, 0.05 + (i % 3) * 0.03, 0.002], { outline: false });
-    // speaker grille
+    k.box(lit(p, m, playerEq), [0, 0.88, front + 0.008], [PLAYER_DISPLAY[0], PLAYER_DISPLAY[1], 0.004], { outline: false });
+    if (p.ghost) for (let i = 0; i < 7; i++) k.box(m("#101014", "paint"), [-0.18 + i * 0.06, 0.86 + (i % 3) * 0.015, front + 0.011], [0.026, 0.05 + (i % 3) * 0.03, 0.002], { outline: false });
+    // speaker grille: the cone behind it nudges the slats out on the kick
     k.box(m("#26262e", "paint"), [0, 0.5, front], [0.5, 0.34, 0.012], { outline: 0.004 });
-    for (let i = 0; i < 7; i++) k.box(m("#3a3a44", "metal"), [0, 0.38 + i * 0.045, front + 0.008], [0.46, 0.012, 0.004], { outline: false });
+    for (let i = 0; i < 7; i++) k.box(m("#3a3a44", "metal", undefined, undefined, 0.012 * (1 - Math.abs(i - 3) / 4)), [0, 0.38 + i * 0.045, front + 0.008], [0.46, 0.012, 0.004], { outline: false });
     // knobs and the play button
     for (const sx of [-1, 1]) k.add("cyl", m("#efe9df", "paint"), [sx * 0.2, 0.2, front + 0.012], [0.09, 0.03, 0.09], { rot: [Math.PI / 2, 0, 0], outline: 0.004 });
     k.add("cyl", m("#efe9df", "paint"), [0, 0.2, front + 0.012], [0.14, 0.03, 0.14], { rot: [Math.PI / 2, 0, 0], outline: 0.004 });

@@ -1,5 +1,6 @@
-import { presetOf, type Music, type Pattern, type PartyLights } from "@cg/shared";
+import { deckBeat, deckPump, musicPosition, presetOf, type Deck, type Music, type Pattern, type PartyLights } from "@cg/shared";
 import * as THREE from "three";
+import { lighting } from "../pencil";
 
 /**
  * The party's shared look. Every lit tile, LED strip and speaker ring is drawn by one of the materials here, and all
@@ -30,7 +31,32 @@ export const partyUniforms = {
   /** 0 to 1: how much the music is playing (speakers glow and the records turn). */
   uBeat: { value: 0 },
   uSpin: { value: 0 },
+  /** 0 to 1: the thump of the kick drum, on each beat, dying away before the next. */
+  uPump: { value: 0 },
+  /** The beat count, held still for steady light (level meters change their pattern with it). */
+  uBeatCount: { value: 0 },
+  /** How loud each deck is, 0 to 1, for the mixer's level lights. */
+  uMeterA: { value: 0 },
+  uMeterB: { value: 0 },
 };
+
+/** What the speakers move to: the deck's own beat, or (for a YouTube video, which tells us nothing of its beat) a steady 120 bpm. */
+export function musicPulse(deck: Deck | undefined, music: Music | undefined, nowMs: number): { playing: boolean; beat: number; pump: number; levels: [number, number]; rate: number } {
+  if (deck?.playing) {
+    const beat = deckBeat(deck, nowMs);
+    const pump = deckPump(beat, deck.drop);
+    const energy = 0.55 + 0.45 * pump;
+    const x = deck.xfade;
+    return { playing: true, beat, pump, levels: [Math.cos((x * Math.PI) / 2) * energy, Math.sin((x * Math.PI) / 2) * energy], rate: deck.bpm / 124 };
+  }
+  if (music?.playing && music.current) {
+    const beat = musicPosition(music, nowMs) / 500;
+    const pump = 0.55 * Math.exp(-(beat - Math.floor(beat)) * 6);
+    const energy = 0.5 + 0.5 * pump;
+    return { playing: true, beat, pump, levels: [energy, energy * 0.9], rate: 1 };
+  }
+  return { playing: false, beat: 0, pump: 0, levels: [0, 0], rate: 0 };
+}
 setPalette(["#00e5ff", "#ff2bd6", "#8a4dff", "#39ff88"]);
 
 function setPalette(hexes: readonly string[], into = partyUniforms.uPalette.value) {
@@ -67,7 +93,7 @@ let pending: ReturnType<typeof lookOf> | null = null;
 const target = Array.from({ length: SLOTS }, () => new THREE.Color());
 
 /** Move the shared uniforms on: the clock, the brightness and the palette, easing each. */
-export function stepParty(lights: PartyLights, music: Music | undefined, nowMs: number, dt: number, centre?: [number, number]) {
+export function stepParty(lights: PartyLights, music: Music | undefined, nowMs: number, dt: number, centre?: [number, number], deck?: Deck) {
   const u = partyUniforms;
   u.uTime.value = partyTime(nowMs);
   if (centre) u.uCentre.value.set(centre[0], centre[1]);
@@ -98,8 +124,17 @@ export function stepParty(lights: PartyLights, music: Music | undefined, nowMs: 
 
   const want = (lights.on ? 0.15 + 0.85 * lights.brightness : 0) * (1 - 0.6 * dip);
   u.uLevel.value += (want - u.uLevel.value) * (1 - Math.exp(-dt * 3.5));
-  u.uBeat.value += ((music?.playing && lights.on ? 1 : music?.playing ? 0.5 : 0) - u.uBeat.value) * (1 - Math.exp(-dt * 3));
-  if (music?.playing) u.uSpin.value = (u.uSpin.value + dt * 3.46) % (Math.PI * 2);
+  const pulse = musicPulse(deck, music, nowMs);
+  u.uBeat.value += ((pulse.playing && lights.on ? 1 : pulse.playing ? 0.5 : 0) - u.uBeat.value) * (1 - Math.exp(-dt * 3));
+  if (pulse.playing) u.uSpin.value = (u.uSpin.value + dt * 3.46 * pulse.rate) % (Math.PI * 2);
+  // speakers thump and meters dance to the beat; a device that asks for less motion keeps them still
+  const still = Boolean(reduced?.matches);
+  u.uPump.value = still ? 0 : pulse.pump;
+  lighting.pump.value = still ? 0 : pulse.pump;
+  u.uBeatCount.value = steady ? 0 : pulse.beat % WRAP;
+  const ease = 1 - Math.exp(-dt * 14);
+  u.uMeterA.value += ((still ? pulse.levels[0] * 0.7 : pulse.levels[0]) - u.uMeterA.value) * ease;
+  u.uMeterB.value += ((still ? pulse.levels[1] * 0.7 : pulse.levels[1]) - u.uMeterB.value) * ease;
 }
 
 function apply(look: ReturnType<typeof lookOf>) {
@@ -116,7 +151,7 @@ function apply(look: ReturnType<typeof lookOf>) {
 }
 
 const common = /* glsl */ `
-  uniform float uTime, uLevel, uCount, uPattern, uPeriod, uSteady, uBeat, uSpin;
+  uniform float uTime, uLevel, uCount, uPattern, uPeriod, uSteady, uBeat, uSpin, uPump, uBeatCount, uMeterA, uMeterB;
   uniform vec3 uPalette[${SLOTS}];
   uniform vec2 uCentre;
   vec3 palAt(float u) {
@@ -177,7 +212,7 @@ export const tileMaterial = new THREE.ShaderMaterial({
       float panel = smoothstep(0.035, 0.075, edge);
       vec2 g = fract(p * 4.0) - 0.5;
       float led = 1.0 - smoothstep(0.17, 0.3, length(g));
-      vec3 glow = palAt(spot(p)) * breathe();
+      vec3 glow = palAt(spot(p)) * breathe() * (1.0 + 0.2 * uPump * (1.0 - uSteady));
       vec3 glass = vec3(0.045, 0.047, 0.07);
       vec3 col = glass + glow * uLevel * (0.38 + 0.62 * led) * panel + glow * uLevel * 0.2 * (1.0 - panel);
       // a faint sheen, fixed to the room, so the glass reads as glass
@@ -199,7 +234,8 @@ export const glowMaterial = new THREE.ShaderMaterial({
     void main() {
       vec2 p = vec2(vWorld.x + vWorld.z, vWorld.y * 2.5);
       vec3 glow = palAt(spot(vec2(vWorld.x, vWorld.z)) + vWorld.y * 0.12) * breathe();
-      float lit = uLevel * (0.55 + 0.45 * uBeat);
+      // brighter on each kick while music plays (steady light holds it level)
+      float lit = uLevel * (0.55 + 0.45 * uBeat) * (1.0 + 0.32 * uPump * (1.0 - uSteady));
       vec3 col = vec3(0.03) + glow * (0.15 + 0.85 * lit);
       gl_FragColor = vec4(col, 1.0);
       ${out}
@@ -230,6 +266,69 @@ export const platterMaterial = new THREE.ShaderMaterial({
     }
   `,
 });
+
+/**
+ * A music player's display: seven bars of an equaliser that jump with the beat, in the party's colours. Drawn from
+ * where each point sits on its panel (`size`, in metres, across x and y), so it fits any panel it's put on.
+ */
+export function equaliserMaterial(size: [number, number]): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...partyUniforms, uSize: { value: new THREE.Vector2(...size) } },
+    toneMapped: false,
+    vertexShader: vertex,
+    fragmentShader: /* glsl */ `
+      varying vec3 vModel;
+      varying vec3 vCenter;
+      uniform vec2 uSize;
+      ${common}
+      float hash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+      void main() {
+        vec2 q = clamp((vModel.xy - vCenter.xy) / uSize + 0.5, 0.0, 1.0);
+        float x = q.x * 7.0;
+        float i = floor(x);
+        float gap = step(0.16, fract(x)) * step(fract(x), 0.84);
+        // each bar takes a new height twice a beat, and the whole lot kicks up with the drum
+        float h = hash(i * 3.1 + floor(uBeatCount * 2.0) * 7.7);
+        float playing = step(0.02, uMeterA + uMeterB);
+        float level = mix(0.08, (0.22 + 0.62 * h) * (0.6 + 0.4 * uPump) + 0.1, playing);
+        float cell = step(0.22, fract(q.y * 6.0));
+        float on = step(q.y, level) * gap * cell;
+        vec3 bar = palAt(q.x * 0.6 + q.y * 0.3) * (0.35 + 0.65 * max(uLevel, 0.6));
+        vec3 col = vec3(0.025, 0.03, 0.05) + bar * on + bar * 0.06 * gap * cell;
+        gl_FragColor = vec4(col, 1.0);
+        ${out}
+      }
+    `,
+  });
+}
+
+/**
+ * A mixer's level lights: little lamps in a column that light from one end with the deck's level (deck A's on the
+ * left, B's on the right), green, then amber, then pink at the top. `first` is where the column starts along z and
+ * `step` how far apart the lamps are.
+ */
+export function levelLightsMaterial(first: number, step: number, count: number): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...partyUniforms, uFirst: { value: first }, uStep: { value: step }, uLamps: { value: count } },
+    toneMapped: false,
+    vertexShader: vertex,
+    fragmentShader: /* glsl */ `
+      varying vec3 vCenter;
+      uniform float uFirst, uStep, uLamps;
+      ${common}
+      void main() {
+        float i = floor((vCenter.z - uFirst) / uStep + 0.5);
+        float level = vCenter.x < 0.0 ? uMeterA : uMeterB;
+        float lit = step(i + 0.5, level * uLamps + 0.35);
+        float top = i / max(1.0, uLamps - 1.0);
+        vec3 hue = top > 0.85 ? vec3(1.0, 0.24, 0.6) : top > 0.55 ? vec3(1.0, 0.82, 0.4) : vec3(0.55, 1.0, 0.23);
+        vec3 col = mix(hue * 0.08, hue, lit);
+        gl_FragColor = vec4(col, 1.0);
+        ${out}
+      }
+    `,
+  });
+}
 
 const balls = new Map<string, THREE.ShaderMaterial>();
 
