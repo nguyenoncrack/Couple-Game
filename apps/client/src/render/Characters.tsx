@@ -80,6 +80,7 @@ export function poseFor(activity: string, seatY: number | null, t: number, stand
     case "dj":
       return djPose(s);
     case "sit":
+    case "rain":
       return {
         hip: (seatY ?? 0.45) + 0.05,
         lean: 0.08,

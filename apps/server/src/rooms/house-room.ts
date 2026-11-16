@@ -384,6 +384,8 @@ export class HouseRoom {
           return this.life.social(id, bp, intent.action, now);
         case "dance":
           return this.life.dance(id, bp, intent.objectId, intent.move, now);
+        case "rain":
+          return this.life.rain(id, bp, intent.objectId, intent.invite, now);
       }
     });
     if (quiet) return;

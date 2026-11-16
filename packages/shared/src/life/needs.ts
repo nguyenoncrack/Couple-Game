@@ -39,6 +39,8 @@ export const GAIN: Partial<Record<Activity, Partial<NeedValues>>> = {
   // curled up in the fort: restful and cosy, and better with company
   fort: { energy: 6, fun: 14, social: 12 },
   sit: { energy: 2 },
+  // two of you on a window bench while it rains: unhurried, and good for the two of you
+  rain: { social: 14, fun: 6, energy: 3 },
   bathe: { hygiene: 60, fun: 3 },
   // a dance floor is the best fun there is, and tiring; the booth is fun too, and a little social
   groove: { fun: 45, social: 8, energy: -6 },

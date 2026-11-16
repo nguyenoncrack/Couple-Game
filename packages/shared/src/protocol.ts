@@ -53,6 +53,8 @@ export const LifeIntent = z.discriminatedUnion("do", [
   z.object({ do: z.literal("party"), cmd: PartyCmd }),
   /** Change a blanket fort (its frame's object id): the pattern, name and sign, or the fairy lights. Not an order to your character. */
   z.object({ do: z.literal("fort"), id: Id, cmd: FortCmd }),
+  /** Sit on a window bench to watch the rain; with `invite`, your partner is asked over to take the other seat. */
+  z.object({ do: z.literal("rain"), objectId: Id, invite: z.boolean() }),
   /** Move the day to a moment, or force the weather. Like the party panel, not an order to your character. */
   z.object({ do: z.literal("world"), cmd: WorldCmd }),
 ]);

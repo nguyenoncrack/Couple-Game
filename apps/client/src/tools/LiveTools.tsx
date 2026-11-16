@@ -1,4 +1,4 @@
-import { actionsOf, catalog, DANCES, floorOf, isLift, liftStops, positionAt, slotsOf, snapUnder, tvFacing, type Action, type Level, type Leftover, type PlacedObject, type Recipe, STOREY, type Together } from "@cg/shared";
+import { actionsOf, catalog, DANCES, floorOf, isLift, isRainWatchable, liftStops, positionAt, slotsOf, windowBehind, snapUnder, tvFacing, type Action, type Level, type Leftover, type PlacedObject, type Recipe, STOREY, type Together } from "@cg/shared";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +36,7 @@ const VERB: Record<Action, string> = {
   groove: "Dance",
   dj: "Work the decks",
   fort: "Enter fort",
+  rain: "Watch the rain",
 };
 
 /** What an item does for a party (see party/definitions.ts). */
@@ -219,6 +220,17 @@ function Menu() {
       options.push({ group: "Fort", label: fort?.lit ? "Fairy lights off" : "Fairy lights on", run: () => { useGame.setState({ menu: null }); fortCmd(frame.id, { lit: !fort?.lit }); } });
       options.push({ group: "Fort", label: "Blanket, name & sign…", run: () => { useGame.setState({ menu: null }); openFort(frame.id); } });
       if (fort?.name) title = fort.name;
+    }
+    // a window bench: watch the rain from it, alone or with your partner asked over to the other seat
+    if (catalog.furniture.get(o.catalogId)?.windowSeat) {
+      const partnerName = members.find((m) => m.id !== me)?.name ?? "your partner";
+      if (!windowBehind(view, view.levels.indexOf(level), o)) body = "Put this bench against a window to watch the rain from it.";
+      else if (!isRainWatchable(serverNow(), life.world)) body = "Come back when it rains: it's the best seat for it.";
+      else {
+        const sittingHere = mine?.use?.objectId === o.id && (mine.use.action === "sit" || mine.use.action === "rain");
+        if (!sittingHere) options.push({ group: "Rain", label: "Watch the rain", run: () => act({ do: "rain", objectId: o.id, invite: false }) });
+        if (us.here) options.push({ group: "Rain", label: `Ask ${partnerName} to watch with you ♥`, run: () => act({ do: "rain", objectId: o.id, invite: true }) });
+      }
     }
     const roles = partyRoles(o);
     if (roles.includes("lights") || roles.includes("dance")) options.push({ group: "Party", label: "Light controls…", run: () => { useGame.setState({ menu: null }); openParty("lights"); } });

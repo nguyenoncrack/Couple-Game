@@ -36,8 +36,8 @@ class Player {
   op(id: string, op: Op) {
     this.send({ type: "op", clientOpId: id, op });
   }
-  async next<T extends ServerMsg["type"]>(type: T, match: (m: Extract<ServerMsg, { type: T }>) => boolean = () => true) {
-    const deadline = Date.now() + 3000;
+  async next<T extends ServerMsg["type"]>(type: T, match: (m: Extract<ServerMsg, { type: T }>) => boolean = () => true, ms = 3000) {
+    const deadline = Date.now() + ms;
     for (;;) {
       const i = this.inbox.findIndex((m) => m.type === type && match(m as Extract<ServerMsg, { type: T }>));
       if (i >= 0) return this.inbox.splice(i, 1)[0] as Extract<ServerMsg, { type: T }>;
@@ -233,4 +233,61 @@ describe("the cozy catalog, over the wire", () => {
     await back.disconnect();
     await old.close();
   });
+});
+
+describe("watching the rain, over the wire", () => {
+  it("seats both players together on a window bench in the rain, through a refresh, and frees the seat when one gets up", async () => {
+    const { a, b } = await couple();
+    await a.connect();
+    await b.connect();
+    // a room with a window in its north wall, the bench against it, and a door
+    const ops: Op[] = [
+      ...[
+        [4, 4, 12, 4],
+        [12, 4, 12, 10],
+        [12, 10, 4, 10],
+        [4, 10, 4, 4],
+      ].map(([x1, z1, x2, z2]) => ({ t: "walls.add" as const, level: 0, edges: edgesBetween(x1!, z1!, x2!, z2!), style: "cedar_planks" })),
+      { t: "floor.paint", level: 0, cells: cellsBetween(4, 4, 11, 9), material: "slate_rain" },
+      { t: "opening.place", level: 0, id: "doorrainy01", catalogId: "door_wood", dir: "h", x: 10, z: 10, flip: false },
+      { t: "opening.place", level: 0, id: "windowrain1", catalogId: "window_wide", dir: "h", x: 6, z: 4, flip: false },
+      { t: "object.place", level: 0, id: "benchrainy1", catalogId: "window_bench", x: 6, z: 4, rot: 0 },
+    ];
+    ops.forEach((op, i) => a.op(`rainop${String(i).padStart(5, "0")}`, op));
+    for (let i = 0; i < ops.length; i++) await b.next("applied");
+
+    // dry weather: the bench has nothing to offer
+    a.intent({ do: "world", cmd: { cmd: "weather", set: "clear" } });
+    await a.next("life", (m) => m.life.world?.weather?.mode === "clear");
+    a.intent({ do: "rain", objectId: "benchrainy1", invite: true });
+    expect((await a.next("lifeRejected")).reason).toBe("not-raining");
+
+    // rain: Amy sits and asks Ben over; both end up on the two seats, facing the window, in "rain" mode
+    a.intent({ do: "world", cmd: { cmd: "weather", set: "rain" } });
+    await a.next("life", (m) => m.life.world?.weather?.mode === "rain");
+    await new Promise((r) => setTimeout(r, 2500));
+    a.intent({ do: "rain", objectId: "benchrainy1", invite: true });
+    const both = (l: LifeState) => Object.values(l.avatars).length === 2 && Object.values(l.avatars).every((v) => v.use?.objectId === "benchrainy1" && v.use.action === "rain");
+    const seen = await b.next("life", (m) => both(m.life), 12_000);
+    const uses = Object.values(seen.life.avatars).map((v) => v.use!);
+    expect(new Set(uses.map((u) => u.slot))).toEqual(new Set([0, 1]));
+    expect(uses.every((u) => u.pose?.face === 2)).toBe(true);
+    expect(uses.some((u) => u.invitedBy)).toBe(true);
+
+    // a refresh lands back in the same seat, in the same rain
+    await b.disconnect();
+    const again = await b.connect();
+    expect(both(again.life)).toBe(true);
+
+    // Ben gets up: the seat is free, Amy is still sitting, and the bonus is over
+    const benId = again.memberId;
+    b.intent({ do: "stop" });
+    const stood = await a.next("life", (m) => Object.values(m.life.avatars).some((v) => !v.use) && Object.values(m.life.avatars).some((v) => v.use?.action === "sit"), 6000);
+    expect(stood.life.avatars[benId]?.use ?? null).toBeNull();
+    // and he can take it again
+    b.intent({ do: "rain", objectId: "benchrainy1", invite: false });
+    await a.next("life", (m) => both(m.life), 12_000);
+    await a.disconnect();
+    await b.disconnect();
+  }, 60_000);
 });

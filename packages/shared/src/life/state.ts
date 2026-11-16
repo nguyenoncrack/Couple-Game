@@ -89,6 +89,8 @@ export interface Use {
   ride?: Ride;
   /** Dancing: which dance (see party/definitions.ts). */
   move?: string;
+  /** Asked over to watch the rain by this member (so the one invited can be told); cleared with the use. */
+  invitedBy?: string;
 }
 
 export interface Avatar {

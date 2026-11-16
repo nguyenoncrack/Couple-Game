@@ -347,6 +347,12 @@ function handle(msg: ServerMsg) {
         const name = s.members.find((m) => m.id === now.with)?.name ?? "Your partner";
         if (other?.use?.with === s.me && performance.now() - askedAt > 3000) toast(`${name} is coming over ${COMING_FOR[now.action]}`);
       }
+      // my partner asked me over to watch the rain: say so, in case I'm looking elsewhere
+      const asked = s.me ? msg.life.avatars[s.me]?.use?.invitedBy : undefined;
+      if (asked && asked !== (s.me ? s.life?.avatars[s.me]?.use?.invitedBy : undefined)) {
+        const name = s.members.find((m) => m.id === asked)?.name ?? "Your partner";
+        toast(`${name} asked you to watch the rain from the window bench ♥`);
+      }
       // food that's been left out goes in the fridge by itself: say so (not when I put it there)
       const had = new Set((s.life?.fridge ?? []).map((l) => l.id));
       const stored = s.life ? (msg.life.fridge ?? []).filter((l) => !had.has(l.id) && s.life!.dishes.some((d) => d.id === l.id)) : [];
