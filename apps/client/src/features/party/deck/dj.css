@@ -522,7 +522,7 @@
 /* record crate */
 .dj-crate {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(62px, 1fr));
   gap: 8px;
   margin-top: 10px;
 }

@@ -49,6 +49,19 @@ describe("the DJ deck", () => {
     expect(s.party!.deck).toMatchObject({ xfade: 0.4, b: "night-bus", echo: true, filter: -0.5 });
   });
 
+  it("cues each recording independently and saves the cues with the paused playhead", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { bpm: 120, playing: true } }, T0);
+    send(s, { cmd: "deck", set: { a: "atlasaudio-edm" } }, T0 + 4 * BEAT);
+    send(s, { cmd: "deck", set: { b: "kulakovka-hard-edm" } }, T0 + 8 * BEAT);
+    expect(send(s, { cmd: "deck", set: { a: "atlasaudio-edm" } }, T0 + 9 * BEAT).changed).toBe(false);
+    const saved = savedParty(s.party!, T0 + 10 * BEAT);
+    const restored = restoredParty(JSON.parse(JSON.stringify(saved)))!;
+    expect(restored.deck).toMatchObject({ a: "atlasaudio-edm", b: "kulakovka-hard-edm", cueA: 4, cueB: 8, beat: 10, playing: false });
+    send(s, { cmd: "deck", set: { a: "night-bus" } }, T0 + 11 * BEAT);
+    expect(s.party!.deck!.cueA).toBeUndefined();
+  });
+
   it("takes turns with the YouTube music", () => {
     const s = fresh();
     send(s, { cmd: "add", videoId: "dQw4w9WgXcQ" }, T0);

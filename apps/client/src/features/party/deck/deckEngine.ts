@@ -1,10 +1,10 @@
-import { BUILD_BEATS, deckBeat, sectionAt, type Deck, type DeckTrackId } from "@cg/shared";
+import { BUILD_BEATS, DEFAULT_BPM, deckBeat, sectionAt, type Deck, type DeckTrackId } from "@cg/shared";
+import { recordingOffset, RECORDING_URLS } from "./recordings";
 import { bassNote, chordVoicing, hitAt, LAYERS, leadNote, midiHz, TRACK_DEFS, type TrackDef } from "./tracks";
 
 /**
- * The DJ deck's sound, made in Web Audio on this screen from the shared deck state: nothing is downloaded and
- * nothing is sent. Notes are scheduled a little ahead, each at the moment the server clock says its beat falls, so
- * both screens play the same note at the same time.
+ * The DJ deck's sound, made in Web Audio from the shared deck state. Notes are scheduled ahead by beat.
+ * Recordings start at the offset given by the same clock and feed the same mixer.
  *
  *   deck A voices ─ gain A ─ meter A ┐
  *                                    ├─ low-pass ─ high-pass ─┬─────────────── out ─ compressor ─ speakers
@@ -30,15 +30,21 @@ export function filterCutoffs(k: number): { low: number; high: number } {
   return { low: k < 0 ? 20_000 * (180 / 20_000) ** -k : 20_000, high: k > 0 ? 20 * (2_400 / 20) ** k : 20 };
 }
 
+type RecordingStatus = "loading" | "error";
+const PATTERNS: Readonly<Partial<Record<DeckTrackId, TrackDef>>> = TRACK_DEFS;
+
 interface DeckBus {
   input: GainNode;
   gain: GainNode;
   meter: AnalyserNode;
+  recording?: AudioBufferSourceNode;
 }
 
 export class DeckEngine {
   private ctx: AudioContext | null = null;
   private buses: [DeckBus, DeckBus] | null = null;
+  private recordings = new Map<DeckTrackId, AudioBuffer | RecordingStatus>();
+  private recordingRequests = new AbortController();
   private low!: BiquadFilterNode;
   private high!: BiquadFilterNode;
   private echoWet!: GainNode;
@@ -81,6 +87,9 @@ export class DeckEngine {
     const c = this.ctx;
     this.ctx = null;
     this.buses = null;
+    this.recordingRequests.abort();
+    this.recordingRequests = new AbortController();
+    this.recordings.clear();
     if (c) {
       this.out.gain.setTargetAtTime(0, c.currentTime, 0.05);
       window.setTimeout(() => void c.close().catch(() => {}), 300);
@@ -94,12 +103,18 @@ export class DeckEngine {
     const key = deck ? `${deck.playing}|${deck.t}|${deck.beat}|${deck.bpm}` : "";
     if (key !== this.anchorKey) {
       this.anchorKey = key;
-      // a pause cuts the notes already queued; starting again schedules from where the beat is now (a tempo change
-      // while playing carries on from the next sixteenth not yet queued)
-      if (was?.playing && !deck?.playing) this.cut();
       if (!was?.playing) this.next = 0;
     }
+    if (was?.playing && this.buses) {
+      if (!deck?.playing || deck.a !== was.a || deck.cueA !== was.cueA) this.cut(this.buses[0]);
+      if (!deck?.playing || deck.b !== was.b || deck.cueB !== was.cueB) this.cut(this.buses[1]);
+    }
     this.apply();
+  }
+
+  recordingStatus(id: DeckTrackId): RecordingStatus | undefined {
+    const state = this.recordings.get(id);
+    return typeof state === "string" ? state : undefined;
   }
 
   /** This player's volume (0 to 1, after mute) and how near the speakers they are (0 to 1). */
@@ -198,17 +213,57 @@ export class DeckEngine {
     this.out.gain.setTargetAtTime(this.level(), at, 0.08);
   }
 
-  /** Stop what's queued: swap each deck's input for a new one and let the old fade out. */
-  private cut() {
+  /** Fade out the current record and any synth notes already scheduled for this deck. */
+  private cut(bus: DeckBus) {
     const c = this.ctx;
-    if (!c || !this.buses) return;
-    for (const b of this.buses) {
-      const old = b.input;
-      old.gain.setTargetAtTime(0, c.currentTime, 0.02);
-      window.setTimeout(() => old.disconnect(), 300);
-      b.input = c.createGain();
-      b.input.connect(b.gain);
+    if (!c) return;
+    const old = bus.input;
+    old.gain.setTargetAtTime(0, c.currentTime, 0.02);
+    bus.recording?.stop(c.currentTime + 0.1);
+    bus.recording = undefined;
+    window.setTimeout(() => old.disconnect(), 300);
+    bus.input = c.createGain();
+    bus.input.connect(bus.gain);
+  }
+
+  private async loadRecording(c: AudioContext, id: DeckTrackId, url: string) {
+    const signal = this.recordingRequests.signal;
+    this.recordings.set(id, "loading");
+    try {
+      const response = await fetch(url, { signal });
+      if (!response.ok) throw new Error("Could not load DJ recording");
+      const data = await response.arrayBuffer();
+      if (signal.aborted) return;
+      const buffer = await c.decodeAudioData(data);
+      if (!signal.aborted) this.recordings.set(id, buffer);
+    } catch {
+      if (!signal.aborted) this.recordings.set(id, "error");
     }
+  }
+
+  private syncRecording(c: AudioContext, bus: DeckBus, id: DeckTrackId, cue: number, beat: number, bpm: number) {
+    const url = RECORDING_URLS[id];
+    if (!url) return;
+    const buffer = this.recordings.get(id);
+    if (!buffer) {
+      void this.loadRecording(c, id, url);
+      return;
+    }
+    if (typeof buffer === "string") return;
+
+    const rate = bpm / DEFAULT_BPM;
+    if (bus.recording?.playbackRate.value === rate) return;
+    if (bus.recording) this.cut(bus);
+    const source = c.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.playbackRate.value = rate;
+    const at = c.currentTime;
+    bus.input.gain.setValueAtTime(0, at);
+    bus.input.gain.linearRampToValueAtTime(1, at + 0.02);
+    source.connect(bus.input);
+    source.start(at, recordingOffset(beat, cue, buffer.duration));
+    bus.recording = source;
   }
 
   private tick() {
@@ -219,13 +274,17 @@ export class DeckEngine {
     // server time to audio time: measured each tick, so a clock correction is followed
     const offset = c.currentTime - serverMs / 1000;
     const beatNow = deckBeat(d, serverMs);
+    this.syncRecording(c, this.buses[0], d.a, d.cueA ?? 0, beatNow, d.bpm);
+    this.syncRecording(c, this.buses[1], d.b, d.cueB ?? 0, beatNow, d.bpm);
     const [from, to] = stepsDue(this.next, beatNow, beatNow + (LOOKAHEAD * d.bpm) / 60);
     const [ga, gb] = xfadeGains(d.xfade);
+    const patternA = PATTERNS[d.a];
+    const patternB = PATTERNS[d.b];
     for (let s = from; s < to; s++) {
       const serverAt = d.t + ((s / 4 - d.beat) * 60_000) / d.bpm;
       const at = Math.max(c.currentTime, serverAt / 1000 + offset);
-      if (ga > 0.01) this.step(c, this.buses[0].input, TRACK_DEFS[d.a], d, s, at);
-      if (gb > 0.01) this.step(c, this.buses[1].input, TRACK_DEFS[d.b], d, s, at);
+      if (ga > 0.01 && patternA) this.step(c, this.buses[0].input, patternA, d, s, at);
+      if (gb > 0.01 && patternB) this.step(c, this.buses[1].input, patternB, d, s, at);
       this.fx(c, d, s, at);
     }
     this.next = to;

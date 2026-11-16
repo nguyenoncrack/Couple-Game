@@ -1,14 +1,13 @@
 /**
  * The DJ deck: two turntables of the game's own music, a crossfader between them, a filter, an echo and a drop.
- * The tracks are made on each screen from the same notes (nothing is downloaded), so all the house keeps is which
- * record is on which deck and where the beat is. Both decks always play in time with each other (one tempo, one
- * beat), so any mix sounds right.
+ * Each screen plays the same records using the shared beat clock. Synthesized records follow its beat directly.
+ * Recordings use it to keep their playback position in sync across players.
  *
  * The beat follows the server clock: at server time `t` the beat count was `beat`, and while playing it moves on at
  * `bpm`. Every change re-anchors it there, so a change of tempo never jumps the music.
  */
 
-export const DECK_TRACKS = [
+const PATTERN_TRACKS = [
   { id: "neon-drift", name: "Neon Drift", style: "House", color: "#ff2bd6" },
   { id: "sunset-loop", name: "Sunset Loop", style: "Deep house", color: "#ff9a3c" },
   { id: "pillow-fort", name: "Pillow Fort", style: "Lo-fi house", color: "#b18cff" },
@@ -16,6 +15,14 @@ export const DECK_TRACKS = [
   { id: "disco-kettle", name: "Disco Kettle", style: "Nu-disco", color: "#ffd166" },
   { id: "night-bus", name: "Night Bus", style: "Techno", color: "#39ff88" },
 ] as const;
+export const RECORDED_TRACKS = [
+  { id: "atlasaudio-edm", name: "EDM", style: "AtlasAudio", color: "#22d3ee" },
+  { id: "kulakovka-hard-edm", name: "Hard EDM", style: "Kulakovka", color: "#ff556d" },
+  { id: "sad-machine-ksk-edit", name: "Sad Machine (KSK Edit)", style: "Porter Robinson", color: "#a78bfa" },
+] as const;
+export type PatternTrackId = (typeof PATTERN_TRACKS)[number]["id"];
+export type RecordedTrackId = (typeof RECORDED_TRACKS)[number]["id"];
+export const DECK_TRACKS = [...PATTERN_TRACKS, ...RECORDED_TRACKS] as const;
 export type DeckTrackId = (typeof DECK_TRACKS)[number]["id"];
 export const DECK_TRACK_IDS = DECK_TRACKS.map((t) => t.id) as [DeckTrackId, ...DeckTrackId[]];
 export const deckTrack = (id: string) => DECK_TRACKS.find((t) => t.id === id) ?? DECK_TRACKS[0];
@@ -35,12 +42,17 @@ export interface Deck {
   beat: number;
   /** -1 muffles the music (low-pass), 0 leaves it open, 1 thins it out (high-pass). */
   filter: number;
+  /** Beat when a recording was loaded. Older decks start at beat zero. */
+  cueA?: number;
+  cueB?: number;
   echo: boolean;
   /** The beat a build-up starts on (the drop lands `BUILD_BEATS` later), or null. */
   drop: number | null;
 }
 
-export const DEFAULT_DECK: Deck = { a: "neon-drift", b: "sunset-loop", xfade: 0, bpm: 124, playing: false, t: 0, beat: 0, filter: 0, echo: false, drop: null };
+export const DEFAULT_BPM = 124;
+
+export const DEFAULT_DECK: Deck = { a: "neon-drift", b: "sunset-loop", xfade: 0, bpm: DEFAULT_BPM, playing: false, t: 0, beat: 0, filter: 0, echo: false, drop: null };
 
 /** A build-up lasts two bars, and the drop after it four. */
 export const BUILD_BEATS = 8;
@@ -103,6 +115,8 @@ export function restoredDeck(saved: Partial<Deck> | undefined): Deck {
   d.xfade = num(saved.xfade, 0, 1, d.xfade);
   d.bpm = num(saved.bpm, MIN_BPM, MAX_BPM, d.bpm);
   d.beat = num(saved.beat, 0, 1e7, 0);
+  if (saved.cueA !== undefined) d.cueA = num(saved.cueA, 0, d.beat, 0);
+  if (saved.cueB !== undefined) d.cueB = num(saved.cueB, 0, d.beat, 0);
   d.filter = num(saved.filter, -1, 1, 0);
   d.echo = saved.echo === true;
   // kept paused, as the rest of the music is

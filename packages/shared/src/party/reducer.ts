@@ -1,7 +1,7 @@
 import type { Blueprint } from "../blueprint";
 import type { Catalog } from "../catalog";
 import type { LifeState } from "../life/state";
-import { anchorDeck, BUILD_BEATS, deckBeat, DEFAULT_DECK, DROP_BEATS, restoredDeck, type Deck } from "./deck";
+import { anchorDeck, BUILD_BEATS, deckBeat, DEFAULT_DECK, DROP_BEATS, RECORDED_TRACKS, restoredDeck, type Deck } from "./deck";
 import { emptyParty, MAX_QUEUE, musicPosition, PARTY_ROLES, type PartyCmd, type PartyReject, type PartyRole, type PartyState, type Track } from "./definitions";
 
 /** What party gear the house has: any item with that role, on any floor. */
@@ -73,7 +73,18 @@ function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: "deck" | "drop" }>, no
     return true;
   }
   const before = JSON.stringify(d);
-  const { playing, bpm, ...rest } = cmd.set;
+  const { playing, bpm, a, b, ...rest } = cmd.set;
+  const beat = deckBeat(d, now);
+  if (a !== undefined && a !== d.a) {
+    d.a = a;
+    if (RECORDED_TRACKS.some((track) => track.id === a)) d.cueA = beat;
+    else delete d.cueA;
+  }
+  if (b !== undefined && b !== d.b) {
+    d.b = b;
+    if (RECORDED_TRACKS.some((track) => track.id === b)) d.cueB = beat;
+    else delete d.cueB;
+  }
   // the beat is re-anchored before the tempo changes or the music stops or starts, so it carries on from where it is
   if ((playing !== undefined && playing !== d.playing) || (bpm !== undefined && bpm !== d.bpm)) anchorDeck(d, now);
   if (bpm !== undefined) d.bpm = bpm;

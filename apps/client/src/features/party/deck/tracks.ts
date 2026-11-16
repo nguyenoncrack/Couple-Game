@@ -1,4 +1,4 @@
-import type { DeckTrackId, Section } from "@cg/shared";
+import type { PatternTrackId, Section } from "@cg/shared";
 
 /**
  * The deck's records, written as patterns: one bar of drums and lines in sixteenths, and a four-bar run of chords.
@@ -10,7 +10,7 @@ import type { DeckTrackId, Section } from "@cg/shared";
  */
 
 export interface TrackDef {
-  id: DeckTrackId;
+  id: PatternTrackId;
   /** Per bar, cycling: the bass root and the chord, as semitones from A. */
   bars: readonly (readonly [root: number, chord: readonly number[]])[];
   kick: string;
@@ -37,7 +37,7 @@ export interface TrackDef {
 const FOUR = "x...x...x...x...";
 const TWO_FOUR = "....x.......x...";
 
-export const TRACK_DEFS: Record<DeckTrackId, TrackDef> = {
+export const TRACK_DEFS: Record<PatternTrackId, TrackDef> = {
   "neon-drift": {
     id: "neon-drift",
     bars: [

@@ -2,12 +2,13 @@ import { DECK_TRACK_IDS, DEFAULT_DECK, type Section } from "@cg/shared";
 import { describe, expect, it } from "vitest";
 import { musicPulse } from "../../../render/party/partyMaterials";
 import { filterCutoffs, stepsDue, xfadeGains } from "./deckEngine";
+import { recordingOffset, RECORDING_URLS } from "./recordings";
 import { bassNote, chordVoicing, LAYERS, leadNote, TRACK_DEFS } from "./tracks";
 
 describe("the deck's records", () => {
-  it("has a record for every track the house can load, with whole bars of pattern", () => {
-    for (const id of DECK_TRACK_IDS) {
-      const def = TRACK_DEFS[id];
+  it("maps every shared record to a whole-bar pattern or a bundled recording", () => {
+    expect([...Object.keys(TRACK_DEFS), ...Object.keys(RECORDING_URLS)].sort()).toEqual([...DECK_TRACK_IDS].sort());
+    for (const [id, def] of Object.entries(TRACK_DEFS)) {
       expect(def.id).toBe(id);
       for (const p of [def.kick, def.clap, def.hat, def.open, def.bass, def.lead]) expect(p).toMatch(/^[.xXrof0-7]{16}$/);
       expect(def.bars.length).toBeGreaterThan(0);
@@ -15,8 +16,7 @@ describe("the deck's records", () => {
   });
 
   it("keeps every note in a sensible range", () => {
-    for (const id of DECK_TRACK_IDS) {
-      const def = TRACK_DEFS[id];
+    for (const def of Object.values(TRACK_DEFS)) {
       for (let bar = 0; bar < 4; bar++)
         for (let s = 0; s < 16; s++) {
           const b = bassNote(def, bar, s);
@@ -36,6 +36,12 @@ describe("the deck's records", () => {
 });
 
 describe("the deck's engine", () => {
+  it("starts recordings at their cue and wraps at the end of the file", () => {
+    expect(recordingOffset(20, 20, 120)).toBe(0);
+    expect(recordingOffset(144, 20, 120)).toBe(60);
+    expect(recordingOffset(330, 20, 120)).toBe(30);
+  });
+
   it("schedules each sixteenth once, never one already gone", () => {
     expect(stepsDue(0, 10, 10.3)).toEqual([40, 42]);
     // the next tick picks up where the last left off
