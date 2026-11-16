@@ -5,6 +5,7 @@ import type { Auto } from "./autonomy";
 import type { BlackjackRound } from "./blackjack";
 import type { FortState } from "../fort/definitions";
 import type { PartyState } from "../party/definitions";
+import type { WorldState } from "../world/definitions";
 import type { Needs } from "./needs";
 import { levelOf, type Point, type Spot } from "./nav";
 
@@ -88,6 +89,8 @@ export interface Use {
   ride?: Ride;
   /** Dancing: which dance (see party/definitions.ts). */
   move?: string;
+  /** Asked over to watch the rain by this member (so the one invited can be told); cleared with the use. */
+  invitedBy?: string;
 }
 
 export interface Avatar {
@@ -154,6 +157,8 @@ export interface LifeState {
   party?: PartyState;
   /** The blanket forts' settings (pattern, name, sign, lights), by the frame's object id. Optional for old saves. */
   forts?: Record<string, FortState>;
+  /** The day's clock shift and forced weather (see world/definitions.ts). Optional: most houses never touch it. */
+  world?: WorldState;
 }
 
 /**

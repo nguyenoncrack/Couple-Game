@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { Kit } from "./kit";
 import type { Finish } from "./pencil";
 
-type Mat = (tone: string, finish?: Finish, alpha?: number) => THREE.Material;
+type Mat = (tone: string, finish?: Finish, alpha?: number, glow?: number) => THREE.Material;
 type Builder = (k: Kit, w: number, d: number, p: Record<string, unknown>, m: Mat, seed: number) => void;
 export type FlowerKind = "daisy" | "tulip" | "lavender";
 /** How far outdoor grass and flowers sway in the breeze (see `pencilMaterial`). */

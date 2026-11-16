@@ -2,6 +2,7 @@ import { catalog } from "@cg/shared";
 import { useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { modelFor, openingModelFor } from "./models";
+import { withDaylight } from "./pencil";
 
 /**
  * Little pictures of catalog items for the build panels: each model drawn once in its own pencil style, from the
@@ -46,7 +47,7 @@ function draw(catalogId: string): string {
   camera.position.copy(centre).addScaledVector(VIEW_DIR, distance);
   camera.lookAt(centre);
 
-  renderer.render(scene, camera);
+  withDaylight(() => renderer!.render(scene, camera));
   return renderer.domElement.toDataURL("image/png");
 }
 

@@ -26,13 +26,16 @@ const fogGlsl = /* glsl */ `
     return pow(smoothstep(60.0, 200.0, d), 0.9);
   }
 `;
-const fogUniform = { value: srgb(FOG) };
+export const fogUniform = { value: srgb(FOG) };
 
 /**
  * Light shared by every pencil surface. `Sunlight` fills in the sun's shadow map and the overhead height map
  * (for contact shadows) while the main view is drawn, and clears them again afterwards, so other canvases (the
  * catalog pictures, the character preview) draw the same materials without them.
  */
+/** How many lamps light the view at once. */
+export const LAMPS = 8;
+
 export const lighting = {
   tint: { value: new THREE.Color(1, 1, 1) },
   time: { value: 0 },
@@ -51,9 +54,62 @@ export const lighting = {
   heightOn: { value: 0 },
   /** How strong the drawn contact patches under furniture are (full when there are no real shadows). */
   contact: { value: 1 },
+  /** The light's colours, in the linear space the shader mixes in: the sun (or the moon at night), the sky's fill from above and the ground's bounce. `Sky` moves them through the day. */
+  sun: { value: new THREE.Vector3(1.0 * 0.86, 0.86 * 0.86, 0.68 * 0.86) },
+  skyLight: { value: new THREE.Vector3(0.6, 0.64, 0.72) },
+  bounce: { value: new THREE.Vector3(0.46, 0.42, 0.37) },
+  /** How much lamps and windows are lit: 0 in daylight, 1 at night. */
+  night: { value: 0 },
+  /** Up to eight lamps near the view: x, y, z and the radius of their pool of light (0 radius: unused). */
+  lamps: { value: Array.from({ length: LAMPS }, () => new THREE.Vector4(0, 0, 0, 0)) },
+  lampColor: { value: new THREE.Vector3(1.0, 0.66, 0.32) },
+  /** How wet the outdoors is (0 dry, 1 soaked): the ground and plants go a little darker and glossier. */
+  wet: { value: 0 },
   /** How hard the breeze blows on plants that sway (0 holds them still, for people who'd rather less motion). */
   wind: { value: 1 },
 };
+
+/** What the sky dome draws, moved through the day by `Sky` (and by the weather): colours in the page's sRGB. */
+export const skyDome = {
+  horizon: { value: srgb(FOG) },
+  zenith: { value: srgb("#7fb1df") },
+  sunDir: SUN_DIR,
+  moonDir: new THREE.Vector3(0, -1, 0),
+  /** Where the sun sits (unit vector, may be below the horizon), as opposed to where the *light* comes from. */
+  sunPos: new THREE.Vector3(0, 1, 0),
+  /** 0 by day, 1 at night: stars, the moon and darker clouds. */
+  night: { value: 0 },
+  /** How much of the low sun's warm glow there is (golden hour). */
+  gold: { value: 0 },
+  /** 0 clear, 1 heavy rain cloud: more cloud, greyer and darker. */
+  overcast: { value: 0 },
+};
+
+/**
+ * Pictures of furniture and people (the catalog's, the character preview's) are always drawn in plain daylight, whatever
+ * the time in the house, so a preview made at midnight isn't a dark blob. Anything drawn inside `fn` sees the day's
+ * defaults; the real sky is put back straight after.
+ */
+const DAYLIGHT = { dir: SUN_DIR.clone(), sun: lighting.sun.value.clone(), sky: lighting.skyLight.value.clone(), bounce: lighting.bounce.value.clone(), fog: fogUniform.value.clone() };
+export function withDaylight<T>(fn: () => T): T {
+  const was = { dir: SUN_DIR.clone(), sun: lighting.sun.value.clone(), sky: lighting.skyLight.value.clone(), bounce: lighting.bounce.value.clone(), fog: fogUniform.value.clone(), night: lighting.night.value };
+  SUN_DIR.copy(DAYLIGHT.dir);
+  lighting.sun.value.copy(DAYLIGHT.sun);
+  lighting.skyLight.value.copy(DAYLIGHT.sky);
+  lighting.bounce.value.copy(DAYLIGHT.bounce);
+  fogUniform.value.copy(DAYLIGHT.fog);
+  lighting.night.value = 0;
+  try {
+    return fn();
+  } finally {
+    SUN_DIR.copy(was.dir);
+    lighting.sun.value.copy(was.sun);
+    lighting.skyLight.value.copy(was.sky);
+    lighting.bounce.value.copy(was.bounce);
+    fogUniform.value.copy(was.fog);
+    lighting.night.value = was.night;
+  }
+}
 
 /** The way the breeze blows (x, z): plants lean this way and leaves drift with it. */
 export const WIND: [number, number] = [0.87, 0.49];
@@ -181,9 +237,17 @@ const pencilFragment = /* glsl */ `
   vec3 toLinear(vec3 c) { return pow(max(c, 0.0), vec3(2.2)); }
   vec3 toSrgb(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
 
-  const vec3 SUN = vec3(1.0, 0.86, 0.68) * 0.86;
-  const vec3 SKY = vec3(0.6, 0.64, 0.72);
-  const vec3 BOUNCE = vec3(0.46, 0.42, 0.37);
+  uniform vec3 uSun;
+  uniform vec3 uSkyLight;
+  uniform vec3 uBounce;
+  uniform float uNight;
+  uniform vec4 uLamps[${LAMPS}];
+  uniform vec3 uLampColor;
+  uniform float uGlow;
+  uniform float uWet;
+  #define SUN uSun
+  #define SKY uSkyLight
+  #define BOUNCE uBounce
 
   // 1 well inside a map's picture (0..1), easing to 0 at its edge. Past the edge a map only repeats its border,
   // which would smear whatever stands there into long straight stripes across the countryside.
@@ -421,11 +485,25 @@ const pencilFragment = /* glsl */ `
     vec3 fill = mix(BOUNCE, SKY, 0.5 + 0.5 * n.y) * (1.0 - occ * 0.55);
     // uFill: soft light from the room itself, for surfaces only ever seen from inside (ceilings)
     vec3 irradiance = fill + SUN * sun * (1.0 - occ * 0.35) + vec3(1.0, 0.95, 0.88) * uFill;
+    // lamps: a warm pool round each, strongest close in and on surfaces facing it (they cast no shadow of their own)
+    if (uNight > 0.01) {
+      for (int i = 0; i < ${LAMPS}; i++) {
+        vec4 lp = uLamps[i];
+        if (lp.w <= 0.0) continue;
+        vec3 toLamp = lp.xyz - vWorldPos;
+        float dl = length(toLamp);
+        float reach = 1.0 - smoothstep(0.0, lp.w, dl);
+        float facing = clamp(dot(n, toLamp / max(dl, 1e-3)) * 0.65 + 0.35, 0.0, 1.0);
+        irradiance += uLampColor * reach * reach * facing * 1.15 * uNight;
+      }
+    }
     #if defined(FINISH) && FINISH == 26
       // Light transmitted through the thin leaves softens the dark side of a crown.
       irradiance += SUN * max(-ndl, 0.0) * 0.12;
     #endif
     vec3 lit = toLinear(base) * irradiance;
+    // things that glow after dark: lampshades, lit windows
+    lit += uLampColor * uGlow * uNight;
     // Gloss: a tight glint for polished things plus a broad soft lobe around it, which is all the bloom there is.
     vec3 halfway = normalize(uLightDir + viewDir);
     float nh = max(dot(sn, halfway), 0.0);
@@ -469,6 +547,9 @@ const pencilFragment = /* glsl */ `
     #else
       // Surface marks are material relief, with no graphite contours or crosshatching.
       col *= 1.0 - lines * 0.16;
+      // rain-soaked: everything outdoors a touch darker and richer
+      col = mix(col, col * col * 1.2, uWet * 0.22);
+      col *= 1.0 - uWet * 0.08;
     #endif
 
     // Grading: lift the softer colours (not the already-bold ones), keep shadows slightly cool, and let
@@ -492,7 +573,7 @@ const pencilFragment = /* glsl */ `
     col = mix(col, uHighlight, uHighlightAmt);
     col *= uTint;
     col = mix(col, uFog, fogAt(length(cameraPosition - vWorldPos)) * uFogScale);
-    gl_FragColor = vec4(col, uAlpha);
+    gl_FragColor = vec4(col, max(uAlpha, min(0.85, uGlow * uNight * 0.7)));
   }
 `;
 
@@ -535,13 +616,15 @@ export interface PencilOptions {
   /** Sways in the breeze (grass, reeds, flowers): how far, per metre of height squared. Its outlines should be
    * drawn with the same `sway` (Kit does this). */
   sway?: number;
+  /** Glows warm after dark (lampshades, lit windows): how brightly, 1 being a lamp's own shade. */
+  glow?: number;
 }
 
 const cache = new Map<string, THREE.ShaderMaterial>();
 
 /** Shared pencil material. Calls with the same arguments return the same instance. */
 export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
-  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}|${opts.fill ?? 0}|${opts.sway ?? 0}|${opts.natural ? 1 : 0}`;
+  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}|${opts.fill ?? 0}|${opts.sway ?? 0}|${opts.natural ? 1 : 0}|${opts.glow ?? 0}`;
   let m = cache.get(key);
   if (!m) {
     const ghost = opts.ghost;
@@ -578,6 +661,14 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
         uHeightOn: lighting.heightOn,
         uSway: { value: opts.sway ?? 0 },
         uWind: lighting.wind,
+        uSun: lighting.sun,
+        uSkyLight: lighting.skyLight,
+        uBounce: lighting.bounce,
+        uNight: lighting.night,
+        uLamps: lighting.lamps,
+        uLampColor: lighting.lampColor,
+        uGlow: { value: opts.glow ?? 0 },
+        uWet: lighting.wet,
       },
       transparent: Boolean(ghost) || (opts.alpha ?? 1) < 1,
       depthWrite: !ghost && (opts.alpha ?? 1) >= 1,

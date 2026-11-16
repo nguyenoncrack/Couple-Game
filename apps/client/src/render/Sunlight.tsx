@@ -86,22 +86,34 @@ export function Sunlight({ w, d }: { w: number; d: number }) {
     };
   }, []);
 
+  // the light moves through the day: aim the sun's camera down it (again whenever it has turned a little)
+  const aimed = useMemo(() => new THREE.Vector3(), []);
+  const aimSun = useMemo(
+    () => () => {
+      const { sunCam } = passes;
+      const half = Math.max(w, d) / 2 + MARGIN;
+      sunCam.left = sunCam.bottom = -half;
+      sunCam.right = sunCam.top = half;
+      sunCam.near = 1;
+      sunCam.far = 160;
+      sunCam.position.set(w / 2, 0, d / 2).addScaledVector(SUN_DIR, 70);
+      sunCam.lookAt(w / 2, 0, d / 2);
+      sunCam.updateMatrixWorld();
+      sunCam.updateProjectionMatrix();
+      lighting.shadowMatrix.value.copy(BIAS).multiply(sunCam.projectionMatrix).multiply(sunCam.matrixWorldInverse);
+      lighting.shadowTexel.value = 1 / SHADOW_SIZE;
+      aimed.copy(SUN_DIR);
+    },
+    [passes, w, d, aimed],
+  );
+
   // aim both cameras at the lot
   useEffect(() => {
     const cx = w / 2;
     const cz = d / 2;
     const half = Math.max(w, d) / 2 + MARGIN;
-    const { sunCam, topCam } = passes;
-    sunCam.left = sunCam.bottom = -half;
-    sunCam.right = sunCam.top = half;
-    sunCam.near = 1;
-    sunCam.far = 160;
-    sunCam.position.set(cx, 0, cz).addScaledVector(SUN_DIR, 70);
-    sunCam.lookAt(cx, 0, cz);
-    sunCam.updateMatrixWorld();
-    sunCam.updateProjectionMatrix();
-    lighting.shadowMatrix.value.copy(BIAS).multiply(sunCam.projectionMatrix).multiply(sunCam.matrixWorldInverse);
-    lighting.shadowTexel.value = 1 / SHADOW_SIZE;
+    const { topCam } = passes;
+    aimSun();
 
     topCam.left = topCam.bottom = -half;
     topCam.right = topCam.top = half;
@@ -116,7 +128,7 @@ export function Sunlight({ w, d }: { w: number; d: number }) {
     // one metre along x and z, in the height map's texture coordinates (z runs up the picture)
     lighting.heightScale.value.set(HEIGHT_MAX, 1 / (half * 2), -1 / (half * 2));
     lighting.focus.value.set(cx, cz, Math.hypot(w, d) / 2 + 4);
-  }, [w, d, passes]);
+  }, [w, d, passes, aimSun]);
 
   // the maps light the main view only
   useEffect(() => {
@@ -158,6 +170,7 @@ export function Sunlight({ w, d }: { w: number; d: number }) {
 
   useFrame((state, dt) => {
     lighting.time.value = state.clock.elapsedTime;
+    if (aimed.distanceToSquared(SUN_DIR) > 1e-5) aimSun();
 
     // fall back to the light version if frames run slow for a while (and the page is actually on screen)
     if (passes.mode === "auto" && passes.on && !document.hidden) {

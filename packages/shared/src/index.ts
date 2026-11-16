@@ -20,7 +20,9 @@ export * from "./life/engine";
 export * from "./life/autonomy";
 export * from "./life/blackjack";
 export * from "./life/pingpong";
+export * from "./life/rainwatch";
 
 export * from "./appearance";
 export * from "./materials/catalog";
 export * from "./materials/rooms";
+export * from "./world";

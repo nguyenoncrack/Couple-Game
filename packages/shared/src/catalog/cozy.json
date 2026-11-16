@@ -1,0 +1,72 @@
+[
+  {
+    "id": "window_bench",
+    "name": "Window bench",
+    "category": "cozy",
+    "tags": ["bench", "window", "seat", "seat for two", "rain", "cozy", "storage", "watch the rain"],
+    "price": 420,
+    "footprint": [2, 1],
+    "layer": "floor",
+    "windowSeat": true,
+    "model": { "kind": "windowbench", "wood": "#b98a5a", "cushion": "#8fa6b0", "pillow": "#e9d6b6" },
+    "interactions": [
+      {
+        "action": "sit",
+        "slots": [
+          { "stand": [[0, 1]], "pose": [0.5, 0.5], "y": 0.46, "face": 2 },
+          { "stand": [[1, 1]], "pose": [1.5, 0.5], "y": 0.46, "face": 2 }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "reading_lamp",
+    "name": "Reading lamp",
+    "category": "cozy",
+    "tags": ["lamp", "light", "reading", "warm", "cozy", "night"],
+    "price": 160,
+    "footprint": [1, 1],
+    "layer": "floor",
+    "model": { "kind": "readinglamp", "metal": "#8a6a45", "shade": "#f3e2b8", "base": "#4b4038" }
+  },
+  {
+    "id": "blanket_basket",
+    "name": "Blanket basket",
+    "category": "cozy",
+    "tags": ["basket", "blanket", "throw", "woven", "cozy", "storage"],
+    "price": 95,
+    "footprint": [1, 1],
+    "layer": "floor",
+    "model": { "kind": "blanketbasket", "wicker": "#c79a62", "blanket": "#a9605a", "blanket2": "#e6d9bd" }
+  },
+  {
+    "id": "umbrella_stand",
+    "name": "Umbrella stand",
+    "category": "cozy",
+    "tags": ["umbrella", "stand", "rain", "entry", "hall", "cozy"],
+    "price": 70,
+    "footprint": [1, 1],
+    "layer": "floor",
+    "model": { "kind": "umbrellastand", "body": "#4f6f7c", "rim": "#c9a35c", "umbrella": "#d9684a", "umbrella2": "#2f4a63" }
+  },
+  {
+    "id": "tea_set_two",
+    "name": "Tea set for two",
+    "category": "cozy",
+    "tags": ["tea", "teapot", "cups", "for two", "table", "side table", "cozy"],
+    "price": 130,
+    "footprint": [1, 1],
+    "layer": "floor",
+    "model": { "kind": "teaset", "wood": "#a57a50", "china": "#f4efe4", "trim": "#5b8aa3" }
+  },
+  {
+    "id": "rug_patterned",
+    "name": "Patterned rug",
+    "category": "cozy",
+    "tags": ["rug", "carpet", "pattern", "diamond", "cozy"],
+    "price": 180,
+    "footprint": [3, 2],
+    "layer": "rug",
+    "model": { "kind": "patternrug", "color": "#e8dcc2", "pattern": "#5f7f8f", "accent": "#c9785d", "border": "#8a4f3f" }
+  }
+]

@@ -1,0 +1,37 @@
+.dev-world {
+  position: fixed;
+  right: 72px;
+  top: 8px;
+  z-index: 30;
+  display: grid;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px dashed var(--ink, #3a3631);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--paper, #f3ede0) 92%, transparent);
+  font-size: 12px;
+  pointer-events: auto;
+}
+.dev-world-title {
+  font-family: var(--hand);
+  opacity: 0.7;
+}
+.dev-world-row {
+  display: flex;
+  gap: 4px;
+}
+.dev-world button {
+  font: inherit;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.dev-world button.on {
+  background: var(--ink, #3a3631);
+  color: var(--paper, #f3ede0);
+}
+.clock-sky {
+  opacity: 0.8;
+}

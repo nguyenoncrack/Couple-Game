@@ -4,8 +4,8 @@ import { pencilMaterial } from "../../render/pencil";
 import { buildSurfaceGlsl } from "./surfaceShader";
 
 export type MaterialKind = "wall" | "floor";
-const profiles: Record<BuildSurface, number> = { plaster: 1, panels: 2, brick: 3, stone: 4, tile: 5, concrete: 6, glass: 7, oak: 8, walnut: 9, parquet: 10, marble: 11, carpet: 12, decking: 13, pavers: 14, botanical: 15, wainscot: 16, slats: 17, shiplap: 18, terrazzo: 19, slate: 20, terracotta: 21, encaustic: 22 };
-const gloss: Partial<Record<BuildSurface, [number, number]>> = { panels: [.12, 26], oak: [.15, 32], walnut: [.2, 40], parquet: [.2, 40], tile: [.35, 65], marble: [.42, 85], glass: [.7, 110], concrete: [.08, 24], wainscot: [.15, 32], slats: [.12, 26], shiplap: [.08, 20], terrazzo: [.35, 65], slate: [.07, 18], terracotta: [.1, 24], encaustic: [.15, 35] };
+const profiles: Record<BuildSurface, number> = { plaster: 1, panels: 2, brick: 3, stone: 4, tile: 5, concrete: 6, glass: 7, oak: 8, walnut: 9, parquet: 10, marble: 11, carpet: 12, decking: 13, pavers: 14, botanical: 15, wainscot: 16, slats: 17, shiplap: 18, terrazzo: 19, slate: 20, terracotta: 21, encaustic: 22, frosted: 7 };
+const gloss: Partial<Record<BuildSurface, [number, number]>> = { panels: [.12, 26], oak: [.15, 32], walnut: [.2, 40], parquet: [.2, 40], tile: [.35, 65], marble: [.42, 85], glass: [.7, 110], frosted: [.25, 40], concrete: [.08, 24], wainscot: [.15, 32], slats: [.12, 26], shiplap: [.08, 20], terrazzo: [.35, 65], slate: [.07, 18], terracotta: [.1, 24], encaustic: [.15, 35] };
 const cache = new Map<string, THREE.ShaderMaterial>();
 
 export function materialDefinition(kind: MaterialKind, id: string) {
@@ -18,8 +18,9 @@ export function buildingMaterial(kind: MaterialKind, id: string, ghost: "ok" | "
   if (material) return material;
   const fallback: Record<string, BuildSurface> = { wood: kind === "wall" ? "panels" : "oak", checker: "tile", carpet: "carpet", brick: "brick", stone: "stone", setts: "pavers", concrete: "concrete" };
   const surface = definition.surface ?? fallback[definition.finish] ?? "plaster";
-  const glass = surface === "glass", [spec, shine] = gloss[surface] ?? [0, 1];
-  const base = pencilMaterial(definition.color, { natural: true, rim: false, alpha: glass ? .24 : 1, ...(ghost ? { ghost } : {}) });
+  // frosted glass is framed like clear glass (and is a solid wall just the same), but milky: light in, no view out
+  const frosted = surface === "frosted", glass = surface === "glass" || frosted, [spec, shine] = gloss[surface] ?? [0, 1];
+  const base = pencilMaterial(definition.color, { natural: true, rim: false, alpha: frosted ? .84 : glass ? .24 : 1, ...(frosted ? { glow: .6 } : {}), ...(ghost ? { ghost } : {}) });
   const marker = "// @build-material-detail";
   if (!base.fragmentShader.includes(marker)) throw new Error("Building material shader hook is missing");
   material = new THREE.ShaderMaterial({

@@ -12,6 +12,10 @@ let master: GainNode | null = null;
 let breeze: { source: AudioBufferSourceNode; lfo: OscillatorNode } | null = null;
 let timer = 0;
 let running = false;
+/** The rain layer's nodes, made when the country sounds start (and thrown away when they stop). */
+let rainLayer: { source: AudioBufferSourceNode; low: BiquadFilterNode; high: BiquadFilterNode; level: GainNode } | null = null;
+/** What the weather wants: how hard it's raining (0..1) and whether the listener is indoors (0 outside, 1 inside). */
+let rainWant = { level: 0, indoors: 0 };
 
 export function startAmbience() {
   if (running) return;
@@ -28,6 +32,7 @@ export function startAmbience() {
   master.gain.linearRampToValueAtTime(LEVEL, c.currentTime + FADE_S);
   master.connect(c.destination);
   breeze = startBreeze(c, master);
+  applyRain();
   timer = window.setTimeout(birdsong, 2500 + Math.random() * 4000);
 }
 
@@ -48,6 +53,78 @@ export function stopAmbience() {
   }, FADE_S * 1000 + 100);
   master = null;
   breeze = null;
+  const r = rainLayer;
+  rainLayer = null;
+  window.setTimeout(() => r?.source.stop(), FADE_S * 1000 + 100);
+}
+
+/** Rain on a roof outdoors is bright hiss; heard from inside it's a soft, low patter. These are how far each goes. */
+const RAIN_OUTDOORS_HZ = 9000;
+const RAIN_INDOORS_HZ = 620;
+const RAIN_LEVEL = 0.34;
+/** Indoors the rain is also quieter: this much of the outdoor level is left. */
+const RAIN_INDOOR_GAIN = 0.4;
+
+/**
+ * Rain, as it sounds where the listener is. `level` is how hard it's raining and `indoors` how much it's heard through
+ * a roof and walls (1 inside): the same noise, but filtered down to a soft low patter and turned down. Eased over
+ * about half a second, so walking through a door fades rather than clicks. It only sounds while the country sounds do
+ * (the same switch as the music); the latest values are kept and applied when they start.
+ */
+export function setRainSound(level: number, indoors: number) {
+  rainWant = { level, indoors };
+  applyRain();
+}
+
+function startRain(c: AudioContext, out: AudioNode) {
+  const seconds = 3;
+  const buffer = c.createBuffer(1, c.sampleRate * seconds, c.sampleRate);
+  const data = buffer.getChannelData(0);
+  // white noise with a little pink in it: lots of tiny drops
+  let pink = 0;
+  for (let i = 0; i < data.length; i++) {
+    const white = Math.random() * 2 - 1;
+    pink = pink * 0.94 + white * 0.06;
+    data[i] = white * 0.55 + pink * 1.6;
+  }
+  const source = c.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  const high = c.createBiquadFilter();
+  high.type = "highpass";
+  high.frequency.value = 380;
+  const low = c.createBiquadFilter();
+  low.type = "lowpass";
+  low.frequency.value = RAIN_OUTDOORS_HZ;
+  const level = c.createGain();
+  level.gain.value = 0;
+  source.connect(high).connect(low).connect(level).connect(out);
+  source.start();
+  return { source, low, high, level };
+}
+
+function applyRain() {
+  if (!running || !ctx || !master) return;
+  const c = ctx;
+  if (!rainLayer) {
+    if (rainWant.level <= 0.01) return;
+    rainLayer = startRain(c, master);
+  }
+  const { level, indoors } = rainWant;
+  const r = rainLayer;
+  const gain = RAIN_LEVEL * level * (1 - (1 - RAIN_INDOOR_GAIN) * indoors);
+  // geometric blend between the bright and the muffled cutoff
+  const hz = RAIN_OUTDOORS_HZ * Math.pow(RAIN_INDOORS_HZ / RAIN_OUTDOORS_HZ, indoors);
+  r.level.gain.setTargetAtTime(gain, c.currentTime, 0.5);
+  r.low.frequency.setTargetAtTime(hz, c.currentTime, 0.3);
+  r.high.frequency.setTargetAtTime(380 - 220 * indoors, c.currentTime, 0.3);
+}
+
+if (import.meta.env.DEV) {
+  Object.assign(window, {
+    /** What the rain sounds like right now: whether the layer's running, and its level and cutoff (development only). */
+    __rainSound: () => ({ running, want: rainWant, gain: rainLayer?.level.gain.value ?? null, cutoff: rainLayer?.low.frequency.value ?? null, state: ctx?.state ?? null }),
+  });
 }
 
 /** Soft noise in the low middle, its loudness drifting slowly up and down like gusts in the trees. */

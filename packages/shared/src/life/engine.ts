@@ -9,6 +9,8 @@ import { gamingSpots } from "./gaming";
 import { dealBlackjack, finishBlackjack, playBlackjack, type BlackjackCommand } from "./blackjack";
 import { FreeWill } from "./autonomy";
 import { applyFort, restoredForts, savedForts, tidyForts, type FortCmd } from "../fort";
+import { applyWorld, emptyWorld, rainAt, restoredWorld, type WorldCmd } from "../world";
+import { isRainWatchable, windowBehind, windowSeats } from "./rainwatch";
 import { applyParty, isDance, partyGear, restoredParty, savedParty, type PartyCmd } from "../party";
 import { needsAt, START_NEEDS } from "./needs";
 import { buildNav, canStep, findRoute, levelOf, liftStops, linkBetween, linksOf, nearestWalkable, roomAt, slide, walkable, type Cell, type Point, type Spot } from "./nav";
@@ -64,7 +66,10 @@ export type LifeReject =
   | "not-at-table"
   | "round-changed"
   | "round-active"
-  | "round-over";
+  | "round-over"
+  | "not-raining"
+  | "no-window"
+  | "not-window-seat";
 
 export const LIFE_TEXT: Record<LifeReject, string> = {
   unreachable: "Can't get there from here.",
@@ -85,12 +90,15 @@ export const LIFE_TEXT: Record<LifeReject, string> = {
   "round-changed": "The round changed. Choose again from the current hand.",
   "round-active": "Finish this round before dealing another.",
   "round-over": "Your hand is finished. Wait for the next deal.",
+  "not-raining": "It isn't raining right now.",
+  "no-window": "Put the bench against a window to watch the rain from it.",
+  "not-window-seat": "That isn't a window bench.",
 };
 
 /** The furniture action a use is based on (eating or watching TV from a seat is sitting, cuddling is sleeping). */
 const slotAction = (u: Use): Action =>
   u.action === "play" ? (u.tv === u.objectId ? "watch" : "sit") :
-  u.action === "eat" || (u.action === "watch" && u.tv !== u.objectId) ? "sit" : u.action === "cuddle" ? "sleep" : (u.action as Action);
+  u.action === "eat" || u.action === "rain" || (u.action === "watch" && u.tv !== u.objectId) ? "sit" : u.action === "cuddle" ? "sleep" : (u.action as Action);
 const together = (u: Use | null | undefined) => isTogether(u?.action);
 
 /** How close together each thing is done: each stands this far from the middle (metres). */
@@ -138,6 +146,8 @@ export class Life {
   freeWill: FreeWill | null = null;
   /** Whose order is being carried out: characters acting on their own give way to them. */
   private yieldFor: string | null = null;
+  /** The house as last given to anything that changes life: window benches are found in it (see settleRain). */
+  seen: Blueprint | null = null;
 
   constructor(
     public state: LifeState,
@@ -426,6 +436,11 @@ export class Life {
   /** A member of the house works the party panel: the lights, or the shared music. Not an order to anyone's character. */
   party(memberId: string, bp: Blueprint, cmd: PartyCmd, now: number, gear = partyGear(bp, this.cat)) {
     return applyParty(this.state, cmd, { memberId, now, newId: this.makeId, gear });
+  }
+
+  /** A member moves the day or forces the weather. Returns whether anything changed. */
+  world(cmd: WorldCmd, now: number): boolean {
+    return applyWorld((this.state.world ??= emptyWorld()), cmd, now);
   }
 
   /** A member of the house changes a blanket fort: its pattern, its name and sign, or its fairy lights. */
@@ -736,6 +751,90 @@ export class Life {
     return null;
   }
 
+  // --- watching the rain ---
+
+  /**
+   * Sit on a window bench to watch the rain. It has to be raining, and the bench has to have a window behind it. With
+   * `invite`, your partner is asked over to the other seat (they walk over as for a hug: if they can't get there, or
+   * there's no seat left for them, nobody moves). Either of you can get up whenever you like, as from any seat.
+   */
+  rain(memberId: string, bp: Blueprint, objectId: string, invite: boolean, now: number): LifeReject | null {
+    const a = this.state.avatars[memberId];
+    const found = this.find(bp, objectId);
+    if (!a || !found) return "nothing-to-do";
+    if (!this.cat.furniture.get(found.o.catalogId)?.windowSeat) return "not-window-seat";
+    if (!isRainWatchable(now, this.state.world)) return "not-raining";
+    if (!windowBehind(bp, found.index, found.o, this.cat)) return "no-window";
+    const seats = on(slotsOf(found.o, "sit", this.cat), found.index);
+    const p = Object.values(this.state.avatars).find((o) => o.memberId !== memberId);
+    if (invite) {
+      if (!p || !this.isHere(p.memberId)) return "partner-away";
+      if (p.use?.ride?.on) return "partner-busy";
+      // someone cooking, eating or asleep is busy; a sitter or someone just standing about isn't
+      if (p.use && !this.givesWay(p, memberId) && !together(p.use) && !["sit", "rain", "lounge", "fort", "watch", "play"].includes(p.use.action)) return "partner-busy";
+    }
+    // already sitting here: nothing to do but wait for the rain (and a partner)
+    const sitting = (u: Use | null | undefined) => u?.objectId === objectId && (u.action === "sit" || u.action === "rain");
+    const mineBefore = structuredClone(a);
+    const partnerBefore = p ? structuredClone(p) : null;
+    if (!sitting(a.use)) {
+      const r = this.goUse(a, bp, seats, now);
+      if (r) return r;
+    }
+    if (invite && p && !sitting(p.use)) {
+      const r = this.goUse(p, bp, seats, now, { invitedBy: memberId });
+      if (r) {
+        // nobody moves if the invitation can't be kept
+        // (put back into the same objects, so the needs the caller restores on a refusal land on them)
+        Object.assign(a, mineBefore);
+        if (partnerBefore) Object.assign(p, partnerBefore);
+        return r;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Two people on one window bench's seats while it rains are watching it together: both are doing "rain" (which is
+   * sitting, with the Social bonus); with the rain stopped, or one of them up, it's plain sitting again. Anyone
+   * still walking there isn't counted. True if anyone's changed.
+   */
+  settleRain(now: number): boolean {
+    const bp = this.seen;
+    if (!bp) return false;
+    const seats = windowSeats(bp, this.cat);
+    const raining = isRainWatchable(now, this.state.world);
+    const by = new Map<string, Avatar[]>();
+    for (const a of Object.values(this.state.avatars)) {
+      const u = a.use;
+      if (!u?.objectId || !seats.has(u.objectId) || (u.action !== "sit" && u.action !== "rain") || now < arrivalTime(a) || !this.present(a.memberId)) continue;
+      by.set(u.objectId, [...(by.get(u.objectId) ?? []), a]);
+    }
+    let changed = false;
+    for (const a of Object.values(this.state.avatars)) {
+      const u = a.use;
+      if (!u || (u.action !== "sit" && u.action !== "rain") || !u.objectId || !seats.has(u.objectId)) continue;
+      const together = raining && (by.get(u.objectId)?.length ?? 0) >= 2 && by.get(u.objectId)!.includes(a);
+      const want = together ? "rain" : "sit";
+      if (u.action !== want) {
+        a.use = { ...u, action: want };
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /** The next moment the rain starts or stops mattering to someone on a window bench (null if nobody's on one). */
+  private nextRainChange(now: number): number | null {
+    const bp = this.seen;
+    if (!bp) return null;
+    const seats = windowSeats(bp, this.cat);
+    if (!Object.values(this.state.avatars).some((a) => a.use?.objectId && seats.has(a.use.objectId))) return null;
+    const now0 = isRainWatchable(now, this.state.world);
+    for (let t = now + 2000; t < now + 6 * 60_000; t += 2000) if (isRainWatchable(t, this.state.world) !== now0) return t;
+    return null;
+  }
+
   // --- together ---
 
   private isHere(memberId: string) {
@@ -765,7 +864,7 @@ export class Life {
     }
 
     // a sitter gets up for a hug; someone cooking, eating or asleep is busy, unless they're only at it of their own accord
-    if (p.use && !this.givesWay(p, memberId) && !together(p.use) && p.use.action !== "sit" && p.use.action !== "lounge" && p.use.action !== "fort" && p.use.action !== "watch" && p.use.action !== "play") return "partner-busy";
+    if (p.use && !this.givesWay(p, memberId) && !together(p.use) && p.use.action !== "sit" && p.use.action !== "rain" && p.use.action !== "lounge" && p.use.action !== "fort" && p.use.action !== "watch" && p.use.action !== "play") return "partner-busy";
     // they stop where they are (the cell they're stepping into); you go beside them, with no wall in between
     const [px, pz, pl] = this.origin(p, now).cell;
     const nav = buildNav(bp, pl, this.cat);
@@ -995,8 +1094,10 @@ export class Life {
   }
 
   private passTime(bp: Blueprint, now: number): boolean {
+    this.seen = bp;
     let changed = this.runLifts(bp, now);
     changed = this.syncTableGames(bp) || changed;
+    changed = this.settleRain(now) || changed;
     for (const a of Object.values(this.state.avatars)) {
       const u = a.use;
       if ((together(u) || brief(u)) && u!.until !== undefined && now >= u!.until) {
@@ -1093,6 +1194,10 @@ export class Life {
     const c = this.state.cooking;
     const step = c && this.cat.recipes.get(c.recipeId)?.steps[c.step];
     if (c && step && c.rate > 0) next = Math.min(next, c.updatedAt + ((step.seconds - c.done) / c.rate) * 1000);
+    // someone on a window bench: when they get there, and when the rain next starts or stops
+    const seats = this.seen ? windowSeats(this.seen, this.cat) : null;
+    if (seats) for (const a of Object.values(this.state.avatars)) if (a.use?.objectId && seats.has(a.use.objectId) && arrivalTime(a) > now) next = Math.min(next, arrivalTime(a));
+    next = Math.min(next, this.nextRainChange(now) ?? Infinity);
     next = Math.min(next, this.freeWill?.nextAt(now) ?? Infinity);
     return next === Infinity ? null : Math.max(next, now);
   }
@@ -1250,6 +1355,8 @@ export class Life {
     if (party) state.party = party;
     const forts = restoredForts(saved.forts);
     if (forts) state.forts = forts;
+    const world = restoredWorld(saved.world);
+    if (world) state.world = world;
     // lifts stopped where they were going, doors shut; anyone in one carries on to their floor
     if (saved.lifts) state.lifts = Object.fromEntries(Object.entries(saved.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }]));
     for (const a of Object.values(saved.avatars ?? {})) {
@@ -1304,6 +1411,7 @@ export class Life {
       ...(this.state.blackjack ? { blackjack: structuredClone(this.state.blackjack) } : {}),
       ...(this.state.party ? { party: savedParty(this.state.party, now) } : {}),
       ...(savedForts(this.state.forts) ? { forts: savedForts(this.state.forts) } : {}),
+      ...(this.state.world ? { world: structuredClone(this.state.world) } : {}),
       ...(this.state.lifts ? { lifts: Object.fromEntries(Object.entries(this.state.lifts).map(([id, l]) => [id, { level: l.move ? l.move.to : l.level, stops: [...l.stops] }])) } : {}),
     };
   }
@@ -1314,15 +1422,20 @@ export class Life {
  * they stood, since from then on they go differently. One that's turned down, or finds nothing to do, puts them
  * back, so it leaves the state just as it was, like everything else it does.
  */
-const CHANGES = ["walk", "use", "dance", "cards", "move", "stop", "social", "cook", "help", "eat", "takeOut", "store", "ride", "tick", "onBlueprint"] as const;
+const CHANGES = ["rain", "walk", "use", "dance", "cards", "move", "stop", "social", "cook", "help", "eat", "takeOut", "store", "ride", "tick", "onBlueprint"] as const;
 for (const name of CHANGES) {
   const change = Life.prototype[name] as (this: Life, ...args: unknown[]) => LifeReject | boolean | null;
   Object.defineProperty(Life.prototype, name, {
     value(this: Life, ...args: unknown[]) {
       const before = Object.values(this.state.avatars).map((a) => [a, a.needs] as const);
       // Walk's optional floor follows its clock. Every other method takes time last.
-      const cameOrWent = this.settle(args[name === "walk" ? 3 : args.length - 1] as number);
+      const at = args[name === "walk" ? 3 : args.length - 1] as number;
+      const cameOrWent = this.settle(at);
+      const house = args.find((x) => typeof x === "object" && x !== null && "levels" in x) as Blueprint | undefined;
+      if (house) this.seen = house;
       const r = change.apply(this, args);
+      // whoever's sat down or got up, the pair on a window bench may now be (or have stopped being) a pair
+      if (name !== "tick" && Number.isFinite(at)) this.settleRain(at);
       if (cameOrWent) return r === false ? true : r;
       if (r !== null && r !== true) for (const [a, needs] of before) a.needs = needs;
       return r;

@@ -23,6 +23,7 @@ import {
   PARTY_TEXT,
   type FortCmd,
   type PartyCmd,
+  type WorldCmd,
 } from "@cg/shared";
 import type { HouseRow, HouseStore, MemberRow } from "../persistence/store";
 import { RateLimiter } from "../rate-limit";
@@ -346,6 +347,7 @@ export class HouseRoom {
     const id = peer.memberId;
     if (intent.do === "party") return this.party(peer, intent.cmd, now);
     if (intent.do === "fort") return this.fort(peer, intent.id, intent.cmd, now);
+    if (intent.do === "world") return this.world(peer, intent.cmd, now);
     // walking into a wall in first person isn't worth a message; you just don't go anywhere
     let quiet = false;
     // an order: the character is the player's again, and anyone acting on their own makes way
@@ -382,6 +384,8 @@ export class HouseRoom {
           return this.life.social(id, bp, intent.action, now);
         case "dance":
           return this.life.dance(id, bp, intent.objectId, intent.move, now);
+        case "rain":
+          return this.life.rain(id, bp, intent.objectId, intent.invite, now);
       }
     });
     if (quiet) return;
@@ -408,6 +412,18 @@ export class HouseRoom {
       return;
     }
     if (changed) this.lifeChanged();
+  }
+
+  /**
+   * A member moves the day to a moment, or forces the weather. It's the world's, not an order to their character; the
+   * clock itself needs nothing from the server (it's the server's own time), so this only stores what was changed.
+   */
+  private world(peer: Peer, cmd: WorldCmd, now: number) {
+    if (!this.partyLimit.take(peer.memberId)) {
+      peer.send({ type: "error", code: "rate-limited", message: "Slow down a little." });
+      return;
+    }
+    if (this.life.world(cmd, now)) this.lifeChanged();
   }
 
   /**

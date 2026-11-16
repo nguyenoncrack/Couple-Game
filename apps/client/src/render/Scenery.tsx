@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { KitMesh } from "./KitMesh";
 import type { Kit } from "./kit";
-import { FOG, SUN_DIR } from "./pencil";
+import { skyDome } from "./pencil";
 import { natureMaterial } from "./nature";
 import { lakeShape } from "./sceneryLayout";
 import { Waterbirds } from "./Waterbirds";
@@ -178,6 +178,11 @@ const skyFragment = /* glsl */ `
   uniform vec3 uHorizon;
   uniform vec3 uZenith;
   uniform vec3 uSunDir;
+  uniform vec3 uSunPos;
+  uniform vec3 uMoonDir;
+  uniform float uNight;
+  uniform float uGold;
+  uniform float uOvercast;
   uniform float uTime;
   varying vec3 vDir;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -200,21 +205,41 @@ const skyFragment = /* glsl */ `
   void main() {
     vec3 d = normalize(vDir);
     float h = d.y;
-    vec3 col = mix(uHorizon, uZenith, pow(smoothstep(0.0, 0.55, h), 0.75));
-    // a warm glow low in the sky toward the sun
-    vec2 toSun = normalize(uSunDir.xz);
+    float grey = uOvercast;
+    vec3 horizon = mix(uHorizon, vec3(dot(uHorizon, vec3(0.33))) * vec3(0.9, 0.95, 1.0), grey * 0.7);
+    vec3 zenith = mix(uZenith, vec3(dot(uZenith, vec3(0.33))) * vec3(0.88, 0.93, 1.0) * 0.9, grey * 0.85);
+    vec3 col = mix(horizon, zenith, pow(smoothstep(0.0, 0.55, h), 0.75));
+    // a warm glow low in the sky toward the sun, strongest at sunrise and sunset
+    vec2 toSun = normalize(uSunPos.xz + 1e-4);
     float s = max(dot(normalize(d.xz + 1e-4), toSun), 0.0);
-    col = mix(col, vec3(1.0, 0.87, 0.7), pow(s, 5.0) * (1.0 - smoothstep(0.0, 0.4, h)) * 0.5);
+    col = mix(col, vec3(1.0, 0.6 + 0.27 * (1.0 - uGold), 0.4 + 0.3 * (1.0 - uGold)), pow(s, 5.0) * (1.0 - smoothstep(0.0, 0.4, h)) * (0.5 * (1.0 - uNight) + 0.35 * uGold) * (1.0 - grey * 0.8));
+    // stars, the sun and the moon (all hidden by cloud and rain)
+    float clear = 1.0 - grey;
+    if (h > 0.0) {
+      vec2 sp = d.xz / (h + 0.25) * 70.0;
+      vec2 cell = floor(sp);
+      float star = step(0.985, hash(cell)) * smoothstep(0.35, 0.0, length(fract(sp) - 0.5 - (vec2(hash(cell + 3.0), hash(cell + 7.0)) - 0.5) * 0.5));
+      col += vec3(0.85, 0.9, 1.0) * star * (0.55 + 0.45 * sin(uTime * 1.3 + hash(cell) * 40.0)) * uNight * clear * smoothstep(0.02, 0.25, h);
+    }
+    float toSunDisc = dot(d, normalize(uSunPos));
+    col += vec3(1.0, 0.92, 0.75) * smoothstep(0.9993, 0.9997, toSunDisc) * (1.0 - uNight) * clear * 1.2;
+    col += vec3(1.0, 0.8, 0.55) * pow(max(toSunDisc, 0.0), 40.0) * 0.18 * (1.0 - uNight) * clear * (0.5 + uGold);
+    float toMoon = dot(d, normalize(uMoonDir));
+    col = mix(col, vec3(0.93, 0.95, 1.0), smoothstep(0.9988, 0.9992, toMoon) * uNight * clear);
+    col += vec3(0.5, 0.6, 0.85) * pow(max(toMoon, 0.0), 60.0) * 0.28 * uNight * clear;
     // Soft layered clouds: volume from a light-facing sample, without drawn contour lines.
     if (h > 0.0) {
       vec2 uv = d.xz / (h + 0.18) * 1.6 + vec2(uTime * 0.004, uTime * 0.002);
       float n = fbm(uv);
-      float c = smoothstep(0.52, 0.7, n) * smoothstep(0.02, 0.14, h);
+      float c = smoothstep(0.52 - 0.3 * grey, 0.7 - 0.22 * grey, n) * smoothstep(0.02, 0.14, h);
       vec3 cloud = mix(vec3(0.8, 0.79, 0.86), vec3(1.0, 0.97, 0.92), smoothstep(0.55, 0.85, fbm(uv + vec2(0.06, 0.09))));
-      cloud = mix(cloud, vec3(1.0, 0.85, 0.72), pow(s, 4.0) * 0.35);
+      cloud = mix(cloud, vec3(1.0, 0.7 + 0.15 * (1.0 - uGold), 0.55 + 0.17 * (1.0 - uGold)), pow(s, 4.0) * (0.35 + 0.4 * uGold));
+      // dusk and night put the clouds in shadow; rain cloud is grey and heavy
+      cloud *= mix(1.0, 0.2, uNight);
+      cloud = mix(cloud, vec3(0.5, 0.53, 0.58) * mix(1.0, 0.3, uNight), grey * 0.85);
       col = mix(col, cloud, c * 0.92);
       float wisps = smoothstep(0.63, 0.83, fbm(uv * 2.1 + 12.0)) * smoothstep(0.16, 0.5, h);
-      col = mix(col, vec3(0.94, 0.96, 0.98), wisps * 0.16);
+      col = mix(col, vec3(0.94, 0.96, 0.98) * mix(1.0, 0.22, uNight), wisps * 0.16 * (1.0 - grey));
     }
     gl_FragColor = vec4(col, 1.0);
   }
@@ -229,9 +254,14 @@ function Sky() {
         vertexShader: skyVertex,
         fragmentShader: skyFragment,
         uniforms: {
-          uHorizon: { value: new THREE.Color(FOG).convertLinearToSRGB() },
-          uZenith: { value: new THREE.Color("#7fb1df").convertLinearToSRGB() },
-          uSunDir: { value: SUN_DIR },
+          uHorizon: skyDome.horizon,
+          uZenith: skyDome.zenith,
+          uSunDir: { value: skyDome.sunDir },
+          uSunPos: { value: skyDome.sunPos },
+          uMoonDir: { value: skyDome.moonDir },
+          uNight: skyDome.night,
+          uGold: skyDome.gold,
+          uOvercast: skyDome.overcast,
           uTime: { value: 0 },
         },
         side: THREE.BackSide,

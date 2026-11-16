@@ -10,8 +10,11 @@ describe("catalog search", () => {
     expect(ids("sink")).toEqual(expect.arrayContaining(["counter_sink", "bath_sink"]));
   });
   it("finds openings alongside furniture", () => {
-    expect(searchCatalog(items, "window")).toHaveLength(3);
-    expect(searchCatalog(items, "window").every((item) => "kind" in item && item.kind === "window")).toBe(true);
+    // every window in the catalog (the frosted ones included), and the one piece of furniture that's for sitting at one
+    const found = searchCatalog(items, "window");
+    const windows = [...catalog.openings.values()].filter((o) => o.kind === "window").map((o) => o.id);
+    expect(found.map((i) => i.id).sort()).toEqual([...windows, "window_bench"].sort());
+    expect(found.filter((item) => "kind" in item).every((item) => "kind" in item && item.kind === "window")).toBe(true);
     expect(searchCatalog(items, "door").every((item) => "kind" in item && item.kind === "door")).toBe(true);
     expect(searchCatalog(items, "sofa").every((item) => "footprint" in item)).toBe(true);
   });

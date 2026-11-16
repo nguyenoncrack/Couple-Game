@@ -1,6 +1,8 @@
 import {
+  clockLabel,
   DAILY_COINS,
   dayNumber,
+  dayPhase,
   localDay,
   MILESTONES,
   nextMilestone,
@@ -9,14 +11,15 @@ import {
 } from "@cg/shared";
 import { useEffect, useId, useRef, useState } from "react";
 import { getVisits } from "../net/api";
-import { closeWelcomeBack, useGame } from "../state/game";
+import { closeWelcomeBack, serverNow, useGame } from "../state/game";
 import { Icon } from "./icons";
 import "./calendar.css";
 
 /**
  * Coming back each day: a clock with the house's coins and a calendar button in the top bar, the calendar itself
  * (the month, today, the days you came by, your streaks and what's to come), and a note when a new day is counted.
- * Dates are your own device's, nothing to do with the sun in the game.
+ * The date is your own device's (it's what the streaks count); the time shown is the game's, the same shared clock the
+ * sun follows, so it reads 6:00 AM at sunrise and a day goes by every ten minutes.
  */
 
 const coins = (n: number) => Math.round(n).toLocaleString();
@@ -29,6 +32,23 @@ function useNow() {
     return () => window.clearInterval(t);
   }, []);
   return now;
+}
+
+/** The game's time of day (shared by the house) and whether the sun is up, ticking over every second. */
+function useGameTime() {
+  const world = useGame((s) => s.life?.world);
+  const read = () => {
+    const phase = dayPhase(serverNow(), world);
+    return { label: clockLabel(phase), sun: phase < 0.5, iso: phase };
+  };
+  const [t, setT] = useState(read);
+  useEffect(() => {
+    setT(read());
+    const i = window.setInterval(() => setT(read()), 1000);
+    return () => window.clearInterval(i);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world]);
+  return t;
 }
 
 /** The house's coins, how they're spent (shown on everything for sale), as a little pill. */
@@ -46,6 +66,7 @@ export function Coins({ className = "" }: { className?: string }) {
 /** The top bar's clock: the house's coins, the time and date, and the calendar. */
 export function ClockPill() {
   const now = useNow();
+  const game = useGameTime();
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
@@ -59,7 +80,9 @@ export function ClockPill() {
         <Coins />
         <span className="clock-sep" aria-hidden />
         <time className="clock-time" dateTime={now.toISOString()}>
-          <span className="clock-hm">{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
+          <span className="clock-hm" title={game.sun ? "Daytime in the house" : "Night in the house"}>
+            <span aria-hidden className="clock-sky">{game.sun ? "☀" : "☾"}</span> {game.label}
+          </span>
           <span className="clock-date">{now.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}</span>
         </time>
         <button
