@@ -4,7 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import { steadyFor } from "../../render/party/partyMaterials";
 import { act, partyCmd, serverNow, useGame } from "../../state/game";
 import { Floating } from "../../ui/Floating";
-import { closeParty, openParty, setMusicPrefs, usePartyUi } from "./partyUi";
+import { closeParty, openDeck, openParty, setMusicPrefs, usePartyUi } from "./partyUi";
 import "./party.css";
 
 /**
@@ -42,7 +42,7 @@ function PartyButton() {
 }
 
 /** A value that follows the house's while untouched, and moves at once under a hand, sending now and then. */
-function useSlider(value: number, commit: (v: number) => void, ms = 160) {
+export function useSlider(value: number, commit: (v: number) => void, ms = 160) {
   const [local, setLocal] = useState<number | null>(null);
   const latest = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,6 +193,23 @@ function MusicTab({ gear }: { gear: Record<PartyRole, boolean> }) {
   return (
     <div className="party-tab">
       {!gear.music && <p className="hint party-note">Place a music player or a DJ booth to play music here.</p>}
+      {gear.music && (
+        <div className="party-deck-card">
+          <span>
+            <b>DJ deck</b> Six built-in tracks to mix, with a crossfader, filter, echo and drops.
+          </span>
+          <button
+            className="btn primary"
+            onClick={() => {
+              openDeck();
+              closeParty();
+            }}
+          >
+            Open the deck
+          </button>
+        </div>
+      )}
+      <div className="party-label">YouTube</div>
       <div className="party-listen">
         {listening ? (
           <>
@@ -276,7 +293,7 @@ function MusicTab({ gear }: { gear: Record<PartyRole, boolean> }) {
           ))}
         </ol>
       )}
-      <p className="hint party-note">Videos play in YouTube's own player, which stays on screen while it plays. Everyone hears the same thing at the same point, louder beside the speakers and quieter as you walk away (switch that off with Fade). Lights don't react to the sound.</p>
+      <p className="hint party-note">Videos play in YouTube's own player, on the DJ deck's screen, which stays in view while it plays. Starting a video pauses the deck, and the other way round. Everyone hears the same thing at the same point, louder beside the speakers and quieter as you walk away (switch that off with Fade).</p>
     </div>
   );
 }

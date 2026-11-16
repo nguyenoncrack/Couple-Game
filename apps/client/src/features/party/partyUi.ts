@@ -16,6 +16,8 @@ interface PartyUi {
   muted: boolean;
   /** The music gets quieter the further your character is from the speakers (on by default). */
   fade: boolean;
+  /** The DJ console is open (otherwise it's a small bar). */
+  deckOpen: boolean;
 }
 
 /** (not "cg.music": that one is the lo-fi background music switch) */
@@ -31,7 +33,7 @@ function loadPrefs(): Pick<PartyUi, "volume" | "muted" | "fade"> {
   return { volume: 60, muted: false, fade: true };
 }
 
-export const usePartyUi = create<PartyUi>(() => ({ open: false, tab: "lights", listening: false, status: "off", message: null, ...loadPrefs() }));
+export const usePartyUi = create<PartyUi>(() => ({ open: false, tab: "lights", listening: false, status: "off", message: null, deckOpen: false, ...loadPrefs() }));
 
 /** Each player keeps their own volume and mute, on this device. */
 export function setMusicPrefs(prefs: Partial<Pick<PartyUi, "volume" | "muted" | "fade">>) {
@@ -46,10 +48,12 @@ export function setMusicPrefs(prefs: Partial<Pick<PartyUi, "volume" | "muted" | 
 
 export const openParty = (tab?: PartyUi["tab"]) => usePartyUi.setState({ open: true, ...(tab ? { tab } : {}) });
 export const closeParty = () => usePartyUi.setState({ open: false });
+/** Open the DJ console and start hearing the music (a click, which is also what lets the browser play sound). */
+export const openDeck = () => usePartyUi.setState({ deckOpen: true, listening: true });
 
 /** Back to nothing: leaving a house. */
 export function resetPartyUi() {
-  usePartyUi.setState({ open: false, listening: false, status: "off", message: null });
+  usePartyUi.setState({ open: false, listening: false, status: "off", message: null, deckOpen: false });
 }
 
 // (a handle for poking at it from the browser's console while developing)

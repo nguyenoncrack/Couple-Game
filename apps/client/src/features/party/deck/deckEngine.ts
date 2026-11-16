@@ -1,0 +1,411 @@
+import { BUILD_BEATS, deckBeat, sectionAt, type Deck, type DeckTrackId } from "@cg/shared";
+import { bassNote, chordVoicing, hitAt, LAYERS, leadNote, midiHz, TRACK_DEFS, type TrackDef } from "./tracks";
+
+/**
+ * The DJ deck's sound, made in Web Audio on this screen from the shared deck state: nothing is downloaded and
+ * nothing is sent. Notes are scheduled a little ahead, each at the moment the server clock says its beat falls, so
+ * both screens play the same note at the same time.
+ *
+ *   deck A voices ─ gain A ─ meter A ┐
+ *                                    ├─ low-pass ─ high-pass ─┬─────────────── out ─ compressor ─ speakers
+ *   deck B voices ─ gain B ─ meter B ┘                        └─ echo (delay) ─┘
+ */
+
+/** How far ahead notes are scheduled (seconds). */
+const LOOKAHEAD = 0.16;
+const TICK_MS = 30;
+
+/** Which sixteenths to schedule now: from `next` (the first not yet scheduled, never one already past) up to the horizon. */
+export function stepsDue(next: number, nowBeat: number, horizonBeat: number): [from: number, to: number] {
+  const from = Math.max(next, Math.ceil(nowBeat * 4 - 1e-6));
+  const to = Math.ceil(horizonBeat * 4 - 1e-6);
+  return [from, Math.max(from, to)];
+}
+
+/** Equal-power crossfade: how loud each deck is for a crossfader position. */
+export const xfadeGains = (x: number): [number, number] => [Math.cos((x * Math.PI) / 2), Math.sin((x * Math.PI) / 2)];
+
+/** Filter knob to cut-offs: left closes a low-pass down to 180 Hz, right opens a high-pass up to 2.4 kHz. */
+export function filterCutoffs(k: number): { low: number; high: number } {
+  return { low: k < 0 ? 20_000 * (180 / 20_000) ** -k : 20_000, high: k > 0 ? 20 * (2_400 / 20) ** k : 20 };
+}
+
+interface DeckBus {
+  input: GainNode;
+  gain: GainNode;
+  meter: AnalyserNode;
+}
+
+export class DeckEngine {
+  private ctx: AudioContext | null = null;
+  private buses: [DeckBus, DeckBus] | null = null;
+  private low!: BiquadFilterNode;
+  private high!: BiquadFilterNode;
+  private echoWet!: GainNode;
+  private delay!: DelayNode;
+  private out!: GainNode;
+  private noise!: AudioBuffer;
+  private meterData = new Float32Array(512);
+  private timer = 0;
+  private next = 0;
+  private deck: Deck | null = null;
+  private anchorKey = "";
+  private output = { volume: 0.6, mix: 1 };
+  /** Asks the server clock for the time (ms). */
+  constructor(private now: () => number) {}
+
+  /** Make the sound (call from a click: browsers only allow sound after one). Reports whether it can play. */
+  start(): boolean {
+    if (!this.ctx) {
+      try {
+        this.ctx = new AudioContext({ latencyHint: "interactive" });
+      } catch {
+        return false;
+      }
+      this.build(this.ctx);
+      this.timer = window.setInterval(() => this.tick(), TICK_MS);
+    }
+    void this.ctx.resume().catch(() => {});
+    this.apply();
+    return true;
+  }
+
+  /** Whether the browser is letting it make sound. */
+  get running() {
+    return this.ctx?.state === "running";
+  }
+
+  stop() {
+    window.clearInterval(this.timer);
+    this.timer = 0;
+    const c = this.ctx;
+    this.ctx = null;
+    this.buses = null;
+    if (c) {
+      this.out.gain.setTargetAtTime(0, c.currentTime, 0.05);
+      window.setTimeout(() => void c.close().catch(() => {}), 300);
+    }
+  }
+
+  /** The shared deck changed. */
+  follow(deck: Deck | undefined) {
+    const was = this.deck;
+    this.deck = deck ?? null;
+    const key = deck ? `${deck.playing}|${deck.t}|${deck.beat}|${deck.bpm}` : "";
+    if (key !== this.anchorKey) {
+      this.anchorKey = key;
+      // a pause cuts the notes already queued; starting again schedules from where the beat is now (a tempo change
+      // while playing carries on from the next sixteenth not yet queued)
+      if (was?.playing && !deck?.playing) this.cut();
+      if (!was?.playing) this.next = 0;
+    }
+    this.apply();
+  }
+
+  /** This player's volume (0 to 1, after mute) and how near the speakers they are (0 to 1). */
+  setOutput(volume: number, mix: number) {
+    this.output = { volume, mix };
+    if (this.ctx) this.out.gain.setTargetAtTime(this.level(), this.ctx.currentTime, 0.08);
+  }
+
+  /** How loud each deck is right now, 0 to 1, for the meters: jumps up with each hit and falls back gently. */
+  levels(): [number, number] {
+    if (!this.buses) return [0, 0];
+    const now = performance.now();
+    const fall = Math.exp(-(now - this.peakAt) / 260);
+    this.peakAt = now;
+    this.buses.forEach((b, i) => {
+      b.meter.getFloatTimeDomainData(this.meterData);
+      let sum = 0;
+      for (const v of this.meterData) sum += v * v;
+      const level = Math.min(1, Math.sqrt(sum / this.meterData.length) * 3.2);
+      this.peaks[i] = Math.max(level, this.peaks[i]! * fall);
+    });
+    return [this.peaks[0]!, this.peaks[1]!];
+  }
+  private peaks = [0, 0];
+  private peakAt = 0;
+
+  private level() {
+    return this.output.volume * this.output.mix * 0.9;
+  }
+
+  private build(c: AudioContext) {
+    const comp = c.createDynamicsCompressor();
+    comp.threshold.value = -14;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.004;
+    comp.release.value = 0.18;
+    comp.connect(c.destination);
+    this.out = c.createGain();
+    this.out.gain.value = 0;
+    this.out.connect(comp);
+    this.low = c.createBiquadFilter();
+    this.low.type = "lowpass";
+    this.low.Q.value = 0.9;
+    this.high = c.createBiquadFilter();
+    this.high.type = "highpass";
+    this.high.Q.value = 0.9;
+    this.low.connect(this.high);
+    this.high.connect(this.out);
+    // echo: a dotted-eighth delay feeding back on itself
+    this.delay = c.createDelay(2);
+    const feedback = c.createGain();
+    feedback.gain.value = 0.38;
+    const tone = c.createBiquadFilter();
+    tone.type = "lowpass";
+    tone.frequency.value = 3200;
+    this.echoWet = c.createGain();
+    this.echoWet.gain.value = 0;
+    this.high.connect(this.echoWet);
+    this.echoWet.connect(this.delay);
+    this.delay.connect(tone);
+    tone.connect(feedback);
+    feedback.connect(this.delay);
+    tone.connect(this.out);
+    const bus = (): DeckBus => {
+      const input = c.createGain();
+      const gain = c.createGain();
+      const meter = c.createAnalyser();
+      meter.fftSize = 512;
+      input.connect(gain);
+      gain.connect(meter);
+      gain.connect(this.low);
+      return { input, gain, meter };
+    };
+    this.buses = [bus(), bus()];
+    const len = c.sampleRate * 2;
+    this.noise = c.createBuffer(1, len, c.sampleRate);
+    const data = this.noise.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  }
+
+  /** Set the mixer from the deck: crossfader, filter, echo, volume. */
+  private apply() {
+    const c = this.ctx;
+    const d = this.deck;
+    if (!c || !this.buses) return;
+    const at = c.currentTime;
+    const [ga, gb] = d ? xfadeGains(d.xfade) : [0, 0];
+    this.buses[0].gain.gain.setTargetAtTime(ga, at, 0.04);
+    this.buses[1].gain.gain.setTargetAtTime(gb, at, 0.04);
+    const { low, high } = filterCutoffs(d?.filter ?? 0);
+    this.low.frequency.setTargetAtTime(low, at, 0.05);
+    this.high.frequency.setTargetAtTime(high, at, 0.05);
+    const beatS = 60 / (d?.bpm ?? 124);
+    this.delay.delayTime.setTargetAtTime(beatS * 0.75, at, 0.05);
+    this.echoWet.gain.setTargetAtTime(d?.echo ? 0.34 : 0, at, 0.06);
+    this.out.gain.setTargetAtTime(this.level(), at, 0.08);
+  }
+
+  /** Stop what's queued: swap each deck's input for a new one and let the old fade out. */
+  private cut() {
+    const c = this.ctx;
+    if (!c || !this.buses) return;
+    for (const b of this.buses) {
+      const old = b.input;
+      old.gain.setTargetAtTime(0, c.currentTime, 0.02);
+      window.setTimeout(() => old.disconnect(), 300);
+      b.input = c.createGain();
+      b.input.connect(b.gain);
+    }
+  }
+
+  private tick() {
+    const c = this.ctx;
+    const d = this.deck;
+    if (!c || !d?.playing || !this.buses || c.state !== "running") return;
+    const serverMs = this.now();
+    // server time to audio time: measured each tick, so a clock correction is followed
+    const offset = c.currentTime - serverMs / 1000;
+    const beatNow = deckBeat(d, serverMs);
+    const [from, to] = stepsDue(this.next, beatNow, beatNow + (LOOKAHEAD * d.bpm) / 60);
+    const [ga, gb] = xfadeGains(d.xfade);
+    for (let s = from; s < to; s++) {
+      const serverAt = d.t + ((s / 4 - d.beat) * 60_000) / d.bpm;
+      const at = Math.max(c.currentTime, serverAt / 1000 + offset);
+      if (ga > 0.01) this.step(c, this.buses[0].input, TRACK_DEFS[d.a], d, s, at);
+      if (gb > 0.01) this.step(c, this.buses[1].input, TRACK_DEFS[d.b], d, s, at);
+      this.fx(c, d, s, at);
+    }
+    this.next = to;
+  }
+
+  /** One sixteenth of one record. */
+  private step(c: AudioContext, out: AudioNode, def: TrackDef, d: Deck, s: number, at: number) {
+    const beat = s / 4;
+    const bar = Math.floor(s / 16);
+    const pos = ((s % 16) + 16) % 16;
+    const section = sectionAt(beat, d.drop);
+    const L = LAYERS[section];
+    const sixteenth = 15 / d.bpm;
+    const t = at + (pos % 2 ? def.swing * sixteenth : 0);
+    const k = hitAt(def.kick, pos);
+    if (k && L.kick) this.kick(c, out, t, k * L.kick, def.kickTone);
+    // the build: a snare roll that gets faster, bar by bar, and a last-beat gap before the drop
+    if (section === "build" && d.drop !== null) {
+      const into = beat - d.drop;
+      const every = into < 4 ? 4 : into < 6 ? 2 : 1;
+      if (into < BUILD_BEATS - 0.5 && pos % every === 0) this.clap(c, out, t, 0.35 + (0.55 * into) / BUILD_BEATS);
+    } else {
+      const cl = hitAt(def.clap, pos);
+      if (cl && L.clap) this.clap(c, out, t, cl * L.clap);
+    }
+    const h = hitAt(def.hat, pos);
+    if (h && L.hat) this.hat(c, out, t, h * L.hat, false);
+    const o = hitAt(def.open, pos);
+    if (o && L.open) this.hat(c, out, t, o * L.open, true);
+    const b = bassNote(def, bar, pos);
+    if (b !== null && L.bass) this.bass(c, out, t, b, sixteenth * 1.8, def, L.bass);
+    const l = leadNote(def, bar, pos);
+    if (l !== null && L.lead) this.pluck(c, out, t, l, def, L.lead);
+    if (pos === 0 && L.pad && def.pad) this.pad(c, out, t, chordVoicing(def, bar), sixteenth * 16, def.pad * L.pad);
+  }
+
+  /** Whole-mix effects, once per sixteenth: the build's riser and the drop's crash. */
+  private fx(c: AudioContext, d: Deck, s: number, at: number) {
+    if (d.drop === null || !this.buses) return;
+    const out = this.buses[0].gain.gain.value >= this.buses[1].gain.gain.value ? this.buses[0].input : this.buses[1].input;
+    const beatS = 60 / d.bpm;
+    if (s === d.drop * 4) this.riser(c, out, at, BUILD_BEATS * beatS);
+    if (s === (d.drop + BUILD_BEATS) * 4) this.crash(c, out, at);
+  }
+
+  private env(c: AudioContext, out: AudioNode, at: number, peak: number, attack: number, decay: number) {
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), at + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
+    g.connect(out);
+    return g;
+  }
+
+  private noiseSource(c: AudioContext, at: number, dur: number) {
+    const src = c.createBufferSource();
+    src.buffer = this.noise;
+    src.start(at, Math.random() * 1.5);
+    src.stop(at + dur);
+    return src;
+  }
+
+  private kick(c: AudioContext, out: AudioNode, at: number, vel: number, tone: number) {
+    const o = c.createOscillator();
+    o.frequency.setValueAtTime(tone, at);
+    o.frequency.exponentialRampToValueAtTime(44, at + 0.12);
+    o.connect(this.env(c, out, at, 0.95 * vel, 0.003, 0.38));
+    o.start(at);
+    o.stop(at + 0.45);
+  }
+
+  private clap(c: AudioContext, out: AudioNode, at: number, vel: number) {
+    const src = this.noiseSource(c, at, 0.25);
+    const bp = c.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 1500;
+    bp.Q.value = 0.9;
+    src.connect(bp);
+    bp.connect(this.env(c, out, at, 0.5 * vel, 0.002, 0.16));
+  }
+
+  private hat(c: AudioContext, out: AudioNode, at: number, vel: number, open: boolean) {
+    const src = this.noiseSource(c, at, open ? 0.3 : 0.08);
+    const hp = c.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = open ? 6500 : 8000;
+    src.connect(hp);
+    hp.connect(this.env(c, out, at, (open ? 0.14 : 0.1) * vel, 0.001, open ? 0.22 : 0.04));
+  }
+
+  private bass(c: AudioContext, out: AudioNode, at: number, midi: number, dur: number, def: TrackDef, vel: number) {
+    const o = c.createOscillator();
+    o.type = def.bassWave;
+    o.frequency.value = midiHz(midi);
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.Q.value = 5;
+    lp.frequency.setValueAtTime(def.bassCut * 3.2, at);
+    lp.frequency.exponentialRampToValueAtTime(def.bassCut, at + dur * 0.7);
+    o.connect(lp);
+    lp.connect(this.env(c, out, at, 0.34 * vel, 0.005, dur));
+    o.start(at);
+    o.stop(at + dur + 0.05);
+  }
+
+  private pluck(c: AudioContext, out: AudioNode, at: number, midi: number, def: TrackDef, vel: number) {
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.Q.value = def.leadWave === "sawtooth" && def.leadCut < 1200 ? 9 : 2;
+    lp.frequency.setValueAtTime(def.leadCut * 3, at);
+    lp.frequency.exponentialRampToValueAtTime(def.leadCut, at + def.leadDecay);
+    lp.connect(this.env(c, out, at, 0.1 * vel, 0.004, def.leadDecay));
+    for (const detune of [-6, 6]) {
+      const o = c.createOscillator();
+      o.type = def.leadWave;
+      o.frequency.value = midiHz(midi);
+      o.detune.value = detune;
+      o.connect(lp);
+      o.start(at);
+      o.stop(at + def.leadDecay + 0.05);
+    }
+  }
+
+  private pad(c: AudioContext, out: AudioNode, at: number, notes: number[], dur: number, vel: number) {
+    const lp = c.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1300;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(0.045 * vel, at + dur * 0.25);
+    g.gain.setValueAtTime(0.045 * vel, at + dur * 0.8);
+    g.gain.linearRampToValueAtTime(0.0001, at + dur * 1.02);
+    lp.connect(g);
+    g.connect(out);
+    for (const n of notes)
+      for (const detune of [-8, 8]) {
+        const o = c.createOscillator();
+        o.type = "sawtooth";
+        o.frequency.value = midiHz(n);
+        o.detune.value = detune;
+        o.connect(lp);
+        o.start(at);
+        o.stop(at + dur * 1.05);
+      }
+  }
+
+  private riser(c: AudioContext, out: AudioNode, at: number, dur: number) {
+    const src = c.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    src.start(at);
+    src.stop(at + dur);
+    const bp = c.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 3;
+    bp.frequency.setValueAtTime(350, at);
+    bp.frequency.exponentialRampToValueAtTime(7000, at + dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(0.22, at + dur * 0.97);
+    g.gain.linearRampToValueAtTime(0.0001, at + dur);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(out);
+  }
+
+  private crash(c: AudioContext, out: AudioNode, at: number) {
+    const src = this.noiseSource(c, at, 1.8);
+    const hp = c.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 3500;
+    src.connect(hp);
+    hp.connect(this.env(c, out, at, 0.22, 0.002, 1.6));
+    const o = c.createOscillator();
+    o.frequency.setValueAtTime(90, at);
+    o.frequency.exponentialRampToValueAtTime(30, at + 0.6);
+    o.connect(this.env(c, out, at, 0.7, 0.004, 0.8));
+    o.start(at);
+    o.stop(at + 0.9);
+  }
+}
+
+export type { DeckTrackId };

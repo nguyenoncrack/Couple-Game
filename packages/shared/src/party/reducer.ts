@@ -1,6 +1,7 @@
 import type { Blueprint } from "../blueprint";
 import type { Catalog } from "../catalog";
 import type { LifeState } from "../life/state";
+import { anchorDeck, BUILD_BEATS, deckBeat, DEFAULT_DECK, DROP_BEATS, restoredDeck, type Deck } from "./deck";
 import { emptyParty, MAX_QUEUE, musicPosition, PARTY_ROLES, type PartyCmd, type PartyReject, type PartyRole, type PartyState, type Track } from "./definitions";
 
 /** What party gear the house has: any item with that role, on any floor. */
@@ -36,6 +37,52 @@ function advance(p: PartyState, now: number) {
  */
 export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): { reject: PartyReject | null; changed: boolean } {
   const p = partyOf(state);
+  if (cmd.cmd === "deck" || cmd.cmd === "drop") {
+    if (!ctx.gear.music) return { reject: "no-music", changed: false };
+    let changed = applyDeck(deckOf(p), cmd, ctx.now);
+    // the deck starting puts the YouTube music on hold (only one plays at a time)
+    if (p.deck?.playing && p.music.playing) {
+      p.music.at = musicPosition(p.music, ctx.now);
+      p.music.playing = false;
+      changed = true;
+    }
+    return { reject: null, changed };
+  }
+  const result = applyMusic(p, cmd, ctx);
+  // and the YouTube music starting puts the deck on hold
+  if (p.music.playing && p.deck?.playing) {
+    anchorDeck(p.deck, ctx.now);
+    p.deck.playing = false;
+    return { ...result, changed: true };
+  }
+  return result;
+}
+
+/** The deck as it stands, made for a party saved before there was one. */
+export const deckOf = (p: PartyState): Deck => (p.deck ??= { ...DEFAULT_DECK });
+
+/** Work the deck. Reports whether anything changed. */
+function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: "deck" | "drop" }>, now: number): boolean {
+  if (cmd.cmd === "drop") {
+    if (!d.playing) return false;
+    const beat = deckBeat(d, now);
+    // one drop at a time
+    if (d.drop !== null && beat < d.drop + BUILD_BEATS + DROP_BEATS) return false;
+    // the build starts on the next bar line
+    d.drop = Math.ceil(beat / 4) * 4;
+    return true;
+  }
+  const before = JSON.stringify(d);
+  const { playing, bpm, ...rest } = cmd.set;
+  // the beat is re-anchored before the tempo changes or the music stops or starts, so it carries on from where it is
+  if ((playing !== undefined && playing !== d.playing) || (bpm !== undefined && bpm !== d.bpm)) anchorDeck(d, now);
+  if (bpm !== undefined) d.bpm = bpm;
+  if (playing !== undefined) d.playing = playing;
+  Object.assign(d, rest);
+  return JSON.stringify(d) !== before;
+}
+
+function applyMusic(p: PartyState, cmd: Exclude<PartyCmd, { cmd: "deck" | "drop" }>, ctx: PartyContext): { reject: PartyReject | null; changed: boolean } {
   const m = p.music;
   const { now } = ctx;
   const done = (changed: boolean) => ({ reject: null, changed });
@@ -122,8 +169,15 @@ export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): 
 
 /** Nobody's here: the music holds where it is, so it's waiting at the same place when they come back. */
 export function pauseMusic(state: LifeState, now: number): boolean {
+  let changed = false;
+  const d = state.party?.deck;
+  if (d?.playing) {
+    anchorDeck(d, now);
+    d.playing = false;
+    changed = true;
+  }
   const m = state.party?.music;
-  if (!m?.playing) return false;
+  if (!m?.playing) return changed;
   m.at = musicPosition(m, now);
   m.playing = false;
   return true;
@@ -135,6 +189,7 @@ export function savedParty(party: PartyState, now: number): PartyState {
   return {
     lights: { ...party.lights },
     music: { queue: m.queue.map((t) => ({ ...t })), current: m.current ? { ...m.current } : null, playing: false, at: m.current ? musicPosition(m, now) : 0 },
+    ...(party.deck ? { deck: restoredDeck({ ...party.deck, beat: deckBeat(party.deck, now) }) } : {}),
   };
 }
 
@@ -152,5 +207,6 @@ export function restoredParty(saved: PartyState | undefined): PartyState | undef
       playing: false,
       at: Number.isFinite(m?.at) ? Math.max(0, m!.at) : 0,
     },
+    deck: restoredDeck(saved.deck),
   };
 }

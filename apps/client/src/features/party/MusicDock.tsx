@@ -1,43 +1,59 @@
 import { positionAt } from "@cg/shared";
 import { useEffect, useMemo, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { holdAmbient } from "../../state/music";
 import { partyCmd, serverNow, useGame } from "../../state/game";
+import { DeckEngine } from "./deck/deckEngine";
+import { DeckBar, DjConsole } from "./deck/DjConsole";
 import { MusicController } from "./musicController";
-import { statusText } from "./PartyPanel";
-import { resetPartyUi, setMusicPrefs, usePartyUi } from "./partyUi";
+import { usePartyGear } from "./PartyPanel";
+import { resetPartyUi, usePartyUi } from "./partyUi";
 import { easeGain, levelAtHeight, musicGain, musicSources } from "./spatialMix";
 
 /**
- * Where the shared music plays on this screen. YouTube's own player sits here in full, with its controls, and
- * nothing is ever drawn over it; it stays on screen for as long as this screen is listening. Joining the music is
- * a click ("Enable music"), which is also what lets the browser play sound. Leaving the house (or leaving the
- * music) takes the player down.
+ * Where the shared music plays on this screen: the DJ console (or, made small, a bar). The deck's built-in tracks
+ * are made here in Web Audio; a YouTube video plays in YouTube's own player on the console's screen, which is up
+ * only while the video plays and stays in view for as long as it does. Joining the music is a click (opening the
+ * deck), which is also what lets the browser play sound. Leaving the house takes it all down.
  */
 export function MusicDock() {
   const music = useGame((s) => s.life?.party?.music);
-  const listening = usePartyUi((s) => s.listening);
-  const status = usePartyUi((s) => s.status);
-  const message = usePartyUi((s) => s.message);
-  const volume = usePartyUi((s) => s.volume);
-  const muted = usePartyUi((s) => s.muted);
-  const fade = usePartyUi((s) => s.fade);
-  const host = useRef<HTMLDivElement>(null);
+  const deck = useGame((s) => s.life?.party?.deck);
+  const gear = usePartyGear();
+  const { listening, volume, muted, fade, deckOpen } = usePartyUi(useShallow((s) => ({ listening: s.listening, volume: s.volume, muted: s.muted, fade: s.fade, deckOpen: s.deckOpen })));
+  const host = useRef<HTMLDivElement | null>(null);
   const ctrl = useMemo(() => new MusicController(partyCmd), []);
-  if (import.meta.env.DEV) Object.assign(window, { __music: ctrl });
+  const engine = useMemo(() => new DeckEngine(serverNow), []);
+  if (import.meta.env.DEV) Object.assign(window, { __music: ctrl, __deck: engine });
 
-  // the player is up while there's something to play, and only then (no player left standing about with nothing in it)
-  const showPlayer = listening && Boolean(music?.current);
+  const youtubeOn = Boolean(music?.current && music.playing);
+  // YouTube's player is up while a video plays and this screen is listening, and only then; it has to be seen, so
+  // the console opens for it
+  const showYouTube = listening && youtubeOn;
   useEffect(() => {
-    if (showPlayer && host.current) void ctrl.attach(host.current, usePartyUi.getState().volume, usePartyUi.getState().muted);
+    if (showYouTube && !deckOpen) usePartyUi.setState({ deckOpen: true });
+  }, [showYouTube, deckOpen]);
+  const playerShown = showYouTube && deckOpen;
+  useEffect(() => {
+    if (playerShown && host.current) void ctrl.attach(host.current, usePartyUi.getState().volume, usePartyUi.getState().muted);
     else ctrl.detach();
-  }, [showPlayer, ctrl]);
+  }, [playerShown, ctrl]);
   useEffect(() => ctrl.follow(music), [music, ctrl]);
   useEffect(() => ctrl.setVolume(volume, muted), [volume, muted, ctrl]);
+
+  // the deck's sound runs while this screen is listening
+  useEffect(() => {
+    if (listening) engine.start();
+    else engine.stop();
+  }, [listening, engine]);
+  useEffect(() => engine.follow(deck), [deck, engine]);
+
   // the sound comes from the speakers: it's full beside them and fades as this player's character walks away
   const view = useGame((s) => s.view);
   const sources = useMemo(() => (view ? musicSources(view) : []), [view]);
+  const audible = listening && (Boolean(deck?.playing) || playerShown);
   useEffect(() => {
-    if (!showPlayer) return;
+    if (!audible) return;
     let gain = 1;
     const step = () => {
       const { me, life } = useGame.getState();
@@ -49,63 +65,29 @@ export function MusicDock() {
       }
       gain = easeGain(gain, target);
       ctrl.setMix(gain);
+      engine.setOutput(muted ? 0 : volume / 100, gain);
     };
     step();
     const timer = setInterval(step, 250);
     return () => clearInterval(timer);
-  }, [showPlayer, fade, sources, ctrl]);
+  }, [audible, fade, sources, ctrl, engine, muted, volume]);
+
   // the lo-fi background music steps aside while this screen plays the party's
-  const playing = Boolean(listening && music?.current && music.playing);
+  const playing = Boolean(listening && (youtubeOn || deck?.playing));
   useEffect(() => {
     holdAmbient(playing);
   }, [playing]);
   useEffect(
     () => () => {
       ctrl.detach();
+      engine.stop();
       holdAmbient(false);
       resetPartyUi();
     },
-    [ctrl],
+    [ctrl, engine],
   );
 
-  if (!listening)
-    return music?.current ? (
-      <button className="pill party-enable" onClick={() => usePartyUi.setState({ listening: true })}>
-        <span aria-hidden>♪</span> {music.playing ? "Music is playing" : "Music is paused"} · Enable music
-      </button>
-    ) : null;
-
-  return (
-    <section className="party-dock" aria-label="Shared music">
-      {showPlayer ? <div className="party-player" ref={host} /> : <p className="party-idle">Nothing queued yet. Add a video from the Party panel's Music tab.</p>}
-      <div className="party-dock-bar">
-        <span className={`party-status ${status}`}>{music?.current ? statusText(status) : "Nothing queued"}</span>
-        {music?.current && (
-          <button className="btn" onClick={() => partyCmd({ cmd: music.playing ? "pause" : "play" })}>
-            {music.playing ? "Pause" : "Play"}
-          </button>
-        )}
-        {music?.current && (
-          <button className="btn" onClick={() => partyCmd({ cmd: "next", trackId: music.current!.id })}>
-            Next
-          </button>
-        )}
-        <button className="btn" onClick={() => setMusicPrefs({ muted: !muted })} aria-pressed={muted}>
-          {muted ? "Unmute" : "Mute"}
-        </button>
-        <button className="btn" onClick={() => setMusicPrefs({ fade: !fade })} aria-pressed={fade} title="The music comes from the speakers and gets quieter the further you walk from them">
-          Fade: {fade ? "on" : "off"}
-        </button>
-        <button className="btn" onClick={() => usePartyUi.setState({ listening: false })}>
-          Leave
-        </button>
-      </div>
-      {status === "blocked" && (
-        <button className="btn primary party-enable-now" onClick={() => ctrl.enable()}>
-          Enable music
-        </button>
-      )}
-      {message && <p className="party-problem">{message}</p>}
-    </section>
-  );
+  if (!gear.music && !music?.current && !deck?.playing) return null;
+  if (!deckOpen) return <DeckBar deck={deck} music={music} listening={listening} />;
+  return <DjConsole deck={deck} music={music} engine={engine} showYouTube={playerShown} ytHost={host} onEnableYouTube={() => ctrl.enable()} />;
 }

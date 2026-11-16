@@ -131,7 +131,7 @@ export class Kit {
   /** Merge into one mesh per material (and one outline mesh per weight). */
   build(ghost = false): BuiltMesh[] {
     const bodies = new Map<THREE.Material, THREE.BufferGeometry[]>();
-    const lines = new Map<string, { thick: number; normals: boolean; sway: number; geos: THREE.BufferGeometry[] }>();
+    const lines = new Map<string, { thick: number; normals: boolean; sway: number; push: number; geos: THREE.BufferGeometry[] }>();
     const center = new THREE.Vector3();
     for (const p of this.parts) {
       const g = p.geo.index ? p.geo.toNonIndexed() : p.geo.clone();
@@ -148,15 +148,16 @@ export class Kit {
       if (!bodies.has(p.mat)) bodies.set(p.mat, []);
       bodies.get(p.mat)!.push(g);
       if (p.outline > 0) {
-        // a swaying part's outline sways with it
+        // a swaying part's outline sways with it, and a thumping speaker cone's thumps with it
         const sway: number = p.mat.userData.sway ?? 0;
-        const key = `${p.outline}|${p.normals}|${sway}`;
-        if (!lines.has(key)) lines.set(key, { thick: p.outline, normals: p.normals, sway, geos: [] });
+        const push: number = p.mat.userData.push ?? 0;
+        const key = `${p.outline}|${p.normals}|${sway}|${push}`;
+        if (!lines.has(key)) lines.set(key, { thick: p.outline, normals: p.normals, sway, push, geos: [] });
         lines.get(key)!.geos.push(g);
       }
     }
     const out: BuiltMesh[] = [];
-    for (const { thick, normals, sway, geos } of lines.values()) out.push({ geometry: mergeGeometries(geos)!, material: outlineMaterial(thick, !normals, true, ghost, sway) });
+    for (const { thick, normals, sway, push, geos } of lines.values()) out.push({ geometry: mergeGeometries(geos)!, material: outlineMaterial(thick, !normals, true, ghost, sway, push) });
     for (const [mat, geos] of bodies) out.push({ geometry: mergeGeometries(geos)!, material: mat });
     for (const o of out) o.geometry.computeBoundingSphere();
     return out;

@@ -102,7 +102,7 @@ export function PartyLights() {
     const party = state.life?.party;
     const lights = party?.lights ?? DEFAULT_LIGHTS;
     const now = serverNow();
-    stepParty(lights, party?.music, now, Math.min(dt, 0.1), state.view ? [state.view.lot.w / 2, state.view.lot.d / 2] : undefined);
+    stepParty(lights, party?.music, now, Math.min(dt, 0.1), state.view ? [state.view.lot.w / 2, state.view.lot.d / 2] : undefined, party?.deck);
     const level = partyUniforms.uLevel.value;
     const T = tubes.current;
     const C = cones.current;

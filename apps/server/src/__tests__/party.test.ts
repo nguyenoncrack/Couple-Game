@@ -262,6 +262,51 @@ describe("party night, over the wire", () => {
     void url;
   });
 
+  it("shares the DJ deck: records, mixer and drops reach both players, it takes turns with YouTube, and keeps its place through a restart", async () => {
+    const { a, b, houseId, ana } = await couple();
+    await a.connect();
+    await b.connect();
+    a.party({ cmd: "deck", set: { playing: true } });
+    expect((await a.next("error")).code).toBe("no-music");
+    await furnish(a, b);
+    a.party({ cmd: "deck", set: { playing: true, bpm: 120, a: "night-bus" } });
+    const seen = (await b.life((l) => Boolean(l.party?.deck?.playing))).life.party!.deck!;
+    expect(seen).toMatchObject({ a: "night-bus", bpm: 120, playing: true });
+    b.party({ cmd: "deck", set: { xfade: 0.75, echo: true, filter: -0.4, b: "disco-kettle" } });
+    await a.life((l) => l.party?.deck?.xfade === 0.75);
+    expect(a.last!.party!.deck).toMatchObject({ echo: true, filter: -0.4, b: "disco-kettle" });
+    b.party({ cmd: "drop" });
+    const dropped = (await a.life((l) => l.party?.deck?.drop !== null && l.party?.deck?.drop !== undefined)).life.party!.deck!;
+    expect(dropped.drop! % 4).toBe(0);
+    // both players read the same beat from the same deck
+    await b.life((l) => l.party?.deck?.drop === dropped.drop);
+    expect(b.last!.party!.deck).toEqual(dropped);
+    // a YouTube video puts the deck on hold, and the deck puts the video on hold
+    a.party({ cmd: "add", videoId: A });
+    await b.life((l) => l.party?.music.playing === true && l.party.deck?.playing === false);
+    b.party({ cmd: "deck", set: { playing: true } });
+    await a.life((l) => l.party?.deck?.playing === true && l.party.music.playing === false);
+    // refused: a record it doesn't have, a tempo off the dial
+    for (const cmd of [{ cmd: "deck", set: { a: "../../etc" } }, { cmd: "deck", set: { bpm: 400 } }]) {
+      a.intent({ do: "party", cmd } as never);
+      expect((await a.next("error")).code).toBe("invalid");
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    await a.disconnect();
+    await b.disconnect();
+    await new Promise((r) => setTimeout(r, 100));
+    // the empty house holds it, and a restart keeps the records, the mix and the beat it stopped on
+    const old = app;
+    await startApp();
+    const again = new Player(`${base.replace("http", "ws")}/ws`, houseId, ana);
+    const welcome = await again.connect();
+    const deck = welcome.life.party!.deck!;
+    expect(deck).toMatchObject({ a: "night-bus", b: "disco-kettle", xfade: 0.75, echo: true, playing: false, drop: null });
+    expect(deck.beat).toBeGreaterThan(0);
+    await again.disconnect();
+    await old.close();
+  });
+
   it("lets both players dance and work the booth, ends one for the other, and stops cleanly", async () => {
     const { a, b } = await couple();
     const wa = await a.connect();

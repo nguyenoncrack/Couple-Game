@@ -16,7 +16,7 @@ import { pencilMaterial, type Finish } from "./pencil";
  * the origin, standing on y = 0 and facing +z. New catalog items reuse these by kind with their own colours.
  */
 
-type Mat = (tone: string, finish?: Finish, alpha?: number, glow?: number) => THREE.Material;
+type Mat = (tone: string, finish?: Finish, alpha?: number, glow?: number, push?: number) => THREE.Material;
 type Params = Record<string, unknown>;
 type Builder = (k: Kit, w: number, d: number, p: Params, m: Mat, seed: number) => void;
 
@@ -632,7 +632,7 @@ export function modelFor(item: FurnitureItem, ghost: "ok" | "bad" | null = null,
   let out = built.get(key);
   if (!out) {
     const k = new Kit();
-    const m: Mat = (tone, finish, alpha, glow) => pencilMaterial(tone, { finish, alpha, glow, ghost: ghost ?? undefined });
+    const m: Mat = (tone, finish, alpha, glow, push) => pencilMaterial(tone, { finish, alpha, glow, push, ghost: ghost ?? undefined });
     const build = BUILDERS[item.model.kind] ?? fallback;
     // (a placement preview tells party models to use plain tints for their shader-driven parts)
     const params = (active || ghost ? { ...item.model, ...(active ? { inUse: true } : {}), ...(ghost ? { ghost: true } : {}) } : item.model) as Params;
@@ -853,7 +853,7 @@ export function openingModelFor(item: OpeningItem, ghost: "ok" | "bad" | null = 
   let out = builtOpenings.get(key);
   if (!out) {
     const k = new Kit();
-    const m: Mat = (tone, finish, alpha, glow) => pencilMaterial(tone, { finish, alpha, glow, ghost: ghost ?? undefined });
+    const m: Mat = (tone, finish, alpha, glow, push) => pencilMaterial(tone, { finish, alpha, glow, push, ghost: ghost ?? undefined });
     (OPENING_BUILDERS[item.model.kind] ?? OPENING_BUILDERS.door!)(k, item, item.model as Params, m, low);
     out = k.parts.length ? k.build(Boolean(ghost)) : [];
     builtOpenings.set(key, out);

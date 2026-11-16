@@ -67,6 +67,8 @@ export const lighting = {
   wet: { value: 0 },
   /** How hard the breeze blows on plants that sway (0 holds them still, for people who'd rather less motion). */
   wind: { value: 1 },
+  /** How hard the party's speakers are pushed right now (0 to 1): speaker cones thump out with it. */
+  pump: { value: 0 },
 };
 
 /** What the sky dome draws, moved through the day by `Sky` (and by the weather): colours in the page's sRGB. */
@@ -92,7 +94,8 @@ export const skyDome = {
  */
 const DAYLIGHT = { dir: SUN_DIR.clone(), sun: lighting.sun.value.clone(), sky: lighting.skyLight.value.clone(), bounce: lighting.bounce.value.clone(), fog: fogUniform.value.clone() };
 export function withDaylight<T>(fn: () => T): T {
-  const was = { dir: SUN_DIR.clone(), sun: lighting.sun.value.clone(), sky: lighting.skyLight.value.clone(), bounce: lighting.bounce.value.clone(), fog: fogUniform.value.clone(), night: lighting.night.value };
+  const was = { dir: SUN_DIR.clone(), sun: lighting.sun.value.clone(), sky: lighting.skyLight.value.clone(), bounce: lighting.bounce.value.clone(), fog: fogUniform.value.clone(), night: lighting.night.value, pump: lighting.pump.value };
+  lighting.pump.value = 0;
   SUN_DIR.copy(DAYLIGHT.dir);
   lighting.sun.value.copy(DAYLIGHT.sun);
   lighting.skyLight.value.copy(DAYLIGHT.sky);
@@ -108,6 +111,7 @@ export function withDaylight<T>(fn: () => T): T {
     lighting.bounce.value.copy(was.bounce);
     fogUniform.value.copy(was.fog);
     lighting.night.value = was.night;
+    lighting.pump.value = was.pump;
   }
 }
 
@@ -131,9 +135,21 @@ const swayGlsl = /* glsl */ `
   }
 `;
 
+/**
+ * A speaker cone that thumps with the music: the part moves out along its model's +z (the way furniture faces) by
+ * `uPush` metres at a full push. It works in the model's own space, so the part's outline moves with it too.
+ */
+const pushGlsl = /* glsl */ `
+  uniform float uPump;
+  uniform float uPush;
+`;
+
 const pencilVertex = /* glsl */ `
   #ifdef SWAY
     ${swayGlsl}
+  #endif
+  #ifdef PUSH
+    ${pushGlsl}
   #endif
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
@@ -152,6 +168,9 @@ const pencilVertex = /* glsl */ `
       mat4 m = modelMatrix;
     #endif
     vec3 local = position;
+    #ifdef PUSH
+      local.z += uPush * uPump;
+    #endif
     #if defined(FINISH) && FINISH == 27
       vec3 anchor = (m * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
       local *= 1.0 - smoothstep(32.0, 55.0, distance(cameraPosition, anchor));
@@ -618,13 +637,16 @@ export interface PencilOptions {
   sway?: number;
   /** Glows warm after dark (lampshades, lit windows): how brightly, 1 being a lamp's own shade. */
   glow?: number;
+  /** Thumps out with the party music (speaker cones): how far forward at a full push, in metres. Kit draws its
+   * outlines with the same `push`. */
+  push?: number;
 }
 
 const cache = new Map<string, THREE.ShaderMaterial>();
 
 /** Shared pencil material. Calls with the same arguments return the same instance. */
 export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
-  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}|${opts.fill ?? 0}|${opts.sway ?? 0}|${opts.natural ? 1 : 0}|${opts.glow ?? 0}`;
+  const key = `${tone}|${opts.density ?? 6}|${opts.rim === false ? 0 : 1}|${opts.finish ?? ""}|${opts.ghost ?? ""}|${opts.alpha ?? 1}|${opts.fog ?? 1}|${opts.fill ?? 0}|${opts.sway ?? 0}|${opts.natural ? 1 : 0}|${opts.glow ?? 0}|${opts.push ?? 0}`;
   let m = cache.get(key);
   if (!m) {
     const ghost = opts.ghost;
@@ -669,12 +691,15 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
         uLampColor: lighting.lampColor,
         uGlow: { value: opts.glow ?? 0 },
         uWet: lighting.wet,
+        uPush: { value: opts.push ?? 0 },
+        uPump: lighting.pump,
       },
       transparent: Boolean(ghost) || (opts.alpha ?? 1) < 1,
       depthWrite: !ghost && (opts.alpha ?? 1) >= 1,
-      defines: { ...(opts.natural ? { NATURAL: 1 } : {}), ...(opts.finish ? { FINISH: FINISHES[opts.finish] } : {}), ...(opts.sway ? { SWAY: 1 } : {}) },
+      defines: { ...(opts.natural ? { NATURAL: 1 } : {}), ...(opts.finish ? { FINISH: FINISHES[opts.finish] } : {}), ...(opts.sway ? { SWAY: 1 } : {}), ...(opts.push ? { PUSH: 1 } : {}) },
     });
     m.userData.sway = opts.sway ?? 0;
+    m.userData.push = opts.push ?? 0;
     m.userData.finish = opts.finish;
     m.userData.natural = Boolean(opts.natural);
     cache.set(key, m);
@@ -685,6 +710,9 @@ export function pencilMaterial(tone: string = PAPER, opts: PencilOptions = {}) {
 const outlineVertex = /* glsl */ `
   #ifdef SWAY
     ${swayGlsl}
+  #endif
+  #ifdef PUSH
+    ${pushGlsl}
   #endif
   uniform float uThickness;
   uniform float uRadial;
@@ -708,6 +736,9 @@ const outlineVertex = /* glsl */ `
     #else
       vec3 dir = normalize(mix(normal, normalize(position + 1e-5), uRadial));
       vec3 pushed = position + dir * uThickness * jitter / s;
+    #endif
+    #ifdef PUSH
+      pushed.z += uPush * uPump;
     #endif
     vec4 world = m * vec4(pushed, 1.0);
     #ifdef SWAY
@@ -734,8 +765,8 @@ const outlineCache = new Map<string, THREE.ShaderMaterial>();
  * Hand-drawn outline: an inverted hull pushed out along the normals (or out from each part's center), with a
  * little static per-vertex noise so the contour isn't machine-perfect.
  */
-export function outlineMaterial(thickness = 0.02, radial = true, merged = false, ghost = false, sway = 0) {
-  const key = `${thickness}|${radial}|${merged}|${ghost}|${sway}`;
+export function outlineMaterial(thickness = 0.02, radial = true, merged = false, ghost = false, sway = 0, push = 0) {
+  const key = `${thickness}|${radial}|${merged}|${ghost}|${sway}|${push}`;
   let m = outlineCache.get(key);
   if (!m) {
     m = new THREE.ShaderMaterial({
@@ -750,11 +781,13 @@ export function outlineMaterial(thickness = 0.02, radial = true, merged = false,
         uTime: lighting.time,
         uSway: { value: sway },
         uWind: lighting.wind,
+        uPush: { value: push },
+        uPump: lighting.pump,
       },
       side: THREE.BackSide,
       transparent: ghost,
       depthWrite: !ghost,
-      defines: { ...(merged ? { MERGED: 1 } : {}), ...(sway ? { SWAY: 1 } : {}) },
+      defines: { ...(merged ? { MERGED: 1 } : {}), ...(sway ? { SWAY: 1 } : {}), ...(push ? { PUSH: 1 } : {}) },
     });
     outlineCache.set(key, m);
   }

@@ -1,0 +1,69 @@
+# DJ deck
+
+Branch: `feature/dj-deck` (from main `5092d49`). Nothing is merged, pushed or deployed until approved.
+
+The party's music dock was a big YouTube video with a row of pill buttons. It's now a game-style DJ console that plays the game's own music. YouTube stays as a source, on a small screen.
+
+## The console
+
+- **Two turntables**: each record turns while the deck plays (at the deck's tempo), with the record's name and an eight-cell level meter fed by that deck's real output.
+- **Screen**: shows what's on air, the section (Intro, Groove, Full, Breakdown, Rising, Build-up, Drop!), four beat lights and the 32-bar phrase. When a YouTube video plays, YouTube's own player takes the screen.
+- **Mixer**:
+  - *Play/Pause* pad.
+  - *Crossfader* (A to B, equal power; double-click centres it).
+  - *Filter* knob (left muffles, right thins; drag, arrow keys, or double-click to reset).
+  - *Echo* pad.
+  - *Drop* pad: a two-bar build-up with a snare roll and a riser, then a four-bar drop with a crash.
+  - *Tempo*: −/+ 2 BPM, from 100 to 140.
+- **Record crate**: six records. Clicking one loads it onto the *cued* deck (whichever the crossfader is away from), as a DJ would.
+- **Just you**: volume, Mute and Fade (quieter away from the speakers), and Leave.
+- **Made small**: a bar with a turning record. The console can't be made small while a YouTube video plays, because its player has to stay in view.
+
+Everything on the deck is shared and synced through the house, except the "just you" row.
+
+## The music
+
+The six records are Neon Drift (house), Sunset Loop (deep house), Pillow Fort (lo-fi house), Rain on Glass (chill), Disco Kettle (nu-disco) and Night Bus (techno).
+
+- They're written as patterns in `features/party/deck/tracks.ts`: drums, bass, lead and a four-bar chord run.
+- They're synthesized in Web Audio on each screen (`deckEngine.ts`), so nothing is downloaded or streamed.
+- All are in A minor, and both decks always share one tempo and one beat, so any crossfade sounds right.
+- Each record goes round a 32-bar phrase: intro, groove, full, breakdown, rise. A drop takes over for its build and drop.
+
+**Sync.** The house keeps an anchor: at server time `t` the beat was `beat`, at `bpm`. Each screen schedules notes about 160 ms ahead, at the audio time that matches the server time of their sixteenth. Both players hear the same note at the same moment. Any change of tempo, play or pause re-anchors, so the beat never jumps. A drop starts on the next bar line and is stored in beats.
+
+**Turns.** The deck and YouTube take turns: starting either one pauses the other (in the server's reducer).
+
+**Saving.** The deck is saved paused at its beat, with its records and mix. A house saved before the deck existed gets a fresh one.
+
+## Music gear moves with the music
+
+| Gear | What it does while music plays |
+| --- | --- |
+| Speakers | The woofer cone, its cap and the tweeter thump forward on each kick, outlines included. This is a `push` option on the pencil material, in the model's own space. The lit ring brightens on the kick. |
+| Music player | The display is a seven-bar equaliser in the party colours that jumps with the beat. The grille slats nudge out. |
+| DJ booth | The records turn at the deck's tempo. The mixer's level lights follow each deck (A left, B right). The lit front pulses. |
+| Dance floor, LED strips | A gentle brightness lift on each kick. |
+
+What drives it:
+- **Deck:** the deck's own beat. The kick is out during the breakdown and the build, so the speakers rest then.
+- **YouTube:** YouTube tells us nothing about the beat, so the gear moves to a steady 120 BPM.
+
+Steady light stops the pulses. A device that asks for reduced motion stops the cones and the record spin.
+
+## Files
+
+- **Shared:**
+  - `party/deck.ts`: tracks, deck state, beat clock, sections, pump.
+  - `party/definitions.ts`: the `deck` and `drop` commands, `PartyState.deck`.
+  - `party/reducer.ts`: deck commands, taking turns, save and restore, holding when the house empties.
+- **Client:**
+  - `features/party/deck/`: engine, tracks, console, styles.
+  - `MusicDock.tsx`: drives both sources and the spatial mix.
+  - `PartyPanel.tsx`: an "Open the deck" card in the Music tab.
+  - `render/pencil.ts` and `render/kit.ts`: the `push` option.
+  - `render/party/*`: pulse uniforms, the equaliser and level-light materials, model changes.
+- **Tests:**
+  - `shared/__tests__/deck.test.ts`
+  - `client/features/party/deck/deck.test.ts`
+  - the server wire test in `server/__tests__/party.test.ts`
