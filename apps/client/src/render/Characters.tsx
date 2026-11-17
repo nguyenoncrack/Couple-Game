@@ -78,6 +78,7 @@ export function poseFor(activity: string, seatY: number | null, t: number, stand
     case "groove":
       return groovePose(move, s);
     case "dj":
+    case "tune":
       return djPose(s);
     case "sit":
     case "rain":

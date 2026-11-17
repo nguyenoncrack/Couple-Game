@@ -56,10 +56,13 @@
     "model": {"kind": "speaker", "body": "#e8e6ee", "trim": "#00e5ff"} },
   {"id": "party_speaker_walnut", "name": "Walnut party speaker", "category": "party", "tags": ["speaker", "sound", "audio", "bass", "pa", "subwoofer", "music", "club"], "price": 280, "footprint": [1, 1], "layer": "floor", "party": ["speaker"], "variantOf": "party_speaker", "swatch": "#7a5638",
     "model": {"kind": "speaker", "body": "#6b4a32", "trim": "#ffb02e"} },
-  {"id": "music_player", "name": "Music player", "category": "party", "tags": ["music", "youtube", "jukebox", "player", "radio", "queue", "songs", "video", "link"], "price": 150, "footprint": [1, 1], "layer": "floor", "party": ["music"], "swatch": "#e05a5a",
-    "model": {"kind": "musicplayer", "body": "#e05a5a"} },
-  {"id": "music_player_mint", "name": "Mint music player", "category": "party", "tags": ["music", "youtube", "jukebox", "player", "radio", "queue", "songs", "video", "link"], "price": 150, "footprint": [1, 1], "layer": "floor", "party": ["music"], "variantOf": "music_player", "swatch": "#6fc9ad",
-    "model": {"kind": "musicplayer", "body": "#6fc9ad"} },
-  {"id": "music_player_cream", "name": "Cream music player", "category": "party", "tags": ["music", "youtube", "jukebox", "player", "radio", "queue", "songs", "video", "link"], "price": 150, "footprint": [1, 1], "layer": "floor", "party": ["music"], "variantOf": "music_player", "swatch": "#efe3c6",
-    "model": {"kind": "musicplayer", "body": "#efe3c6"} }
+  {"id": "music_player", "name": "Music player", "category": "party", "tags": ["music", "jukebox", "player", "radio", "tracks", "songs", "stereo"], "price": 150, "footprint": [1, 1], "layer": "floor", "party": ["music"], "swatch": "#e05a5a",
+    "model": {"kind": "musicplayer", "body": "#e05a5a"},
+    "interactions": [{"action": "tune", "slots": [{"stand": [[0, 1]], "pose": [0.5, 1.3], "y": 0, "face": 2}]}] },
+  {"id": "music_player_mint", "name": "Mint music player", "category": "party", "tags": ["music", "jukebox", "player", "radio", "tracks", "songs", "stereo"], "price": 150, "footprint": [1, 1], "layer": "floor", "party": ["music"], "variantOf": "music_player", "swatch": "#6fc9ad",
+    "model": {"kind": "musicplayer", "body": "#6fc9ad"},
+    "interactions": [{"action": "tune", "slots": [{"stand": [[0, 1]], "pose": [0.5, 1.3], "y": 0, "face": 2}]}] },
+  {"id": "music_player_cream", "name": "Cream music player", "category": "party", "tags": ["music", "jukebox", "player", "radio", "tracks", "songs", "stereo"], "price": 150, "footprint": [1, 1], "layer": "floor", "party": ["music"], "variantOf": "music_player", "swatch": "#efe3c6",
+    "model": {"kind": "musicplayer", "body": "#efe3c6"},
+    "interactions": [{"action": "tune", "slots": [{"stand": [[0, 1]], "pose": [0.5, 1.3], "y": 0, "face": 2}]}] }
 ]

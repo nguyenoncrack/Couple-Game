@@ -84,3 +84,26 @@
   font-family: var(--hand);
   font-size: 18px;
 }
+
+/* rows, switches and small labels (they used to come with the party panel's styles) */
+.party-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 15px;
+}
+.party-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: #c24bd6;
+}
+.party-switch {
+  justify-content: flex-start;
+}
+.party-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}

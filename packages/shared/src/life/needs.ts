@@ -45,6 +45,8 @@ export const GAIN: Partial<Record<Activity, Partial<NeedValues>>> = {
   // a dance floor is the best fun there is, and tiring; the booth is fun too, and a little social
   groove: { fun: 45, social: 8, energy: -6 },
   dj: { fun: 25, social: 4, energy: -1 },
+  // choosing a record on the music player: a little fun
+  tune: { fun: 12 },
   // forty seconds under the shower gets you about as clean as a long bath
   shower: { hygiene: 140, fun: 4 },
   swim: { fun: 20, hygiene: 15, energy: -2 },
