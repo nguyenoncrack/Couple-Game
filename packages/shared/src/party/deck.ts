@@ -19,6 +19,7 @@ export const RECORDED_TRACKS = [
   { id: "atlasaudio-edm", name: "EDM", style: "AtlasAudio", color: "#22d3ee" },
   { id: "kulakovka-hard-edm", name: "Hard EDM", style: "Kulakovka", color: "#ff556d" },
   { id: "sad-machine-ksk-edit", name: "Sad Machine (KSK Edit)", style: "Porter Robinson", color: "#a78bfa" },
+  { id: "fuck-the-speakerz-up", name: "FUCK THE SPEAKERZ UP", style: "ISOxo", color: "#ff643b" },
 ] as const;
 export type PatternTrackId = (typeof PATTERN_TRACKS)[number]["id"];
 export type RecordedTrackId = (typeof RECORDED_TRACKS)[number]["id"];
