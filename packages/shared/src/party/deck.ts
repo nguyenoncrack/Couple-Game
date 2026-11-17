@@ -20,6 +20,9 @@ export const RECORDED_TRACKS = [
   { id: "kulakovka-hard-edm", name: "Hard EDM", style: "Kulakovka", color: "#ff556d" },
   { id: "sad-machine-ksk-edit", name: "Sad Machine (KSK Edit)", style: "Porter Robinson", color: "#a78bfa" },
   { id: "fuck-the-speakerz-up", name: "FUCK THE SPEAKERZ UP", style: "ISOxo", color: "#ff643b" },
+  { id: "hard-summer-2017-live", name: "HARD SUMMER 2017 LIVE", style: "4B", color: "#bafa45" },
+  { id: "back-to-u", name: "Back To U", style: "SLANDER & William Black", color: "#58a6ff" },
+  { id: "take-me", name: "Take Me", style: "William Black & Matte feat. RUNN", color: "#f693c5" },
 ] as const;
 export type PatternTrackId = (typeof PATTERN_TRACKS)[number]["id"];
 export type RecordedTrackId = (typeof RECORDED_TRACKS)[number]["id"];

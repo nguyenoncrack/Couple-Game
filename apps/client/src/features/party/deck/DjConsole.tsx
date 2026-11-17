@@ -46,8 +46,8 @@ function useDeckClock(deck: Deck, engine: DeckEngine, meters: RefObject<HTMLDivE
       const s = deck.playing ? sectionAt(beat, deck.drop) : sectionAt(beat, null);
       setSection(s);
       setHeard(engine.running);
-      setRecordingA(engine.recordingStatus(deck.a));
-      setRecordingB(engine.recordingStatus(deck.b));
+      setRecordingA(engine.recordingStatus("a"));
+      setRecordingB(engine.recordingStatus("b"));
       const el = meters.current;
       if (el) {
         const [a, b] = engine.levels();
@@ -262,7 +262,7 @@ function Turntable({ side, id, playing, live, cued, label, status }: { side: "a"
       <div className="dj-track">
         <span className="dj-deck-name">{label ?? `Deck ${side.toUpperCase()}`}</span>
         <b>{t.name}</b>
-        <span>{status === "loading" ? "Loading…" : status === "error" ? "Could not load. Pick the record again." : cued ? "Cued: pick a record" : t.style}</span>
+        <span>{status === "loading" ? "Loading…" : status === "error" ? "Could not load audio." : cued ? "Cued: pick a record" : t.style}</span>
       </div>
     </div>
   );

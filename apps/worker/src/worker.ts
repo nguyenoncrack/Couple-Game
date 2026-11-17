@@ -8,6 +8,7 @@ import { RateLimiter } from "@cg/server/rate-limit";
 import { HouseRoom } from "@cg/server/rooms/house-room";
 import { errorReason, MAX_MESSAGE, serveSocket } from "@cg/server/rooms/socket";
 import { DurableObject } from "cloudflare:workers";
+import { serveAudioRange } from "./audioRange";
 
 /**
  * The game on Cloudflare. The same rooms and stores as the Node server, arranged differently: one Durable Object
@@ -241,6 +242,7 @@ export default {
       return house(env, houseId).fetch(new Request(req.url, { headers }));
     }
 
+    if (url.pathname === "/audio/dj/4b-hard-summer-2017-live.mp3") return serveAudioRange(req, env.ASSETS);
     return env.ASSETS.fetch(req);
   },
 } satisfies ExportedHandler<Env>;

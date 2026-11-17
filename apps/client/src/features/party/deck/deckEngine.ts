@@ -1,5 +1,6 @@
 import { BUILD_BEATS, DEFAULT_BPM, deckBeat, sectionAt, type Deck, type DeckTrackId } from "@cg/shared";
-import { recordingOffset, RECORDING_URLS } from "./recordings";
+import { recordingOffset, RECORDING_URLS, STREAMED_RECORDINGS } from "./recordings";
+import { StreamedRecording } from "./streamedRecording";
 import { bassNote, chordVoicing, hitAt, LAYERS, leadNote, midiHz, TRACK_DEFS, type TrackDef } from "./tracks";
 
 /**
@@ -38,6 +39,7 @@ interface DeckBus {
   gain: GainNode;
   meter: AnalyserNode;
   recording?: AudioBufferSourceNode;
+  stream?: StreamedRecording;
 }
 
 export class DeckEngine {
@@ -72,19 +74,23 @@ export class DeckEngine {
       this.timer = window.setInterval(() => this.tick(), TICK_MS);
     }
     void this.ctx.resume().catch(() => {});
+    for (const bus of this.buses ?? []) {
+      if (bus.stream?.blocked) bus.stream.play();
+    }
     this.apply();
     return true;
   }
 
   /** Whether the browser is letting it make sound. */
   get running() {
-    return this.ctx?.state === "running";
+    return this.ctx?.state === "running" && !this.buses?.some((bus) => bus.stream?.blocked);
   }
 
   stop() {
     window.clearInterval(this.timer);
     this.timer = 0;
     const c = this.ctx;
+    for (const bus of this.buses ?? []) bus.stream?.stop();
     this.ctx = null;
     this.buses = null;
     this.recordingRequests.abort();
@@ -112,7 +118,10 @@ export class DeckEngine {
     this.apply();
   }
 
-  recordingStatus(id: DeckTrackId): RecordingStatus | undefined {
+  recordingStatus(side: "a" | "b"): RecordingStatus | undefined {
+    const id = this.deck?.[side];
+    if (!id) return;
+    if (STREAMED_RECORDINGS.has(id)) return this.buses?.[side === "a" ? 0 : 1].stream?.status;
     const state = this.recordings.get(id);
     return typeof state === "string" ? state : undefined;
   }
@@ -221,6 +230,8 @@ export class DeckEngine {
     old.gain.setTargetAtTime(0, c.currentTime, 0.02);
     bus.recording?.stop(c.currentTime + 0.1);
     bus.recording = undefined;
+    bus.stream?.stop();
+    bus.stream = undefined;
     window.setTimeout(() => old.disconnect(), 300);
     bus.input = c.createGain();
     bus.input.connect(bus.gain);
@@ -244,6 +255,12 @@ export class DeckEngine {
   private syncRecording(c: AudioContext, bus: DeckBus, id: DeckTrackId, cue: number, beat: number, bpm: number) {
     const url = RECORDING_URLS[id];
     if (!url) return;
+    if (STREAMED_RECORDINGS.has(id)) {
+      bus.stream ??= new StreamedRecording(c, bus.input, url);
+      bus.stream.sync(beat, cue, bpm);
+      return;
+    }
+
     const buffer = this.recordings.get(id);
     if (!buffer) {
       void this.loadRecording(c, id, url);
