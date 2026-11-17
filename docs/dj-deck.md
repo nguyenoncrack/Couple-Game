@@ -40,6 +40,7 @@ The music is heard by everyone in the house whenever the deck plays. There is no
   - Or pick a style and a length (1, 2, 4, 8 or 16 bars) for the *Mix* pad. *+ Save* keeps that as a preset of your own (up to six, on this device, deletable with ×).
   - Styles: *Blend* fades one into the other. *Bass swap* has both play but only one bass line at a time, swapping halfway. *Echo out* sends the old track into the echo as the new one comes up. *Filter out* strips the old track's bass and then its middle, then the new one takes over. *Cut* switches on the bar line at the end.
   - While it runs, the Mix pad fills up bar by bar; pressing it (or grabbing the crossfader) stops the transition where it is. A transition needs the music playing and a record on the other deck.
+  - **Timed**: two separate times, when the mix starts on the record on air and where the incoming record starts: "At `2:45` on B ➜ start A at `1:12`", with the chosen style and length, then *Queue*. The incoming deck parks at its cue (its own Play is off; dragging its place bar moves the cue) until the record on air gets there. A queued card shows it ("At 2:45 on B ➜ start A at 1:12 · Bass swap · 8 bars", and how long until it starts) with *Mix now* and *Cancel*. Cancel leaves the incoming deck paused at its cue. Pausing the record on air holds the queued mix; jumping it moves the start, and jumping past the time calls the mix off. A time already gone by can't be queued.
 - **Record crate**: one row that scrolls sideways. Clicking a record loads it onto an empty deck if there is one, otherwise the deck that isn't on air, and it starts from its beginning. Recordings show their length.
 - **Just you**: volume, Mute and Fade (quieter away from the speakers).
 
@@ -64,7 +65,9 @@ Built-in records:
 
 **Transitions** are stored as `{style, from, to, start, beats}` in beats, and every screen works out the crossfader and each deck's EQ and echo from them at any beat (`mixAt`). So a transition moves on both screens at once with nothing more sent. Pausing holds it where it is. The next command after it ends writes down where the crossfader finished.
 
-**Saving.** The deck is saved paused at its beat, with its records, cues, channels and crossfader. A transition under way is saved finished. A house saved before the deck existed gets a fresh one.
+A **timed** transition also has `at` (the place in the outgoing record) and `inAt` (the place in the incoming one). After every deck command the house works out `start` from where the outgoing record is (`null` while that deck is paused on its own), and parks the incoming deck: its cue is set so it is at `inAt` on `start`, and `wait` keeps it there until then (`trackPosition` and the engine both respect it; a parked recording is fetched ahead so it comes in on the beat). *Mix now* sets `start` to now; *Cancel* (`unmix`) turns the park into a hold.
+
+**Saving.** The deck is saved paused at its beat, with its records, cues, channels and crossfader. A queued or running transition is saved as it is and carries on from there. A house saved before the deck existed gets a fresh one.
 
 ## Music gear moves with the music
 
@@ -84,7 +87,7 @@ Steady light stops the pulses. A device that asks for reduced motion stops the c
 - **Shared:**
   - `catalog/party.json`, `catalog/index.ts`, `life/needs.ts`: the music player's `tune` place and what it does for fun.
   - `party/deck.ts`: tracks and their lengths, deck state, beat clock, sections, pump, channels, cues, transitions (`mixAt`).
-  - `party/definitions.ts`: the `deck`, `drop`, `mix`, `cue`, `drop-cue`, `transport` and `mark` commands, `PartyState.deck`.
+  - `party/definitions.ts`: the `deck`, `drop`, `mix`, `cue`, `drop-cue`, `transport`, `mark`, `mixnow` and `unmix` commands (`mix` takes optional `at` and `inAt`), `PartyState.deck`.
   - `party/reducer.ts`: deck commands, loading and ejecting, jumping, transitions, taking turns, save and restore, holding when the house empties.
 - **Client:**
   - `features/party/deck/`: engine (a three-band EQ and an echo send per deck, set every tick from the channel and the transition), tracks, recordings, console (`DjConsole.tsx`: booth and music-player pages, place bars, channel strips, transitions), lights page (`LightsPage.tsx`), styles.

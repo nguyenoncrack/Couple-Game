@@ -10,15 +10,22 @@ import {
   DEFAULT_DECK,
   DROP_BEATS,
   holdOf,
+  isParked,
   isRecording,
   MAX_MARKS,
+  mixAt,
+  mixInto,
+  mixOut,
+  mixQueued,
   otherSide,
   placeIn,
   restoredDeck,
   settleMix,
   trackBeats,
   trackPosition,
+  waitOf,
   type Deck,
+  type DeckMix,
   type DeckSide,
   type DeckTrackId,
 } from "./deck";
@@ -82,14 +89,15 @@ export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): 
 export const deckOf = (p: PartyState): Deck => (p.deck ??= { ...DEFAULT_DECK });
 
 type DeckCmd = (typeof DECK_CMDS)[number];
-const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark"] as const;
+const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark", "mixnow", "unmix"] as const;
 export const isDeckCmd = (cmd: PartyCmd): cmd is Extract<PartyCmd, { cmd: DeckCmd }> => (DECK_CMDS as readonly string[]).includes(cmd.cmd);
 
 const S = (side: DeckSide) => (side === "a" ? "A" : "B");
 
-/** Let a deck's record move with the deck's clock again (not paused on its own). */
+/** Let a deck's record move with the deck's clock again (not paused or parked on its own). */
 function release(d: Deck, side: DeckSide) {
   delete d[`hold${S(side)}`];
+  delete d[`wait${S(side)}`];
 }
 
 /** Put a deck `pos` into its record at `beat`, moving with the clock from there. */
@@ -115,12 +123,55 @@ function load(d: Deck, side: DeckSide, id: DeckTrackId | null, beat: number) {
   else delete d[`cue${S(side)}`];
 }
 
+/**
+ * Keep a queued transition on time: it starts when the outgoing record gets to `at`, so its start beat follows that
+ * record (and is unknown while it's paused). The incoming record waits parked at `inAt` until then. A jump past
+ * `at` calls it off.
+ */
+function scheduleMix(d: Deck, beat: number) {
+  const m = d.mix;
+  // (a transition starting on this very beat still puts its incoming record in place)
+  if (!m || (m.start !== null && beat > m.start)) return;
+  const out = mixOut(m);
+  const into = mixInto(m);
+  if (!d[out] || !d[into]) return cancelMix(d, beat);
+  if (m.at !== undefined) {
+    if (holdOf(d, out) !== undefined) m.start = null;
+    else {
+      const from = Math.max(beat, waitOf(d, out) ?? -Infinity);
+      const pos = trackPosition(d, out, from)!;
+      if (m.at < pos - 1e-6) return cancelMix(d, beat);
+      m.start = from + (m.at - pos);
+    }
+  }
+  if (m.inAt !== undefined) {
+    if (m.start === null) holdAt(d, into, d[into]!, m.inAt);
+    else {
+      release(d, into);
+      d[`cue${S(into)}`] = m.start - m.inAt;
+      d[`wait${S(into)}`] = m.start;
+    }
+  }
+}
+
+/** Call a transition off: a queued one leaves the incoming record paused at its starting place; one under way stops where it got to. */
+function cancelMix(d: Deck, beat: number) {
+  const m = d.mix;
+  if (!m) return;
+  if (mixQueued(m, beat)) {
+    const into = mixInto(m);
+    if (m.inAt !== undefined && d[into]) holdAt(d, into, d[into]!, m.inAt);
+  } else d.xfade = mixAt(d, beat).xfade;
+  d.mix = null;
+}
+
 /** Work the deck. Reports whether anything changed. */
 function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, now: number): boolean {
   const beat = deckBeat(d, now);
   const before = JSON.stringify(d);
   settleMix(d, beat);
   runDeck(d, cmd, beat, now);
+  scheduleMix(d, beat);
   return JSON.stringify(d) !== before;
 }
 
@@ -141,21 +192,55 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
       return;
     }
     case "mix": {
-      // one transition at a time, while the music plays, and only to a deck with a record on it
-      if (!d.playing || d.mix) return false;
+      // one transition at a time, and only to a deck with a record on it
+      if (d.mix) return false;
       const to: 0 | 1 = d.xfade < 0.5 ? 1 : 0;
-      const into: DeckSide = to === 1 ? "b" : "a";
-      if (!d[into]) return false;
-      d.mix = { style: cmd.style, from: d.xfade, to, start: Math.ceil(beat / 4 - 1e-9) * 4, beats: cmd.bars * 4 };
-      // a paused incoming record comes in with it
-      if (holdOf(d, into) !== undefined) placeAt(d, into, d[into]!, holdOf(d, into)!, d.mix.start);
+      const out: DeckSide = to === 1 ? "a" : "b";
+      const into = otherSide(out);
+      const outId = d[out];
+      const inId = d[into];
+      if (!inId || !outId) return false;
+      const mix: DeckMix = { style: cmd.style, from: d.xfade, to, start: null, beats: cmd.bars * 4 };
+      // a paused incoming record comes in from where it's held
+      const inAt = cmd.inAt ?? holdOf(d, into) ?? (isParked(d, into, beat) ? trackPosition(d, into, beat)! : undefined);
+      if (inAt !== undefined) mix.inAt = placeIn(inId, inAt);
+      if (cmd.at === undefined) {
+        // now: from the next bar line, while the music plays
+        if (!d.playing) return false;
+        mix.start = Math.ceil(beat / 4 - 1e-9) * 4;
+      } else {
+        mix.at = placeIn(outId, cmd.at);
+        const pos = trackPosition(d, out, beat)!;
+        if (holdOf(d, out) === undefined && !isParked(d, out, beat) && mix.at < pos - 1e-6) return false;
+      }
+      d.mix = mix;
+      return;
+    }
+    case "mixnow": {
+      const m = d.mix;
+      if (!m || !mixQueued(m, beat)) return false;
+      m.start = beat;
+      delete m.at;
+      const into = mixInto(m);
+      if (m.inAt !== undefined) placeAt(d, into, d[into]!, m.inAt, beat);
+      const out = mixOut(m);
+      // the outgoing record plays out under the transition
+      if (holdOf(d, out) !== undefined) placeAt(d, out, d[out]!, holdOf(d, out)!, beat);
+      play();
+      return;
+    }
+    case "unmix": {
+      if (!d.mix) return false;
+      cancelMix(d, beat);
       return;
     }
     case "transport": {
       const { side } = cmd;
       const id = d[side];
       if (!id) return false;
+      // a record waiting for its transition comes in with it
       const m = d.mix;
+      if (m && mixQueued(m, beat) && mixInto(m) === side && m.inAt !== undefined) return false;
       if (cmd.playing) {
         const hold = holdOf(d, side);
         if (!d.playing) {
@@ -175,6 +260,12 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
       const { side } = cmd;
       const id = d[side];
       if (!id || (cmd.track !== undefined && cmd.track !== id)) return false;
+      const m = d.mix;
+      // the incoming record of a queued transition: that's where it will come in from
+      if (m && mixQueued(m, beat) && mixInto(m) === side && m.inAt !== undefined) {
+        m.inAt = placeIn(id, cmd.pos);
+        return;
+      }
       if (holdOf(d, side) !== undefined) return holdAt(d, side, id, cmd.pos);
       placeAt(d, side, id, cmd.pos, beat, isRecording(id));
       return;
@@ -210,6 +301,7 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
       }
       const drop = d[marker];
       if (drop === undefined) return false;
+      if (d.mix) cancelMix(d, beat);
       d.mix = null;
       placeAt(d, side, track, drop, beat, isRecording(track));
       play();
@@ -222,6 +314,8 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
       for (const [side, id] of [["a", a], ["b", b]] as const) {
         if (id === undefined || id === d[side]) continue;
         load(d, side, id, beat);
+        // a new record calls off a transition
+        if (d.mix) cancelMix(d, beat);
       }
       if (chA) d.chA = { ...channelOf(d, "a"), ...chA };
       if (chB) d.chB = { ...channelOf(d, "b"), ...chB };

@@ -1,4 +1,4 @@
-import { BUILD_BEATS, channelOf, cueOf, DEFAULT_BPM, deckBeat, deckRunning, holdOf, mixAt, sectionOf, type Deck, type DeckSide, type DeckTrackId } from "@cg/shared";
+import { BUILD_BEATS, channelOf, cueOf, DEFAULT_BPM, deckBeat, deckRunning, holdOf, mixAt, sectionOf, waitOf, type Deck, type DeckSide, type DeckTrackId } from "@cg/shared";
 import { recordingOffset, RECORDING_URLS, STREAMED_RECORDINGS } from "./recordings";
 import { StreamedRecording } from "./streamedRecording";
 import { bassNote, chordVoicing, hitAt, LAYERS, leadNote, midiHz, TRACK_DEFS, type TrackDef } from "./tracks";
@@ -125,8 +125,8 @@ export class DeckEngine {
     if (was?.playing && this.buses) {
       for (const [index, side] of (["a", "b"] as const).entries()) {
         const bus = this.buses[index]!;
-        // a record changed or paused: what's playing (or scheduled) stops
-        if (!deck?.playing || deck[side] !== was[side] || holdOf(deck, side) !== holdOf(was, side)) this.cut(bus);
+        // a record changed, paused, or parked again for a transition: what's playing (or scheduled) stops
+        if (!deck?.playing || deck[side] !== was[side] || holdOf(deck, side) !== holdOf(was, side) || waitOf(deck, side) !== waitOf(was, side)) this.cut(bus);
         else if (cueOf(deck, side) !== cueOf(was, side)) {
           if (bus.stream) bus.stream.requestSeek();
           else this.cut(bus);
@@ -339,7 +339,7 @@ export class DeckEngine {
     // server time to audio time: measured each tick, so a clock correction is followed
     const offset = c.currentTime - serverMs / 1000;
     const beatNow = deckBeat(d, serverMs);
-    // a record paused on its own stays silent (and gets ready to come back in)
+    // a record paused on its own, or parked for a transition, stays silent (a parked one gets ready to come in)
     (["a", "b"] as const).forEach((side, i) => {
       const id = d[side];
       const bus = this.buses![i]!;
@@ -367,8 +367,8 @@ export class DeckEngine {
     for (let s = from; s < to; s++) {
       const serverAt = d.t + ((s / 4 - d.beat) * 60_000) / d.bpm;
       const at = Math.max(c.currentTime, serverAt / 1000 + offset);
-      if (ga > 0.01 && patternA && deckRunning(d, "a")) this.step(c, this.buses[0].input, patternA, d, s - cueA, s, at);
-      if (gb > 0.01 && patternB && deckRunning(d, "b")) this.step(c, this.buses[1].input, patternB, d, s - cueB, s, at);
+      if (ga > 0.01 && patternA && deckRunning(d, "a", s / 4)) this.step(c, this.buses[0].input, patternA, d, s - cueA, s, at);
+      if (gb > 0.01 && patternB && deckRunning(d, "b", s / 4)) this.step(c, this.buses[1].input, patternB, d, s - cueB, s, at);
       this.fx(c, d, s, at);
     }
     this.next = to;

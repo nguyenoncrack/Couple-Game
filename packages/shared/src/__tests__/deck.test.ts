@@ -181,10 +181,14 @@ describe("transitions", () => {
     expect(PartyCmd.safeParse({ cmd: "mix", style: "spin", bars: 4 }).success).toBe(false);
   });
 
-  it("are finished when a saved deck comes back", () => {
-    const d = restoredDeck({ ...DEFAULT_DECK, xfade: 0.4, mix: { style: "blend", from: 0, to: 1, start: 0, beats: 16 } });
-    expect(d.xfade).toBe(1);
-    expect(d.mix).toBeUndefined();
+  it("carry on from where they were when a saved deck comes back, and a finished one is put away", () => {
+    const mix = { style: "blend", from: 0, to: 1, start: 0, beats: 16 } as const;
+    const d = restoredDeck({ ...DEFAULT_DECK, xfade: 0, beat: 6, mix });
+    expect(d.mix).toEqual(mix);
+    expect(mixAt(d, 6).xfade).toBeGreaterThan(0);
+    const done = restoredDeck({ ...DEFAULT_DECK, xfade: 0.4, beat: 20, mix });
+    expect(done.xfade).toBe(1);
+    expect(done.mix).toBeUndefined();
   });
 });
 
@@ -332,5 +336,100 @@ describe("each deck's own transport", () => {
     expect(s.party!.deck!.marks?.["take-me"]).toHaveLength(8);
     send(s, { cmd: "mark", track: "take-me", pos: sec(12), remove: true }, T0);
     expect(s.party!.deck!.marks?.["take-me"]).toHaveLength(7);
+  });
+});
+
+describe("timed transitions", () => {
+  /** B on air at 2:40, A loaded: "at 2:45 on B, start A at 1:12 and do an 8-bar bass swap". */
+  function onB() {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { a: "take-me", b: "back-to-u", xfade: 1 } }, T0);
+    send(s, { cmd: "cue", side: "b", pos: sec(160) }, T0);
+    send(s, { cmd: "deck", set: { playing: true } }, T0);
+    send(s, { cmd: "mix", style: "bass", bars: 8, at: sec(165), inAt: sec(72) }, T0);
+    return { s, d: s.party!.deck! };
+  }
+
+  it("waits for the moment on the record on air, with the incoming record parked at its cue", () => {
+    const { d } = onB();
+    expect(d.mix).toMatchObject({ style: "bass", to: 0, beats: 32 });
+    expect(posOf(d, "a", T0 + 4000)).toBeCloseTo(sec(72), 2);
+    expect(deckRunning(d, "a", deckBeat(d, T0 + 4000))).toBe(false);
+    expect(mixAt(d, deckBeat(d, T0 + 4000))).toMatchObject({ xfade: 1, progress: null });
+    // the mix starts as B reaches 2:45, with A coming in from 1:12
+    expect(d.mix!.start).toBeCloseTo(deckBeat(d, T0 + 5000), 2);
+    expect(posOf(d, "a", T0 + 5000 + msFor(4))).toBeCloseTo(sec(72) + 4, 2);
+    expect(deckRunning(d, "a", deckBeat(d, T0 + 6000))).toBe(true);
+    // a bass swap: the new bass is out until halfway, then the old one goes
+    const k = (t: number) => mixAt(d, d.mix!.start! + t);
+    expect(k(4).fx.a.low).toBe(-1);
+    expect(k(20).fx.b.low).toBe(-1);
+    expect(k(32).xfade).toBe(0);
+  });
+
+  it("goes the other way too: at 2:45 on A, start B at 1:12", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { a: "back-to-u", b: "take-me", xfade: 0 } }, T0);
+    send(s, { cmd: "cue", side: "a", pos: sec(160) }, T0);
+    send(s, { cmd: "deck", set: { playing: true } }, T0);
+    send(s, { cmd: "mix", style: "bass", bars: 8, at: sec(165), inAt: sec(72) }, T0);
+    const d = s.party!.deck!;
+    expect(d.mix).toMatchObject({ to: 1 });
+    expect(posOf(d, "b", T0 + 4000)).toBeCloseTo(sec(72), 2);
+    expect(d.mix!.start).toBeCloseTo(deckBeat(d, T0 + 5000), 2);
+    expect(posOf(d, "b", T0 + 7000)).toBeCloseTo(sec(74), 1);
+    send(s, { cmd: "deck", set: {} }, T0 + 5000 + msFor(33));
+    expect(d).toMatchObject({ mix: null, xfade: 1 });
+  });
+
+  it("freezes with the music mid-mix, and carries on from the same point", () => {
+    const { s, d } = onB();
+    const mid = T0 + 5000 + msFor(12);
+    send(s, { cmd: "deck", set: { playing: false } }, mid);
+    const frozen = mixAt(d, deckBeat(d, mid));
+    expect(mixAt(d, deckBeat(d, mid + 60_000))).toEqual(frozen);
+    expect(posOf(d, "a", mid + 60_000)).toBeCloseTo(sec(72) + 12, 2);
+    expect(posOf(d, "b", mid + 60_000)).toBeCloseTo(sec(165) + 12, 2);
+    send(s, { cmd: "deck", set: { playing: true } }, mid + 60_000);
+    expect(mixAt(d, deckBeat(d, mid + 60_000))).toEqual(frozen);
+    expect(posOf(d, "a", mid + 60_000 + msFor(4))).toBeCloseTo(sec(72) + 16, 2);
+    expect(mixAt(d, deckBeat(d, mid + 60_000 + msFor(20))).xfade).toBe(0);
+  });
+
+  it("can start now, or be called off (the incoming record stays at its cue)", () => {
+    const a = onB();
+    send(a.s, { cmd: "mixnow" }, T0 + 1000);
+    expect(a.d.mix!.start).toBeCloseTo(deckBeat(a.d, T0 + 1000));
+    expect(posOf(a.d, "a", T0 + 1000 + msFor(2))).toBeCloseTo(sec(72) + 2, 2);
+    const b = onB();
+    send(b.s, { cmd: "unmix" }, T0 + 1000);
+    expect(b.d.mix).toBeNull();
+    expect(posOf(b.d, "a", T0 + 30_000)).toBeCloseTo(sec(72), 2);
+    expect(b.d.xfade).toBe(1);
+  });
+
+  it("follows the record on air: a pause holds it, a jump moves it, and a jump past calls it off", () => {
+    const { s, d } = onB();
+    send(s, { cmd: "transport", side: "b", playing: false }, T0 + 2000);
+    expect(d.mix!.start).toBeNull();
+    expect(posOf(d, "a", T0 + 9000)).toBeCloseTo(sec(72), 2);
+    send(s, { cmd: "transport", side: "b", playing: true }, T0 + 9000);
+    expect(d.mix!.start).toBeCloseTo(deckBeat(d, T0 + 12_000), 2);
+    send(s, { cmd: "cue", side: "b", pos: sec(150) }, T0 + 9000);
+    expect(d.mix!.start).toBeCloseTo(deckBeat(d, T0 + 24_000), 2);
+    // the incoming record's cue can still be moved while it waits
+    send(s, { cmd: "cue", side: "a", pos: sec(30) }, T0 + 9000);
+    expect(posOf(d, "a", T0 + 10_000)).toBeCloseTo(sec(30), 2);
+    send(s, { cmd: "cue", side: "b", pos: sec(200) }, T0 + 10_000);
+    expect(d.mix).toBeNull();
+    expect(send(s, { cmd: "mix", style: "bass", bars: 8, at: sec(165), inAt: sec(72) }, T0 + 10_000).changed).toBe(false);
+  });
+
+  it("stays queued through a save", () => {
+    const { s } = onB();
+    const d = restoredParty(savedParty(s.party!, T0 + 2000))!.deck!;
+    expect(d.mix).toMatchObject({ style: "bass", at: placeIn("back-to-u", sec(165)), inAt: placeIn("take-me", sec(72)) });
+    expect(trackPosition(d, "a", d.beat)).toBeCloseTo(sec(72), 2);
+    expect(trackPosition(d, "b", d.beat)).toBeCloseTo(sec(162), 1);
   });
 });

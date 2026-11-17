@@ -178,8 +178,15 @@ export const PartyCmd = z.discriminatedUnion("cmd", [
   }),
   /** Start a build-up on the next bar; the drop lands two bars later. */
   z.object({ cmd: z.literal("drop") }),
-  /** Go over to the other deck: from the next bar line, over `bars`, in a style. */
-  z.object({ cmd: z.literal("mix"), style: z.enum(MIX_STYLE_IDS), bars: Bars }),
+  /**
+   * Go over to the other deck, over `bars`, in a style: from the next bar line, or, given `at`, when the record on air
+   * gets there. `inAt` is where the incoming record comes in from (it waits there until then).
+   */
+  z.object({ cmd: z.literal("mix"), style: z.enum(MIX_STYLE_IDS), bars: Bars, at: Place.optional(), inAt: Place.optional() }),
+  /** Start the queued transition now. */
+  z.object({ cmd: z.literal("mixnow") }),
+  /** Call off the transition (a queued one, or one under way). */
+  z.object({ cmd: z.literal("unmix") }),
   /** Play or pause one deck on its own. */
   z.object({ cmd: z.literal("transport"), side: z.enum(["a", "b"]), playing: z.boolean() }),
   /** Save a cue point on a record (or, with `remove`, take one away). */

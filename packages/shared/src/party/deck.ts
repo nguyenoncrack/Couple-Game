@@ -73,13 +73,19 @@ export const MIX_STYLE_IDS = MIX_STYLES.map((m) => m.id) as [MixStyle, ...MixSty
 /** How long a transition can take, in bars. */
 export const MIX_BARS = [1, 2, 4, 8, 16] as const;
 
-/** A transition under way: from crossfader `from` to the `to` end, over `beats` from beat `start` (a bar line). */
+/**
+ * A transition: from crossfader `from` to the `to` end, over `beats` from beat `start`. A queued one starts when the
+ * outgoing record reaches `at` (track beats), and brings the incoming record in from `inAt`; its `start` is worked out
+ * from where the outgoing record is, and is null while that record is paused on its own (nobody can say when yet).
+ */
 export interface DeckMix {
   style: MixStyle;
   from: number;
   to: 0 | 1;
-  start: number;
+  start: number | null;
   beats: number;
+  at?: number;
+  inAt?: number;
 }
 
 export const MAX_MARKS = 8;
@@ -109,6 +115,9 @@ export interface Deck {
   /** A deck paused on its own: its record held at this place (track beats), whatever the deck's clock does. */
   holdA?: number;
   holdB?: number;
+  /** A deck parked for a transition: its record waits at its starting place until the deck's clock reaches this beat. */
+  waitA?: number;
+  waitB?: number;
   /** Saved cue points for each record, in track beats, in order. */
   marks?: Partial<Record<DeckTrackId, number[]>>;
   /** Each deck's channel (flat when missing). */
@@ -137,14 +146,18 @@ export const cueOf = (d: Pick<Deck, "cueA" | "cueB">, side: DeckSide) => (side =
 export const channelOf = (d: Pick<Deck, "chA" | "chB">, side: DeckSide): DeckChannel => (side === "a" ? d.chA : d.chB) ?? FLAT_CHANNEL;
 
 export const holdOf = (d: Pick<Deck, "holdA" | "holdB">, side: DeckSide) => (side === "a" ? d.holdA : d.holdB);
+export const waitOf = (d: Pick<Deck, "waitA" | "waitB">, side: DeckSide) => (side === "a" ? d.waitA : d.waitB);
 export const marksOf = (d: Pick<Deck, "marks">, id: DeckTrackId | null): number[] => (id ? (d.marks?.[id] ?? []) : []);
 
-/** Whether a deck's record is moving: the deck is playing, and this record isn't paused on its own. */
-export const deckRunning = (d: Deck, side: DeckSide, _beat?: number) => Boolean(d[side]) && d.playing && holdOf(d, side) === undefined;
+/** Whether a deck is parked (waiting for a transition to bring it in) at `beat`. */
+export const isParked = (d: Deck, side: DeckSide, beat: number) => holdOf(d, side) === undefined && (waitOf(d, side) ?? -Infinity) > beat;
+
+/** Whether a deck's record is moving at `beat`: the deck is playing, and this record isn't paused or parked. */
+export const deckRunning = (d: Deck, side: DeckSide, beat: number) => Boolean(d[side]) && d.playing && holdOf(d, side) === undefined && !isParked(d, side, beat);
 
 /**
  * How far into its record a deck is at `beat`, in track beats (it goes round when it gets to the end), or null if
- * empty. A paused deck stays where it was held.
+ * empty. A paused deck stays where it was held; a parked one at its starting place until its transition comes.
  */
 export function trackPosition(d: Deck, side: DeckSide, beat: number): number | null {
   const id = d[side];
@@ -152,7 +165,9 @@ export function trackPosition(d: Deck, side: DeckSide, beat: number): number | n
   const len = trackBeats(id);
   const hold = holdOf(d, side);
   if (hold !== undefined) return Math.min(Math.max(0, hold), len - 0.01);
-  return (((beat - cueOf(d, side)) % len) + len) % len;
+  const wait = waitOf(d, side);
+  const b = wait !== undefined && beat < wait ? wait : beat;
+  return (((b - cueOf(d, side)) % len) + len) % len;
 }
 
 /** A place in a record, kept inside it. Built-in records keep to sixteenths, so their notes stay on the grid. */
@@ -160,6 +175,14 @@ export function placeIn(id: DeckTrackId, pos: number): number {
   const p = Math.min(Math.max(0, pos), trackBeats(id) - 0.01);
   return isRecording(id) ? Math.round(p * 1000) / 1000 : Math.round(p * 4) / 4;
 }
+
+/** The side a transition leaves, and the side it brings in. */
+export const mixOut = (m: Pick<DeckMix, "to">): DeckSide => (m.to === 1 ? "a" : "b");
+export const mixInto = (m: Pick<DeckMix, "to">): DeckSide => (m.to === 1 ? "b" : "a");
+/** Whether a transition is still waiting to start at `beat`. */
+export const mixQueued = (m: DeckMix, beat: number) => m.start === null || beat < m.start;
+/** Whether a transition is over at `beat`. */
+export const mixDone = (m: DeckMix, beat: number) => m.start !== null && beat >= m.start + m.beats;
 
 /**
  * The cue that puts a deck `pos` track beats into its record at `beat`. A built-in record keeps to the deck's bars
@@ -191,8 +214,8 @@ const smooth = (k: number) => k * k * (3 - 2 * k);
 /** Where the crossfader really is at `beat`, and what a transition is doing to each deck then. */
 export function mixAt(d: Pick<Deck, "xfade" | "mix">, beat: number): MixNow {
   const m = d.mix;
-  if (!m) return { xfade: d.xfade, fx: { a: NO_FX, b: NO_FX }, progress: null };
-  const k = Math.min(1, Math.max(0, (beat - m.start) / m.beats));
+  if (!m || mixQueued(m, beat)) return { xfade: m ? m.from : d.xfade, fx: { a: NO_FX, b: NO_FX }, progress: null };
+  const k = Math.min(1, Math.max(0, (beat - m.start!) / m.beats));
   if (k >= 1) return { xfade: m.to, fx: { a: NO_FX, b: NO_FX }, progress: null };
   const out: DeckSide = m.to === 1 ? "a" : "b";
   const into = otherSide(out);
@@ -212,7 +235,7 @@ export function mixAt(d: Pick<Deck, "xfade" | "mix">, beat: number): MixNow {
     case "echo":
       // the old track goes into the echo straight away and fades out under it as the new one comes up
       xfade = toward(smooth(k));
-      if (beat >= m.start) fx[out].echo = 1;
+      fx[out].echo = 1;
       break;
     case "filter":
       // the old track loses its bass and then its middle, and the new one takes over in the last part
@@ -226,10 +249,11 @@ export function mixAt(d: Pick<Deck, "xfade" | "mix">, beat: number): MixNow {
   return { xfade, fx, progress: k };
 }
 
-/** Put a finished transition away: the crossfader stays where it ended. */
+/** Put a finished transition away: the crossfader stays where it ended, and the record it brought in is playing. */
 export function settleMix(d: Deck, beat: number) {
-  if (d.mix && beat >= d.mix.start + d.mix.beats) {
+  if (d.mix && mixDone(d.mix, beat)) {
     d.xfade = d.mix.to;
+    delete d[mixInto(d.mix) === "a" ? "waitA" : "waitB"];
     d.mix = null;
   }
 }
@@ -287,9 +311,7 @@ export function restoredDeck(saved: Partial<Deck> | undefined): Deck {
   const track = (v: unknown, fallback: DeckTrackId | null) => (v === null ? null : DECK_TRACK_IDS.includes(v as DeckTrackId) ? (v as DeckTrackId) : fallback);
   d.a = track(saved.a, d.a);
   d.b = track(saved.b, d.b);
-  // a transition that was under way is finished
-  const mix = saved.mix && typeof saved.mix === "object" ? saved.mix : null;
-  d.xfade = mix && (mix.to === 0 || mix.to === 1) ? mix.to : num(saved.xfade, 0, 1, d.xfade);
+  d.xfade = num(saved.xfade, 0, 1, d.xfade);
   d.bpm = num(saved.bpm, MIN_BPM, MAX_BPM, d.bpm);
   d.beat = num(saved.beat, 0, 1e7, 0);
   if (saved.cueA !== undefined) d.cueA = num(saved.cueA, -1e7, d.beat, 0);
@@ -304,8 +326,13 @@ export function restoredDeck(saved: Partial<Deck> | undefined): Deck {
     const S = side === "a" ? "A" : "B";
     const len = trackBeats(id);
     const hold = saved[`hold${S}`];
+    const wait = saved[`wait${S}`];
     if (typeof hold === "number" && Number.isFinite(hold)) d[`hold${S}`] = num(hold, 0, len - 0.01, 0);
+    else if (typeof wait === "number" && Number.isFinite(wait) && wait > d.beat) d[`wait${S}`] = num(wait, d.beat, 1e7, d.beat);
   }
+  // a transition carries on (or stays queued) from where it was, as the beat does
+  const mix = restoredMix(saved.mix, d);
+  if (mix) d.mix = mix;
   const marks = restoredMarks(saved.marks);
   if (marks) d.marks = marks;
   const channel = (c: unknown): DeckChannel | undefined => {
@@ -327,7 +354,25 @@ export function restoredDeck(saved: Partial<Deck> | undefined): Deck {
 }
 
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const goodStyle = (v: unknown): v is MixStyle => MIX_STYLE_IDS.includes(v as MixStyle);
+const goodBars = (v: unknown): v is number => (MIX_BARS as readonly number[]).includes(v as number);
 const goodTrack = (v: unknown): v is DeckTrackId => DECK_TRACK_IDS.includes(v as DeckTrackId);
+
+function restoredMix(v: unknown, d: Deck): DeckMix | null {
+  if (!v || typeof v !== "object") return null;
+  const m = v as Partial<DeckMix>;
+  if (!goodStyle(m.style) || (m.to !== 0 && m.to !== 1) || !finite(m.from) || !goodBars((m.beats ?? 0) / 4)) return null;
+  if (m.start !== null && !finite(m.start)) return null;
+  if (!d.a || !d.b) return null;
+  const mix: DeckMix = { style: m.style, from: Math.min(1, Math.max(0, m.from)), to: m.to, start: m.start, beats: m.beats! };
+  if (mixDone(mix, d.beat)) {
+    d.xfade = mix.to;
+    return null;
+  }
+  if (finite(m.at)) mix.at = placeIn(d[mixOut(mix)]!, m.at);
+  if (finite(m.inAt)) mix.inAt = placeIn(d[mixInto(mix)]!, m.inAt);
+  return mix;
+}
 
 /** A list of cue points on a record, checked: in order, inside the record, no more than `MAX_MARKS`. */
 export function restoredCues(id: DeckTrackId, v: unknown): number[] {
