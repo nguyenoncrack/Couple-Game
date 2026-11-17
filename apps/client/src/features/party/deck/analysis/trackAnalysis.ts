@@ -67,11 +67,17 @@ async function pump() {
   }
 }
 
-/** The audio's version, from the server: its ETag, or else its size and date. */
+/**
+ * The audio's version, from the server: its ETag, or else its size and date. Asked with a one-byte range, which
+ * also gives the file's full size (a HEAD doesn't always say it).
+ */
 async function audioVersion(url: string): Promise<{ version: string; size: number | null }> {
-  const res = await fetch(url, { method: "HEAD", cache: "no-cache" });
+  const res = await fetch(url, { headers: { Range: "bytes=0-0" }, cache: "no-cache" });
   if (!res.ok) throw new Error(`no audio at ${url}`);
-  const size = Number(res.headers.get("content-length")) || null;
+  const total = res.headers.get("content-range")?.match(/\/(\d+)$/)?.[1];
+  const size = Number(total ?? (res.status === 200 ? res.headers.get("content-length") : null)) || null;
+  // (a server that ignores the range sends the whole file: no need to wait for it)
+  void res.body?.cancel().catch(() => {});
   const tag = res.headers.get("etag") ?? `${size ?? "?"}-${res.headers.get("last-modified") ?? "?"}`;
   return { version: `${METHOD}:${tag}`, size };
 }

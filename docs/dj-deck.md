@@ -83,7 +83,7 @@ A **timed** transition also has `at` (the place in the outgoing record) and `inA
 **Song analysis** (`features/party/deck/analysis/`). Every record gets a waveform, tempo, beat grid, downbeat and a per-second energy curve:
 - Recordings are fetched and decoded at 11 kHz mono in the background while the booth's console is open (the records on the decks first; the 72-minute set in 1.5 MB byte ranges). They play as usual meanwhile.
 - `analyze.ts` finds the tempo from how onsets repeat (each candidate, its double and half tuned to the best-fitting grid, leaning toward DJ tempos). It finds the downbeat from where the record changes on a bar line, and calls the grid reliable only if it holds section by section.
-- Results are kept in IndexedDB (`cg-dj`) under the record's id and its audio version (the file's ETag, or size and date). Replacing a file gets it analyzed again, and so does changing how it's done (`METHOD`). Built-in records are worked out from their patterns.
+- Results are kept in IndexedDB (`cg-dj`) under the record's id and its audio version (the file's ETag, or size and date, read from a one-byte range request, which also gives the full size). Replacing a file gets it analyzed again, and so does changing how it's done (`METHOD`). Built-in records are worked out from their patterns.
 - A new recording needs nothing extra: put the file in `public/audio/dj/`, add it to `RECORDED_TRACKS` and `RECORDING_URLS`, and it is analyzed the first time the console opens.
 
 **Suggestions** (`suggest.ts`) put the outgoing point on the record's 8-bar phrases:
