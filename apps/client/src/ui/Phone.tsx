@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CharacterButton } from "../features/character/CharacterButton";
 import { openChat, useGame } from "../state/game";
-import { setMusic, useMusicOn } from "../state/music";
+import { setSound, useSoundSettings } from "../state/music";
 import { Icon } from "./icons";
 import "./phone.css";
 
 /**
  * Everything that isn't the house itself, tucked into a phone in the corner: who's home, inviting your partner,
- * your character, chat, sound and the controls. One button on screen instead of a row of them.
+ * your character, chat, sound (all of it, the background music, and the rain) and the controls. One button on screen instead of a row of them.
  */
 
 function App({ icon, label, badge, on, onClick }: { icon: ReactNode; label: string; badge?: number; on?: boolean; onClick: () => void }) {
@@ -28,7 +28,7 @@ export function Phone({ onInvite, onHelp }: { onInvite: () => void; onHelp: () =
   const me = useGame((s) => s.me);
   const online = useGame((s) => s.status === "online");
   const unread = useGame((s) => s.unread);
-  const music = useMusicOn();
+  const sound = useSoundSettings();
   const partner = members.find((m) => m.id !== me);
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -110,7 +110,9 @@ export function Phone({ onInvite, onHelp }: { onInvite: () => void; onHelp: () =
               </span>
               <span className="phone-app-label">Character</span>
             </CharacterButton>
-            <App icon={music ? <Icon.music /> : <Icon.musicOff />} label={music ? "Sound on" : "Sound off"} on={music} onClick={() => setMusic(!music)} />
+            <App icon={sound.sound ? <Icon.sound /> : <Icon.soundOff />} label={sound.sound ? "Sound on" : "Sound off"} on={sound.sound} onClick={() => setSound("sound", !sound.sound)} />
+            <App icon={sound.music ? <Icon.music /> : <Icon.musicOff />} label={sound.music ? "Music on" : "Music off"} on={sound.music} onClick={() => setSound("music", !sound.music)} />
+            <App icon={sound.rain ? <Icon.rain /> : <Icon.rainOff />} label={sound.rain ? "Rain on" : "Rain off"} on={sound.rain} onClick={() => setSound("rain", !sound.rain)} />
             <App icon={<Icon.help />} label="Controls" onClick={go(onHelp)} />
           </div>
         </div>

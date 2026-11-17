@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { useGame } from "../../state/game";
 import { weatherNow } from "../weatherState";
 import { skyDome } from "../pencil";
+import { useRainOn } from "../../state/music";
 
 /**
  * Falling rain: thousands of streaks in a box that follows where the camera is looking, all moved by the graphics
@@ -57,7 +58,12 @@ const fragment = /* glsl */ `
   }
 `;
 
+/** The falling rain, unless this player has switched rain off (the weather carries on either way). */
 export function Rain() {
+  return useRainOn() ? <RainDrops /> : null;
+}
+
+function RainDrops() {
   const bp = useGame((s) => s.view);
   const lines = useRef<THREE.LineSegments>(null);
 

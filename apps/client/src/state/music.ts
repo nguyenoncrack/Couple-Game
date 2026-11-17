@@ -1,33 +1,38 @@
 import { useSyncExternalStore } from "react";
-import { startAmbience, stopAmbience } from "./ambience";
+import { setAmbienceRain, startAmbience, stopAmbience } from "./ambience";
 
 /**
- * Quiet lo-fi music while you're in a house. Browsers only let a page make sound after you've clicked or typed,
- * so it starts on your first one; it fades in and out rather than cutting. The country sounds (ambience) come
- * and go with it. Whether it's on is remembered on this device.
+ * The game's own sound while you're in a house, with three switches remembered on this device:
+ * - **Sound**: everything (the music, the country sounds, the rain and the party's music).
+ * - **Music**: the quiet lo-fi background music.
+ * - **Rain**: the sound of rain, and the rain falling on your screen (the weather itself is shared and carries on).
+ *
+ * Browsers only let a page make sound after you've clicked or typed, so it starts on your first one; it fades in and
+ * out rather than cutting.
  */
 
 const SRC = "/audio/lofi.m4a";
 const VOLUME = 0.32;
 const FADE_MS = 1200;
-const KEY = "cg.music";
+const KEYS = { sound: "cg.music", music: "cg.bgmusic", rain: "cg.rain" } as const;
+export type SoundSetting = keyof typeof KEYS;
 
 let audio: HTMLAudioElement | null = null;
 let wanted = false;
-/** Held back while a shared party video is playing on this screen: two tunes at once helps nobody. */
+/** Held back while the party's music is playing on this screen: two tunes at once helps nobody. */
 let held = false;
 let fade = 0;
 const listeners = new Set<() => void>();
 
-function stored(): boolean {
+function stored(key: string): boolean {
   try {
-    return localStorage.getItem(KEY) !== "off";
+    return localStorage.getItem(key) !== "off";
   } catch {
     return true;
   }
 }
 
-let on = stored();
+let settings: Record<SoundSetting, boolean> = { sound: stored(KEYS.sound), music: stored(KEYS.music), rain: stored(KEYS.rain) };
 
 function fadeTo(target: number, then?: () => void) {
   const a = audio;
@@ -45,43 +50,46 @@ function fadeTo(target: number, then?: () => void) {
   fade = requestAnimationFrame(step);
 }
 
-function play() {
-  if (!wanted || !on || held) return;
-  if (!audio) {
-    audio = new Audio(SRC);
-    audio.loop = true;
-    audio.volume = 0;
+/** Bring everything in line with the switches: the lo-fi music, the country sounds and the rain. */
+function sync() {
+  const sound = wanted && settings.sound && !held;
+  setAmbienceRain(settings.rain);
+  if (sound) startAmbience();
+  else stopAmbience();
+  if (sound && settings.music) {
+    if (!audio) {
+      audio = new Audio(SRC);
+      audio.loop = true;
+      audio.volume = 0;
+    }
+    const a = audio;
+    // already playing (or fading out after a quick off and on): back up to full
+    if (!a.paused) {
+      if (a.volume < VOLUME) fadeTo(VOLUME);
+      return;
+    }
+    // refused until the first click or key press; we try again then
+    a.play()
+      .then(() => fadeTo(VOLUME))
+      .catch(() => {});
+  } else {
+    const a = audio;
+    if (a && !a.paused) fadeTo(0, () => a.pause());
   }
-  // refused until the first click or key press; we try again then
-  audio
-    .play()
-    .then(() => {
-      fadeTo(VOLUME);
-      startAmbience();
-    })
-    .catch(() => {});
-}
-
-function pause() {
-  const a = audio;
-  if (a && !a.paused) fadeTo(0, () => a.pause());
-  stopAmbience();
 }
 
 /** The house screen wants music for as long as it's open. */
 export function wantMusic() {
   wanted = true;
-  const kick = () => {
-    if (!audio || audio.paused) play();
-  };
-  play();
+  const kick = () => sync();
+  sync();
   window.addEventListener("pointerdown", kick);
   window.addEventListener("keydown", kick);
   return () => {
     wanted = false;
     window.removeEventListener("pointerdown", kick);
     window.removeEventListener("keydown", kick);
-    pause();
+    sync();
   };
 }
 
@@ -89,28 +97,36 @@ export function wantMusic() {
 export function holdAmbient(hold: boolean) {
   if (hold === held) return;
   held = hold;
-  if (hold) pause();
-  else play();
+  sync();
 }
 
-export function setMusic(next: boolean) {
-  on = next;
+/** Turn one of the sound switches on or off (remembered on this device). */
+export function setSound(which: SoundSetting, next: boolean) {
+  settings = { ...settings, [which]: next };
   try {
-    localStorage.setItem(KEY, next ? "on" : "off");
+    localStorage.setItem(KEYS[which], next ? "on" : "off");
   } catch {
     // not remembered, but still switched for now
   }
-  if (next) play();
-  else pause();
+  sync();
   listeners.forEach((l) => l());
 }
 
-export function useMusicOn() {
+/** The sound switches. */
+export function useSoundSettings(): Record<SoundSetting, boolean> {
   return useSyncExternalStore(
     (l) => {
       listeners.add(l);
       return () => listeners.delete(l);
     },
-    () => on,
+    () => settings,
   );
 }
+
+/** Whether the game's sound is on at all (the party's music follows it too). */
+export const useMusicOn = () => useSoundSettings().sound;
+/** Whether rain shows and sounds on this screen. */
+export const useRainOn = () => useSoundSettings().rain;
+
+// (a look at the music from the browser's console while developing)
+if (import.meta.env.DEV) Object.assign(window, { __music: () => ({ settings, wanted, held, playing: Boolean(audio && !audio.paused), volume: audio?.volume ?? 0 }) });
