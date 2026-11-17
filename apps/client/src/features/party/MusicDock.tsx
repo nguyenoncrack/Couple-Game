@@ -1,8 +1,8 @@
-import { positionAt } from "@cg/shared";
+import { deckBeat, mixDone, positionAt } from "@cg/shared";
 import { useEffect, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { holdAmbient, useMusicOn } from "../../state/music";
-import { serverNow, useGame } from "../../state/game";
+import { partyCmd, serverNow, useGame } from "../../state/game";
 import { DeckEngine } from "./deck/deckEngine";
 import { DjConsole } from "./deck/DjConsole";
 import { useGearInUse } from "./partyHooks";
@@ -25,6 +25,19 @@ export function MusicDock() {
   if (import.meta.env.DEV) Object.assign(window, { __deck: engine });
 
   useEffect(() => engine.follow(deck), [deck, engine]);
+
+  // a set moves on when its transition finishes: the house puts the next record on the free deck, queued to come in
+  useEffect(() => {
+    const set = deck?.set;
+    if (!deck || !set?.steps[set.step]?.next || !set.steps[set.step + 1]) return;
+    const m = deck.mix;
+    if (!m) return void partyCmd({ cmd: "setstep" });
+    if (m.start === null || !deck.playing) return;
+    if (mixDone(m, deckBeat(deck, serverNow()))) return void partyCmd({ cmd: "setstep" });
+    const ms = ((m.start + m.beats - deckBeat(deck, serverNow())) * 60_000) / deck.bpm;
+    const timer = setTimeout(() => partyCmd({ cmd: "setstep" }), ms + 60);
+    return () => clearTimeout(timer);
+  }, [deck]);
 
   const audible = Boolean(deck?.playing) && musicOn;
   // once the sound has started it stays up (a paused deck makes none); the browser lets it start after any click
