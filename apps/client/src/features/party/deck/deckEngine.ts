@@ -70,8 +70,28 @@ export class DeckEngine {
   private deck: Deck | null = null;
   private anchorKey = "";
   private output = { volume: 0.6, mix: 1 };
-  /** Asks the server clock for the time (ms). */
-  constructor(private now: () => number) {}
+  /** How far down this player's own preview has turned the live mix (1 is not at all). */
+  private duck = 1;
+  /**
+   * Asks the server clock for the time (ms). A private engine (a preview) can borrow the records `shared` has
+   * already decoded, rather than fetch them again.
+   */
+  constructor(
+    private now: () => number,
+    private shared?: DeckEngine,
+  ) {}
+
+  /** A record this engine has decoded, if it has. */
+  bufferOf(id: DeckTrackId): AudioBuffer | undefined {
+    const b = this.recordings.get(id);
+    return b instanceof AudioBuffer ? b : undefined;
+  }
+
+  /** Turn the live mix down while this player listens to a preview (just for them), and back up. */
+  setDuck(k: number) {
+    this.duck = k;
+    if (this.ctx) this.out.gain.setTargetAtTime(this.level(), this.ctx.currentTime, 0.12);
+  }
 
   /** Make the sound (call from a click: browsers only allow sound after one). Reports whether it can play. */
   start(): boolean {
@@ -169,7 +189,7 @@ export class DeckEngine {
   private peakAt = 0;
 
   private level() {
-    return this.output.volume * this.output.mix * 0.9;
+    return this.output.volume * this.output.mix * this.duck * 0.9;
   }
 
   private build(c: AudioContext) {
@@ -281,6 +301,11 @@ export class DeckEngine {
 
   private async loadRecording(c: AudioContext, id: DeckTrackId, url: string) {
     const signal = this.recordingRequests.signal;
+    const borrowed = this.shared?.bufferOf(id);
+    if (borrowed) {
+      this.recordings.set(id, borrowed);
+      return;
+    }
     this.recordings.set(id, "loading");
     try {
       const response = await fetch(url, { signal });

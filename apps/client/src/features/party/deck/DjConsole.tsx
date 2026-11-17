@@ -45,6 +45,8 @@ import { DjGuide } from "./DjGuide";
 import { parseClock, preciseClock, secondsToBeats } from "./deckTime";
 import { LightsPage } from "./LightsPage";
 import { SetsPage } from "./SetsPage";
+import { SoundPage } from "./SoundPage";
+import { requestAnalysis, useAnalysis } from "./analysis/trackAnalysis";
 import "./dj.css";
 
 /**
@@ -155,14 +157,21 @@ export function DjConsole({ deck: shared, engine, mode }: ConsoleProps) {
   const { volume, muted, fade, tab: chosen } = usePartyUi(useShallow((s) => ({ volume: s.volume, muted: s.muted, fade: s.fade, tab: s.tab })));
   const gear = usePartyGear();
   const hasLights = gear.lights || gear.dance;
-  const tab = (chosen === "lights" && !hasLights) || (chosen === "sets" && mode !== "dj") ? "music" : chosen;
+  const tab = (chosen === "lights" && !hasLights) || ((chosen === "sets" || chosen === "sound") && mode !== "dj") ? "music" : chosen;
+  // at the booth, every record's waveform and beats get worked out in the background (the ones on the decks first)
+  useEffect(() => {
+    if (mode !== "dj") return;
+    requestAnalysis(deck.a, true);
+    requestAnalysis(deck.b, true);
+    for (const t of DECK_TRACKS) requestAnalysis(t.id);
+  }, [mode, deck.a, deck.b]);
   const musicOn = useMusicOn();
   const djs = useGame(useShallow((s) => Object.values(s.life?.avatars ?? {}).filter((a) => a.use?.action === "dj").map((a) => s.members.find((m) => m.id === a.memberId)?.name ?? "Someone")));
   const color = (side: DeckSide) => (deck[side] ? deckTrack(deck[side]).color : EMPTY_COLOR);
   const style = { "--a": color("a"), "--b": color("b"), "--spin": `${(1.8 * 124) / deck.bpm}s`, "--build": `${(BUILD_BEATS * 60) / deck.bpm}s` } as CSSProperties;
   const tabs = [
     { id: "music", label: mode === "dj" ? "Decks" : "Records" },
-    ...(mode === "dj" ? [{ id: "sets", label: "My Sets" } as const] : []),
+    ...(mode === "dj" ? [{ id: "sound", label: "Sound" } as const, { id: "sets", label: "My Sets" } as const] : []),
     ...(hasLights ? [{ id: "lights", label: "Lights" } as const] : []),
     { id: "guide", label: "Guide" },
   ] as const;
@@ -186,7 +195,7 @@ export function DjConsole({ deck: shared, engine, mode }: ConsoleProps) {
         </button>
       </header>
 
-      {tab === "guide" ? <DjGuide simple={mode !== "dj"} /> : tab === "sets" ? <SetsPage deck={deck} beat={clock.beat} air={clock.air} /> : tab === "lights" ? <LightsPage /> : mode === "dj" ? <DeckPage deck={deck} clock={clock} /> : <PlayerPage deck={deck} clock={clock} />}
+      {tab === "guide" ? <DjGuide simple={mode !== "dj"} /> : tab === "sets" ? <SetsPage deck={deck} beat={clock.beat} air={clock.air} /> : tab === "sound" ? <SoundPage deck={deck} beat={clock.beat} x={clock.x} engine={engine} /> : tab === "lights" ? <LightsPage /> : mode === "dj" ? <DeckPage deck={deck} clock={clock} /> : <PlayerPage deck={deck} clock={clock} />}
 
       <footer className="dj-foot">
         <label className="dj-vol">
@@ -525,6 +534,7 @@ function PlayPad({ deck }: { deck: Deck }) {
 
 /** The house's records as sleeves, in one row; `tagOf` says what to mark on one (where it's loaded). */
 function Crate({ label, title, tagOf, onPick }: { label: string; title: string; tagOf: (id: DeckTrackId) => string; onPick: (id: DeckTrackId) => void }) {
+  const analyzing = useAnalysis(useShallow((s) => DECK_TRACKS.filter((t) => s[t.id]?.status === "analyzing").map((t) => t.id)));
   return (
     <div className="dj-crate" role="list" aria-label={label}>
       {DECK_TRACKS.map((t) => {
@@ -533,7 +543,7 @@ function Crate({ label, title, tagOf, onPick }: { label: string; title: string; 
           <button key={t.id} role="listitem" className={`dj-sleeve ${tag ? "loaded" : ""}`} style={{ "--c": t.color } as CSSProperties} onClick={() => onPick(t.id)} title={`${title}: ${t.name}`}>
             <span className="dj-sleeve-art" aria-hidden />
             <span className="dj-sleeve-name">{t.name}</span>
-            <span className="dj-sleeve-style">{isRecording(t.id) ? `${t.style} · ${trackClock(trackBeats(t.id))}` : t.style}</span>
+            <span className="dj-sleeve-style">{analyzing.includes(t.id) ? "Analyzing…" : isRecording(t.id) ? `${t.style} · ${trackClock(trackBeats(t.id))}` : t.style}</span>
             {tag && <span className="dj-sleeve-tag">{tag}</span>}
           </button>
         );
