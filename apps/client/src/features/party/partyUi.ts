@@ -1,10 +1,10 @@
-import { MIX_BARS, MIX_STYLE_IDS, type MixStyle } from "@cg/shared";
+import { MIX_BARS, MIX_STYLE_IDS, restoredSteps, type DeckSet, type MixStyle } from "@cg/shared";
 import { create } from "zustand";
 
 /** This player's own party settings and which page of the console is showing. Nothing here is shared. */
 
 interface PartyUi {
-  tab: "music" | "lights" | "guide";
+  tab: "music" | "sets" | "lights" | "guide";
   volume: number;
   muted: boolean;
   /** The music gets quieter the further your character is from the speakers (on by default). */
@@ -13,6 +13,13 @@ interface PartyUi {
   mixStyle: MixStyle;
   mixBars: number;
   presets: MixPreset[];
+  /** This player's saved DJ sets (on this device). */
+  sets: SavedSet[];
+}
+
+export interface SavedSet extends DeckSet {
+  id: string;
+  savedAt: number;
 }
 
 export interface MixPreset {
@@ -78,6 +85,70 @@ export function removePreset(index: number) {
   saveMix();
 }
 
+const SETS_KEY = "cg.party.sets";
+export const MAX_SETS = 24;
+
+function loadSets(): SavedSet[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SETS_KEY) ?? "[]") as unknown;
+    if (!Array.isArray(raw)) return [];
+    const sets: SavedSet[] = [];
+    for (const v of raw.slice(0, MAX_SETS)) {
+      if (!v || typeof v !== "object") continue;
+      const s = v as Partial<SavedSet>;
+      const steps = restoredSteps(s.steps);
+      if (!steps.length || typeof s.id !== "string") continue;
+      sets.push({ id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 32) : "My set", steps, savedAt: Number.isFinite(s.savedAt) ? s.savedAt! : 0 });
+    }
+    return sets;
+  } catch {
+    return [];
+  }
+}
+
+function writeSets(sets: SavedSet[]) {
+  usePartyUi.setState({ sets });
+  try {
+    localStorage.setItem(SETS_KEY, JSON.stringify(sets));
+  } catch {
+    // only a convenience
+  }
+}
+
+const newSetId = () => `set-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+const cleanName = (name: string, fallback: string) => name.trim().slice(0, 32) || fallback;
+
+/** Keep a set on this device. A set with the same name is replaced (so saving again updates it). Reports its id. */
+export function saveSet(set: DeckSet): string {
+  const name = cleanName(set.name, "My set");
+  const { sets } = usePartyUi.getState();
+  const same = sets.find((s) => s.name === name);
+  const saved: SavedSet = { id: same?.id ?? newSetId(), name, steps: restoredSteps(set.steps), savedAt: Date.now() };
+  writeSets(same ? sets.map((s) => (s.id === same.id ? saved : s)) : [saved, ...sets].slice(0, MAX_SETS));
+  return saved.id;
+}
+
+export function renameSet(id: string, name: string) {
+  const { sets } = usePartyUi.getState();
+  writeSets(sets.map((s) => (s.id === id ? { ...s, name: cleanName(name, s.name) } : s)));
+}
+
+/** A copy of a set, next to it, called "… copy" (or "… copy 2", and so on). */
+export function duplicateSet(id: string) {
+  const { sets } = usePartyUi.getState();
+  const i = sets.findIndex((s) => s.id === id);
+  if (i < 0 || sets.length >= MAX_SETS) return;
+  const base = `${sets[i]!.name.slice(0, 24)} copy`;
+  let name = base;
+  for (let n = 2; sets.some((s) => s.name === name); n++) name = `${base} ${n}`;
+  const copy: SavedSet = { ...structuredClone(sets[i]!), id: newSetId(), name, savedAt: Date.now() };
+  writeSets([...sets.slice(0, i + 1), copy, ...sets.slice(i + 1)]);
+}
+
+export function deleteSet(id: string) {
+  writeSets(usePartyUi.getState().sets.filter((s) => s.id !== id));
+}
+
 /** (not "cg.music": that one is the game's music switch) */
 const KEY = "cg.party.music";
 
@@ -91,7 +162,7 @@ function loadPrefs(): Pick<PartyUi, "volume" | "muted" | "fade"> {
   return { volume: 60, muted: false, fade: true };
 }
 
-export const usePartyUi = create<PartyUi>(() => ({ tab: "music", ...loadPrefs(), ...loadMix() }));
+export const usePartyUi = create<PartyUi>(() => ({ tab: "music", ...loadPrefs(), ...loadMix(), sets: loadSets() }));
 
 /** Each player keeps their own volume and mute, on this device. */
 export function setMusicPrefs(prefs: Partial<Pick<PartyUi, "volume" | "muted" | "fade">>) {

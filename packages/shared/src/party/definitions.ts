@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Id } from "../ops";
-import { DECK_TRACK_IDS, DEFAULT_DECK, MAX_BPM, MIN_BPM, MIX_BARS, MIX_STYLE_IDS, type Deck } from "./deck";
+import { DECK_TRACK_IDS, DEFAULT_DECK, MAX_BPM, MAX_MARKS, MAX_SET_STEPS, MIN_BPM, MIX_BARS, MIX_STYLE_IDS, type Deck } from "./deck";
 import { isVideoId } from "./youtube";
 
 /**
@@ -129,6 +129,22 @@ const Bars = z
   .number()
   .int()
   .refine((n) => (MIX_BARS as readonly number[]).includes(n), "not a length a transition comes in");
+/** A saved DJ set: records in order, each with where it starts, its cue points and its transition to the next. */
+const DeckSetSchema = z.object({
+  name: z.string().max(32),
+  steps: z
+    .array(
+      z.object({
+        track: z.enum(DECK_TRACK_IDS),
+        from: Place,
+        cues: z.array(Place).max(MAX_MARKS),
+        next: z.object({ at: Place, style: z.enum(MIX_STYLE_IDS), bars: Bars }).optional(),
+      }),
+    )
+    .min(1)
+    .max(MAX_SET_STEPS),
+});
+
 export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({
     cmd: z.literal("lights"),
@@ -191,6 +207,10 @@ export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("transport"), side: z.enum(["a", "b"]), playing: z.boolean() }),
   /** Save a cue point on a record (or, with `remove`, take one away). */
   z.object({ cmd: z.literal("mark"), track: z.enum(DECK_TRACK_IDS), pos: Place, remove: z.literal(true).optional() }),
+  /** Put a saved set in the decks, paused at its start. */
+  z.object({ cmd: z.literal("setload"), set: DeckSetSchema }),
+  /** A screen saw the set's transition finish: time for the set to move on. */
+  z.object({ cmd: z.literal("setstep") }),
   /** Jump a deck to another part of its record: `pos` track beats in (at the default tempo). */
   z.object({ cmd: z.literal("cue"), side: z.enum(["a", "b"]), track: z.enum(DECK_TRACK_IDS).optional(), pos: Place }),
   /** A position saves the point. Omitting it jumps to the saved point and brings that deck on air. */

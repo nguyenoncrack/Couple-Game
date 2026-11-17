@@ -44,6 +44,7 @@ import type { DeckEngine } from "./deckEngine";
 import { DjGuide } from "./DjGuide";
 import { parseClock, preciseClock, secondsToBeats } from "./deckTime";
 import { LightsPage } from "./LightsPage";
+import { SetsPage } from "./SetsPage";
 import "./dj.css";
 
 /**
@@ -154,13 +155,14 @@ export function DjConsole({ deck: shared, engine, mode }: ConsoleProps) {
   const { volume, muted, fade, tab: chosen } = usePartyUi(useShallow((s) => ({ volume: s.volume, muted: s.muted, fade: s.fade, tab: s.tab })));
   const gear = usePartyGear();
   const hasLights = gear.lights || gear.dance;
-  const tab = chosen === "lights" && !hasLights ? "music" : chosen;
+  const tab = (chosen === "lights" && !hasLights) || (chosen === "sets" && mode !== "dj") ? "music" : chosen;
   const musicOn = useMusicOn();
   const djs = useGame(useShallow((s) => Object.values(s.life?.avatars ?? {}).filter((a) => a.use?.action === "dj").map((a) => s.members.find((m) => m.id === a.memberId)?.name ?? "Someone")));
   const color = (side: DeckSide) => (deck[side] ? deckTrack(deck[side]).color : EMPTY_COLOR);
   const style = { "--a": color("a"), "--b": color("b"), "--spin": `${(1.8 * 124) / deck.bpm}s`, "--build": `${(BUILD_BEATS * 60) / deck.bpm}s` } as CSSProperties;
   const tabs = [
     { id: "music", label: mode === "dj" ? "Decks" : "Records" },
+    ...(mode === "dj" ? [{ id: "sets", label: "My Sets" } as const] : []),
     ...(hasLights ? [{ id: "lights", label: "Lights" } as const] : []),
     { id: "guide", label: "Guide" },
   ] as const;
@@ -184,7 +186,7 @@ export function DjConsole({ deck: shared, engine, mode }: ConsoleProps) {
         </button>
       </header>
 
-      {tab === "guide" ? <DjGuide simple={mode !== "dj"} /> : tab === "lights" ? <LightsPage /> : mode === "dj" ? <DeckPage deck={deck} clock={clock} /> : <PlayerPage deck={deck} clock={clock} />}
+      {tab === "guide" ? <DjGuide simple={mode !== "dj"} /> : tab === "sets" ? <SetsPage deck={deck} beat={clock.beat} air={clock.air} /> : tab === "lights" ? <LightsPage /> : mode === "dj" ? <DeckPage deck={deck} clock={clock} /> : <PlayerPage deck={deck} clock={clock} />}
 
       <footer className="dj-foot">
         <label className="dj-vol">

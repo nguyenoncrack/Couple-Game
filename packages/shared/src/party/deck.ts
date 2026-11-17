@@ -88,6 +88,31 @@ export interface DeckMix {
   inAt?: number;
 }
 
+/** How one record of a set hands over to the next: at this place in it, in a style, over some bars. */
+export interface SetHandover {
+  at: number;
+  style: MixStyle;
+  bars: number;
+}
+/** One record of a set: where it starts, its saved cue points, and how it hands over (not on the last one). */
+export interface SetStep {
+  track: DeckTrackId;
+  from: number;
+  cues: number[];
+  next?: SetHandover;
+}
+/** A DJ set: records in order, with their transitions. */
+export interface DeckSet {
+  name: string;
+  steps: SetStep[];
+}
+/** The set in the decks (loaded, or being recorded as you mix): `step` is the record on air. */
+export interface DeckSetPlay {
+  name: string | null;
+  steps: SetStep[];
+  step: number;
+}
+export const MAX_SET_STEPS = 24;
 export const MAX_MARKS = 8;
 
 export interface Deck {
@@ -118,8 +143,13 @@ export interface Deck {
   /** A deck parked for a transition: its record waits at its starting place until the deck's clock reaches this beat. */
   waitA?: number;
   waitB?: number;
+  /** Where each deck's record was last started from (track beats), for a set's first record. */
+  entryA?: number;
+  entryB?: number;
   /** Saved cue points for each record, in track beats, in order. */
   marks?: Partial<Record<DeckTrackId, number[]>>;
+  /** The set in the decks, if any. */
+  set?: DeckSetPlay | null;
   /** Each deck's channel (flat when missing). */
   chA?: DeckChannel;
   chB?: DeckChannel;
@@ -327,14 +357,18 @@ export function restoredDeck(saved: Partial<Deck> | undefined): Deck {
     const len = trackBeats(id);
     const hold = saved[`hold${S}`];
     const wait = saved[`wait${S}`];
+    const entry = saved[`entry${S}`];
     if (typeof hold === "number" && Number.isFinite(hold)) d[`hold${S}`] = num(hold, 0, len - 0.01, 0);
     else if (typeof wait === "number" && Number.isFinite(wait) && wait > d.beat) d[`wait${S}`] = num(wait, d.beat, 1e7, d.beat);
+    if (typeof entry === "number" && Number.isFinite(entry)) d[`entry${S}`] = num(entry, 0, len - 0.01, 0);
   }
   // a transition carries on (or stays queued) from where it was, as the beat does
   const mix = restoredMix(saved.mix, d);
   if (mix) d.mix = mix;
   const marks = restoredMarks(saved.marks);
   if (marks) d.marks = marks;
+  const set = restoredSetPlay(saved.set);
+  if (set) d.set = set;
   const channel = (c: unknown): DeckChannel | undefined => {
     if (!c || typeof c !== "object") return undefined;
     const v = c as Partial<DeckChannel>;
@@ -391,4 +425,30 @@ function restoredMarks(v: unknown): Deck["marks"] | null {
     if (cues.length) marks[id] = cues;
   }
   return Object.keys(marks).length ? marks : null;
+}
+
+/** A set's records, checked into shape (anything wrong is left out). */
+export function restoredSteps(v: unknown): SetStep[] {
+  if (!Array.isArray(v)) return [];
+  const steps: SetStep[] = [];
+  for (const raw of v.slice(0, MAX_SET_STEPS)) {
+    if (!raw || typeof raw !== "object") continue;
+    const s = raw as Partial<SetStep>;
+    if (!goodTrack(s.track)) continue;
+    const step: SetStep = { track: s.track, from: placeIn(s.track, finite(s.from) ? s.from : 0), cues: restoredCues(s.track, s.cues) };
+    const n = s.next;
+    if (n && typeof n === "object" && finite(n.at) && goodStyle(n.style) && goodBars(n.bars)) step.next = { at: placeIn(s.track, n.at), style: n.style, bars: n.bars };
+    steps.push(step);
+  }
+  delete steps[steps.length - 1]?.next;
+  return steps;
+}
+
+function restoredSetPlay(v: unknown): DeckSetPlay | null {
+  if (!v || typeof v !== "object") return null;
+  const s = v as Partial<DeckSetPlay>;
+  const steps = restoredSteps(s.steps);
+  if (!steps.length) return null;
+  const step = finite(s.step) ? Math.min(steps.length - 1, Math.max(0, Math.floor(s.step))) : 0;
+  return { name: typeof s.name === "string" ? s.name.slice(0, 32) : null, steps, step };
 }

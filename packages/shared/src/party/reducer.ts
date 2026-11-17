@@ -13,6 +13,7 @@ import {
   isParked,
   isRecording,
   MAX_MARKS,
+  MAX_SET_STEPS,
   mixAt,
   mixInto,
   mixOut,
@@ -20,6 +21,7 @@ import {
   otherSide,
   placeIn,
   restoredDeck,
+  restoredSteps,
   settleMix,
   trackBeats,
   trackPosition,
@@ -28,6 +30,7 @@ import {
   type DeckMix,
   type DeckSide,
   type DeckTrackId,
+  type SetHandover,
 } from "./deck";
 import { emptyParty, MAX_QUEUE, musicPosition, PARTY_ROLES, type PartyCmd, type PartyReject, type PartyRole, type PartyState, type Track } from "./definitions";
 
@@ -89,7 +92,7 @@ export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): 
 export const deckOf = (p: PartyState): Deck => (p.deck ??= { ...DEFAULT_DECK });
 
 type DeckCmd = (typeof DECK_CMDS)[number];
-const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark", "mixnow", "unmix"] as const;
+const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark", "mixnow", "unmix", "setload", "setstep"] as const;
 export const isDeckCmd = (cmd: PartyCmd): cmd is Extract<PartyCmd, { cmd: DeckCmd }> => (DECK_CMDS as readonly string[]).includes(cmd.cmd);
 
 const S = (side: DeckSide) => (side === "a" ? "A" : "B");
@@ -105,6 +108,7 @@ function placeAt(d: Deck, side: DeckSide, id: DeckTrackId, pos: number, beat: nu
   release(d, side);
   const p = placeIn(id, pos);
   d[`cue${S(side)}`] = exact ? beat - p : cueFor(id, beat, p);
+  d[`entry${S(side)}`] = p;
 }
 
 /** Pause a deck on its own at a place in its record. */
@@ -118,6 +122,7 @@ function load(d: Deck, side: DeckSide, id: DeckTrackId | null, beat: number) {
   if (id === d[side]) return;
   d[side] = id;
   delete d[`dropCue${S(side)}`];
+  delete d[`entry${S(side)}`];
   release(d, side);
   if (id) placeAt(d, side, id, 0, beat, false);
   else delete d[`cue${S(side)}`];
@@ -150,6 +155,7 @@ function scheduleMix(d: Deck, beat: number) {
       release(d, into);
       d[`cue${S(into)}`] = m.start - m.inAt;
       d[`wait${S(into)}`] = m.start;
+      d[`entry${S(into)}`] = m.inAt;
     }
   }
 }
@@ -163,6 +169,62 @@ function cancelMix(d: Deck, beat: number) {
     if (m.inAt !== undefined && d[into]) holdAt(d, into, d[into]!, m.inAt);
   } else d.xfade = mixAt(d, beat).xfade;
   d.mix = null;
+  trimSet(d);
+}
+
+/** The set stops at the record on air: what came after it was the transition just called off. */
+function trimSet(d: Deck) {
+  const s = d.set;
+  if (!s) return;
+  s.steps = s.steps.slice(0, s.step + 1);
+  delete s.steps[s.step]!.next;
+}
+
+/** Note a transition in the set: as the next step of the set in the decks, or as the start of a new one. */
+function recordMix(d: Deck, beat: number) {
+  const m = d.mix!;
+  const outId = d[mixOut(m)]!;
+  const inId = d[mixInto(m)]!;
+  const startBeat = m.start ?? beat;
+  const at = m.at ?? trackPosition(d, mixOut(m), startBeat)!;
+  const inAt = m.inAt ?? trackPosition(d, mixInto(m), startBeat)!;
+  const next: SetHandover = { at: placeIn(outId, at), style: m.style, bars: m.beats / 4 };
+  const s = d.set;
+  // the last transition finished and nobody has moved the set on yet
+  if (s && s.steps[s.step]?.next && s.steps[s.step + 1]?.track === outId) s.step++;
+  if (s && s.steps[s.step]?.track === outId) {
+    s.steps = s.steps.slice(0, s.step + 1);
+    s.steps[s.step]!.next = next;
+    if (s.steps.length < MAX_SET_STEPS) s.steps.push({ track: inId, from: placeIn(inId, inAt), cues: [] });
+    return;
+  }
+  const entry = d[`entry${S(mixOut(m))}`] ?? 0;
+  d.set = { name: null, steps: [{ track: outId, from: entry, cues: [], next }, { track: inId, from: placeIn(inId, inAt), cues: [] }], step: 0 };
+}
+
+/** A set's transition is over: the next record goes on the deck that's free, parked for the transition after. */
+function advanceSet(d: Deck) {
+  const s = d.set;
+  if (!s || d.mix) return;
+  const hand = s.steps[s.step]?.next;
+  const now = s.steps[s.step + 1];
+  if (!hand || !now) return;
+  const onAir: DeckSide = d.xfade < 0.5 ? "a" : "b";
+  if (d[onAir] !== now.track) return void (d.set = null);
+  s.step++;
+  queueStep(d, otherSide(onAir));
+}
+
+/** Put the set's next record on a free deck and queue the transition to it. */
+function queueStep(d: Deck, free: DeckSide) {
+  const s = d.set!;
+  const cur = s.steps[s.step]!;
+  const next = s.steps[s.step + 1];
+  if (!cur.next || !next) return;
+  d[free] = next.track;
+  delete d[`dropCue${S(free)}`];
+  holdAt(d, free, next.track, next.from);
+  d.mix = { style: cur.next.style, from: d.xfade, to: free === "b" ? 1 : 0, start: null, beats: cur.next.bars * 4, at: cur.next.at, inAt: next.from };
 }
 
 /** Work the deck. Reports whether anything changed. */
@@ -170,6 +232,7 @@ function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, now: numbe
   const beat = deckBeat(d, now);
   const before = JSON.stringify(d);
   settleMix(d, beat);
+  advanceSet(d);
   runDeck(d, cmd, beat, now);
   scheduleMix(d, beat);
   return JSON.stringify(d) !== before;
@@ -214,6 +277,8 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
         if (holdOf(d, out) === undefined && !isParked(d, out, beat) && mix.at < pos - 1e-6) return false;
       }
       d.mix = mix;
+      scheduleMix(d, beat);
+      if (d.mix) recordMix(d, beat);
       return;
     }
     case "mixnow": {
@@ -264,6 +329,7 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
       // the incoming record of a queued transition: that's where it will come in from
       if (m && mixQueued(m, beat) && mixInto(m) === side && m.inAt !== undefined) {
         m.inAt = placeIn(id, cmd.pos);
+        if (d.set?.steps[d.set.step + 1]) d.set.steps[d.set.step + 1]!.from = m.inAt;
         return;
       }
       if (holdOf(d, side) !== undefined) return holdAt(d, side, id, cmd.pos);
@@ -309,20 +375,51 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
       d.drop = null;
       return;
     }
+    case "setload": {
+      const steps = restoredSteps(cmd.set.steps);
+      const first = steps[0];
+      if (!first) return false;
+      if (d.playing) anchorDeck(d, now);
+      d.playing = false;
+      d.mix = null;
+      d.drop = null;
+      for (const step of steps) if (step.cues.length) (d.marks ??= {})[step.track] = step.cues;
+      d.a = first.track;
+      delete d.dropCueA;
+      placeAt(d, "a", first.track, first.from, beat);
+      d.b = null;
+      release(d, "b");
+      delete d.cueB;
+      delete d.dropCueB;
+      delete d.entryB;
+      d.xfade = 0;
+      d.set = { name: cmd.set.name.trim().slice(0, 32) || null, steps: steps.map((s) => ({ ...s, cues: [] })), step: 0 };
+      queueStep(d, "b");
+      return;
+    }
+    case "setstep":
+      // (the set moves on before any command; this one only asks it to)
+      return false;
     case "deck": {
       const { playing, bpm, a, b, chA, chB, xfade, ...rest } = cmd.set;
+      const onAir: DeckSide = d.xfade < 0.5 ? "a" : "b";
       for (const [side, id] of [["a", a], ["b", b]] as const) {
         if (id === undefined || id === d[side]) continue;
         load(d, side, id, beat);
-        // a new record calls off a transition
+        // a new record calls off a transition, and a set carries on only from the record still on air
         if (d.mix) cancelMix(d, beat);
+        if (side === onAir) d.set = null;
+        else trimSet(d);
       }
       if (chA) d.chA = { ...channelOf(d, "a"), ...chA };
       if (chB) d.chB = { ...channelOf(d, "b"), ...chB };
       // a hand on the crossfader takes over from a transition; it starts from where the transition had got to
       if (xfade !== undefined) {
         d.xfade = xfade;
-        if (d.mix) d.mix = null;
+        if (d.mix) {
+          d.mix = null;
+          trimSet(d);
+        }
       }
       // the beat is re-anchored before the tempo changes or the music stops or starts, so it carries on from where it is
       if ((playing !== undefined && playing !== d.playing) || (bpm !== undefined && bpm !== d.bpm)) anchorDeck(d, now);
@@ -337,6 +434,7 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
           if (d.playing) anchorDeck(d, now);
           d.playing = false;
           d.drop = null;
+          d.set = null;
         }
       }
       return;

@@ -378,7 +378,7 @@ describe("timed transitions", () => {
     expect(posOf(d, "b", T0 + 4000)).toBeCloseTo(sec(72), 2);
     expect(d.mix!.start).toBeCloseTo(deckBeat(d, T0 + 5000), 2);
     expect(posOf(d, "b", T0 + 7000)).toBeCloseTo(sec(74), 1);
-    send(s, { cmd: "deck", set: {} }, T0 + 5000 + msFor(33));
+    send(s, { cmd: "setstep" }, T0 + 5000 + msFor(33));
     expect(d).toMatchObject({ mix: null, xfade: 1 });
   });
 
@@ -431,5 +431,74 @@ describe("timed transitions", () => {
     expect(d.mix).toMatchObject({ style: "bass", at: placeIn("back-to-u", sec(165)), inAt: placeIn("take-me", sec(72)) });
     expect(trackPosition(d, "a", d.beat)).toBeCloseTo(sec(72), 2);
     expect(trackPosition(d, "b", d.beat)).toBeCloseTo(sec(162), 1);
+  });
+});
+
+describe("DJ sets", () => {
+  it("records the mix as you go: records in order, where each started, and each transition", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { a: "take-me", b: "back-to-u", xfade: 1 } }, T0);
+    send(s, { cmd: "cue", side: "b", pos: sec(160) }, T0);
+    send(s, { cmd: "deck", set: { playing: true } }, T0);
+    send(s, { cmd: "mix", style: "bass", bars: 8, at: sec(165), inAt: sec(72) }, T0);
+    const d = s.party!.deck!;
+    expect(d.set).toMatchObject({
+      step: 0,
+      steps: [
+        { track: "back-to-u", from: placeIn("back-to-u", sec(160)), next: { at: placeIn("back-to-u", sec(165)), style: "bass", bars: 8 } },
+        { track: "take-me", from: placeIn("take-me", sec(72)) },
+      ],
+    });
+    // the transition finishes; the set moves on to the record now on air
+    send(s, { cmd: "setstep" }, T0 + 5000 + msFor(33));
+    expect(d.set!.step).toBe(1);
+    // and the next transition carries on the same set
+    send(s, { cmd: "deck", set: { b: "atlasaudio-edm" } }, T0 + 40_000);
+    send(s, { cmd: "mix", style: "echo", bars: 4 }, T0 + 40_000);
+    expect(d.set!.steps.map((x) => x.track)).toEqual(["back-to-u", "take-me", "atlasaudio-edm"]);
+    expect(d.set!.steps[1]!.next).toMatchObject({ style: "echo", bars: 4 });
+  });
+
+  it("loads paused with the first transition queued, and plays through, setting up each next record", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { playing: true } }, T0);
+    const set = {
+      name: "Friday",
+      steps: [
+        { track: "back-to-u", from: sec(160), cues: [sec(30)], next: { at: sec(165), style: "bass", bars: 8 } },
+        { track: "take-me", from: sec(72), cues: [], next: { at: sec(90), style: "blend", bars: 4 } },
+        { track: "atlasaudio-edm", from: sec(10), cues: [] },
+      ],
+    };
+    send(s, { cmd: "setload", set }, T0 + 1000);
+    const d = s.party!.deck!;
+    expect(d).toMatchObject({ playing: false, a: "back-to-u", b: "take-me", xfade: 0, set: { name: "Friday", step: 0 } });
+    expect(d.mix).toMatchObject({ style: "bass", to: 1, at: placeIn("back-to-u", sec(165)), inAt: placeIn("take-me", sec(72)) });
+    expect(d.marks?.["back-to-u"]).toEqual([placeIn("back-to-u", sec(30))]);
+    expect(posOf(d, "a", T0 + 60_000)).toBeCloseTo(sec(160), 2);
+    expect(posOf(d, "b", T0 + 60_000)).toBeCloseTo(sec(72), 2);
+    // press play: B comes in when A reaches 2:45
+    const t = T0 + 100_000;
+    send(s, { cmd: "deck", set: { playing: true } }, t);
+    expect(d.mix!.start).toBeCloseTo(deckBeat(d, t + 5000), 2);
+    expect(posOf(d, "b", t + 5000 + msFor(8))).toBeCloseTo(sec(72) + 8, 2);
+    // after it: the third record is parked on A for a blend when B gets to 1:30
+    const after = t + 5000 + msFor(33);
+    send(s, { cmd: "setstep" }, after);
+    expect(d).toMatchObject({ a: "atlasaudio-edm", xfade: 1, set: { step: 1 } });
+    expect(d.mix).toMatchObject({ style: "blend", to: 0, beats: 16 });
+    expect(posOf(d, "a", after + 1000)).toBeCloseTo(sec(10), 2);
+    const bNow = posOf(d, "b", after);
+    expect(d.mix!.start).toBeCloseTo(deckBeat(d, after) + (sec(90) - bNow), 4);
+    // nothing more to queue after the last one
+    send(s, { cmd: "setstep" }, after + msFor(sec(90) - bNow) + msFor(17));
+    expect(d).toMatchObject({ mix: null, xfade: 0, set: { step: 2 } });
+    expect(send(s, { cmd: "setstep" }, after + 200_000).changed).toBe(false);
+  });
+
+  it("checks a set before loading it", () => {
+    expect(PartyCmd.safeParse({ cmd: "setload", set: { name: "x", steps: [] } }).success).toBe(false);
+    expect(PartyCmd.safeParse({ cmd: "setload", set: { name: "x", steps: [{ track: "nope", from: 0, cues: [] }] } }).success).toBe(false);
+    expect(PartyCmd.safeParse({ cmd: "setload", set: { name: "x", steps: [{ track: "take-me", from: 0, cues: [], next: { at: 4, style: "blend", bars: 3 } }] } }).success).toBe(false);
   });
 });
