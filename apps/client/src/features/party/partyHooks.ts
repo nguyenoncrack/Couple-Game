@@ -44,6 +44,8 @@ export function useSlider(value: number, commit: (v: number) => void, ms = 160) 
   };
   return {
     value: local ?? value,
+    /** A hand is on it (its value hasn't come back from the house yet). */
+    held: local !== null,
     onChange: (v: number) => {
       latest.current = v;
       setLocal(v);
