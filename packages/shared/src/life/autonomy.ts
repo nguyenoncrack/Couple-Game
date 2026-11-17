@@ -41,6 +41,11 @@ const MAX_MS: Partial<Record<LifeAction, number>> = {
 };
 /** How often a character at something checks whether to stop. */
 const CHECK_MS = 6000;
+/**
+ * Working the music gear (the DJ booth, a music player): only a player puts their character there, and it stays
+ * there, however long they're away, until they say otherwise; the music goes on without anyone wandering off.
+ */
+const STAYS: ReadonlySet<LifeAction> = new Set(["dj", "tune"]);
 
 /** What a character acting on their own is up to: the need it's for (none for a pause), and since when. */
 export interface Auto {
@@ -121,6 +126,8 @@ export class FreeWill {
     // a plate, the toilet, a hug: over by itself
     if (u?.startsAt !== undefined && now < u.startsAt) return this.wait(id, u.startsAt + 500);
     if (u?.until !== undefined && now < u.until) return this.wait(id, u.until + 500);
+    // at the decks: theirs until their player says otherwise
+    if (u && STAYS.has(u.action)) return this.wait(id, now + CHECK_MS);
 
     const v = needsAt(a, now);
     const urgent = mostUrgent(v);
