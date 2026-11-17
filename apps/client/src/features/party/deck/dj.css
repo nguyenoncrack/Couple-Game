@@ -1,7 +1,6 @@
 /* The DJ console: a chunky toy deck in the game's ink-outlined sticker style, dark so its lights read. */
 
-.dj,
-.dj-bar {
+.dj {
   --dj-body: #24212c;
   --dj-body-2: #1a1820;
   --dj-well: #0e0d13;
@@ -231,24 +230,6 @@
   box-shadow: inset 0 0 0 2px var(--dj-line), inset 0 0 24px #00000099;
   overflow: hidden;
 }
-/* YouTube asks for at least 200 x 200 and its controls in view; nothing is drawn over its player */
-.dj-screen.yt {
-  width: 356px;
-  min-height: 200px;
-  display: grid;
-}
-.dj-yt {
-  width: 100%;
-  height: 100%;
-  min-height: 200px;
-  aspect-ratio: auto;
-  border-radius: 12px;
-}
-.dj-yt-enable {
-  position: absolute;
-  left: 50%;
-  bottom: -46px;
-}
 
 .dj-vis {
   height: 100%;
@@ -335,19 +316,6 @@
   background: var(--dj-echo);
   text-transform: uppercase;
 }
-.dj-yt-chip {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  padding: 3px 9px;
-  border-radius: 9px;
-  border: 2px solid var(--dj-line);
-  background: #e0453c;
-  color: #fff;
-  font: 600 11px var(--logo);
-  cursor: pointer;
-}
-
 /* mixer */
 .dj-mixer {
   display: flex;
@@ -658,10 +626,6 @@
   color: var(--dj-soft);
   text-transform: uppercase;
 }
-.dj-leave {
-  background: transparent;
-  color: var(--dj-soft);
-}
 
 .dj-hear {
   position: absolute;
@@ -677,44 +641,129 @@
   cursor: pointer;
 }
 
-/* the deck made small */
-.dj-bar {
+/* page tabs and stepping away */
+.dj-tabs {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 52px;
-  padding: 0 16px 0 7px;
-  border: var(--border);
-  border-radius: 26px;
-  background: linear-gradient(180deg, var(--dj-body), var(--dj-body-2));
-  box-shadow: var(--shadow);
-  cursor: pointer;
-  text-align: left;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--dj-well);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
 }
-.dj-vinyl.small {
-  width: 38px;
-  height: 38px;
-  --c: var(--a);
-}
-.dj-bar-text {
-  display: grid;
-  line-height: 1.15;
-}
-.dj-bar-text b {
-  font-size: 14px;
-}
-.dj-bar-text span {
-  font-size: 11px;
+.dj-tab {
+  padding: 3px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
   color: var(--dj-soft);
+  font: 600 12px var(--logo);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
 }
-.dj-bar.is-playing .dj-bar-text b {
-  color: var(--a);
+.dj-tab.on {
+  background: #3a3646;
+  color: var(--dj-text);
+  box-shadow: inset 0 0 0 2px var(--dj-line), 0 0 10px color-mix(in srgb, var(--a) 35%, transparent);
+}
+.dj-away {
+  background: var(--yellow, #ffd166);
+  color: var(--ink, #1c1a17);
+}
+
+/* the music player: one record and the screen */
+.dj-top-player {
+  grid-template-columns: 1fr 1.4fr;
+}
+.dj-top-player .dj-screen {
+  width: auto;
+}
+.dj-mixer-note {
+  text-align: right;
+}
+
+/* the lights page */
+.dj-lights {
+  --glow: var(--tint);
+}
+.dj-lights .dj-mixer {
+  margin-top: 4px;
+}
+.dj-lamp {
+  --glow: var(--tint);
+  min-width: 128px;
+}
+.dj-lamp-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4a4555;
+  box-shadow: 0 0 0 2px var(--dj-line);
+}
+.dj-lamp.on .dj-lamp-dot {
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--dj-line), 0 0 10px #fff;
+}
+.dj-level input {
+  background: linear-gradient(90deg, #2c2935, var(--tint));
+}
+.dj-level input::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 26px;
+  border-radius: 6px;
+  border: 2px solid var(--dj-line);
+  background: #cfcad8;
+  box-shadow: 0 3px 0 var(--dj-line);
+}
+.dj-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.dj-heading {
+  margin: 10px 2px 6px;
+}
+.dj-looks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.dj-look-strip {
+  width: 100%;
+  height: 22px;
+  margin-bottom: 4px;
+  border-radius: 7px;
+  background: var(--strip);
+  box-shadow: inset 0 0 0 1.5px var(--dj-line);
+}
+.dj-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.dj-swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--dj-line);
+  background: var(--c);
+  box-shadow: 0 3px 0 var(--dj-line);
+  cursor: pointer;
+  transition: transform 0.08s;
+}
+.dj-swatch:hover {
+  transform: translateY(-2px);
+}
+.dj-swatch.on {
+  box-shadow: 0 0 0 3px var(--dj-text), 0 0 14px var(--c);
+}
+.dj-hint {
+  margin: 8px 2px 0;
 }
 
 /* a narrow screen: the screen goes on top, the decks side by side under it */
 @media (max-width: 640px) {
-  .dj,
-  .dj-bar {
+  .dj {
     bottom: 108px;
   }
   .dj {
@@ -724,8 +773,7 @@
   .dj-top {
     grid-template-columns: 1fr 1fr;
   }
-  .dj-screen,
-  .dj-screen.yt {
+  .dj-screen {
     grid-column: 1 / -1;
     order: -1;
     width: 100%;
@@ -737,7 +785,7 @@
     width: 84px;
     height: 84px;
   }
-  .dj-vinyl:not(.small) {
+  .dj-vinyl {
     width: 70px;
     height: 70px;
   }
@@ -750,6 +798,15 @@
   }
   .dj-crate {
     grid-template-columns: repeat(3, 1fr);
+  }
+  .dj-top-player {
+    grid-template-columns: 1fr 1fr;
+  }
+  .dj-looks {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dj-head {
+    flex-wrap: wrap;
   }
 }
 

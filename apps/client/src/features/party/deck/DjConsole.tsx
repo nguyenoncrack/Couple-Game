@@ -1,17 +1,20 @@
-import { BUILD_BEATS, DECK_TRACKS, deckBeat, deckTrack, DEFAULT_DECK, MAX_BPM, MIN_BPM, PHRASE_BEATS, sectionAt, type Deck, type DeckTrackId, type Music, type PartyCmd, type Section } from "@cg/shared";
+import { BUILD_BEATS, DECK_TRACKS, deckBeat, deckTrack, DEFAULT_DECK, MAX_BPM, MIN_BPM, PHRASE_BEATS, sectionAt, type Deck, type DeckTrackId, type PartyCmd, type Section } from "@cg/shared";
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { partyCmd, serverNow, useGame } from "../../../state/game";
-import { useSlider } from "../PartyPanel";
-import { openDeck, setMusicPrefs, usePartyUi } from "../partyUi";
+import { act, partyCmd, serverNow, useGame } from "../../../state/game";
+import { useMusicOn } from "../../../state/music";
+import { usePartyGear, useSlider, type GearInUse } from "../partyHooks";
+import { setConsoleTab, setMusicPrefs, usePartyUi } from "../partyUi";
 import type { DeckEngine } from "./deckEngine";
+import { LightsPage } from "./LightsPage";
 import "./dj.css";
 
 /**
- * The DJ console: two turntables with the house's built-in records, a screen in the middle, and a mixer of chunky
- * pads, a crossfader and a filter knob. Everything on it is shared (both players work the same deck) except the
- * volume, mute and fade along the bottom. When a YouTube video plays, YouTube's own player takes the screen (it has
- * to stay in view while it plays, at 200 px or more), and the decks wait.
+ * The console you get while your character works the party gear. At the DJ booth it's the full deck: two
+ * turntables with the house's built-in records, a screen in the middle, and a mixer of chunky pads, a crossfader and
+ * a filter knob. At a music player it's the simple version: one record on, play, skip and a crate to pick from. Both
+ * have a lights page when the house has party lights. Everything on it is shared (both players work the same deck)
+ * except the volume, mute and fade along the bottom. Stepping away puts it away; the music plays on.
  */
 
 type DeckSet = Extract<PartyCmd, { cmd: "deck" }>["set"];
@@ -21,12 +24,9 @@ const SECTION_TEXT: Record<Section, string> = { intro: "Intro", groove: "Groove"
 
 interface ConsoleProps {
   deck: Deck | undefined;
-  music: Music | undefined;
   engine: DeckEngine;
-  /** YouTube is playing here: its player is on the screen. */
-  showYouTube: boolean;
-  ytHost: RefObject<HTMLDivElement | null>;
-  onEnableYouTube: () => void;
+  /** The booth's full deck, or a music player's simple one. */
+  mode: GearInUse;
 }
 
 /** The deck's live readings, worked out each frame from the shared clock (not shared any further). */
@@ -57,54 +57,85 @@ function useDeckClock(deck: Deck, engine: DeckEngine, meters: RefObject<HTMLDivE
   return { section, heard };
 }
 
-export function DjConsole({ deck: shared, music, engine, showYouTube, ytHost, onEnableYouTube }: ConsoleProps) {
+export function DjConsole({ deck: shared, engine, mode }: ConsoleProps) {
   const deck = shared ?? DEFAULT_DECK;
   const root = useRef<HTMLDivElement>(null);
   const { section, heard } = useDeckClock(deck, engine, root);
-  const { volume, muted, fade, status } = usePartyUi(useShallow((s) => ({ volume: s.volume, muted: s.muted, fade: s.fade, status: s.status })));
+  const { volume, muted, fade, tab: chosen } = usePartyUi(useShallow((s) => ({ volume: s.volume, muted: s.muted, fade: s.fade, tab: s.tab })));
+  const gear = usePartyGear();
+  const hasLights = gear.lights || gear.dance;
+  const tab = hasLights ? chosen : "music";
+  const musicOn = useMusicOn();
   const djs = useGame(useShallow((s) => Object.values(s.life?.avatars ?? {}).filter((a) => a.use?.action === "dj").map((a) => s.members.find((m) => m.id === a.memberId)?.name ?? "Someone")));
+  const style = { "--a": deckTrack(deck.a).color, "--b": deckTrack(deck.b).color, "--spin": `${(1.8 * 124) / deck.bpm}s`, "--build": `${(BUILD_BEATS * 60) / deck.bpm}s` } as CSSProperties;
+  const tabs = [
+    { id: "music", label: mode === "dj" ? "Decks" : "Records" },
+    { id: "lights", label: "Lights" },
+  ] as const;
+
+  return (
+    <section ref={root} className={`dj dj-mode-${mode} ${deck.playing ? "is-playing" : ""} ${section === "drop" && deck.playing ? "is-drop" : ""}`} style={style} aria-label={mode === "dj" ? "DJ deck" : "Music player"}>
+      <header className="dj-head">
+        <span className="dj-logo">
+          <span className="dj-led" aria-hidden /> {mode === "dj" ? "DJ deck" : "Music"}
+        </span>
+        {hasLights && (
+          <div className="dj-tabs" role="tablist">
+            {tabs.map((t) => (
+              <button key={t.id} role="tab" aria-selected={tab === t.id} className={`dj-tab ${tab === t.id ? "on" : ""}`} onClick={() => setConsoleTab(t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+        <span className="dj-on">{djs.length ? `${djs.join(" & ")} on the decks` : deck.playing ? "Live" : "Ready"}</span>
+        <button className="dj-chip dj-away" onClick={() => act({ do: "stop" })} title="Put the controls away (the music plays on)">
+          Step away
+        </button>
+      </header>
+
+      {tab === "lights" ? <LightsPage /> : mode === "dj" ? <DeckPage deck={deck} section={section} /> : <PlayerPage deck={deck} section={section} />}
+
+      <footer className="dj-foot">
+        <label className="dj-vol">
+          <span>Volume</span>
+          <input type="range" min={0} max={100} value={volume} onChange={(e) => setMusicPrefs({ volume: Number(e.target.value) })} aria-label="Volume, just for you" />
+        </label>
+        <button className={`dj-chip ${muted ? "on" : ""}`} onClick={() => setMusicPrefs({ muted: !muted })} aria-pressed={muted}>
+          {muted ? "Muted" : "Mute"}
+        </button>
+        <button className={`dj-chip ${fade ? "on" : ""}`} onClick={() => setMusicPrefs({ fade: !fade })} aria-pressed={fade} title="Quieter the further you walk from the speakers">
+          Fade
+        </button>
+        <span className="dj-note">{musicOn ? "Just you" : "Music is switched off in the game"}</span>
+      </footer>
+      {!heard && deck.playing && musicOn && (
+        <button className="dj-hear" onClick={() => engine.start()}>
+          Tap to hear the music
+        </button>
+      )}
+    </section>
+  );
+}
+
+/** The booth's decks: both turntables, the screen, the mixer and the crate (a record goes onto the cued deck). */
+function DeckPage({ deck, section }: { deck: Deck; section: Section }) {
   const xfade = useSlider(deck.xfade, (v) => setDeck({ xfade: v }), 120);
   const filter = useSlider(deck.filter, (v) => setDeck({ filter: v }), 120);
   const cued: "a" | "b" = deck.xfade < 0.5 ? "b" : "a";
   const dropping = deck.playing && (section === "build" || section === "drop");
-  const style = { "--a": deckTrack(deck.a).color, "--b": deckTrack(deck.b).color, "--spin": `${(1.8 * 124) / deck.bpm}s`, "--build": `${(BUILD_BEATS * 60) / deck.bpm}s` } as CSSProperties;
-
   return (
-    <section ref={root} className={`dj ${deck.playing ? "is-playing" : ""} ${section === "drop" && deck.playing ? "is-drop" : ""}`} style={style} aria-label="DJ deck">
-      <header className="dj-head">
-        <span className="dj-logo">
-          <span className="dj-led" aria-hidden /> DJ deck
-        </span>
-        <span className="dj-on">{djs.length ? `${djs.join(" & ")} on the decks` : deck.playing ? "Live" : showYouTube ? "YouTube on air" : "Ready"}</span>
-        <button className="dj-mini" onClick={() => usePartyUi.setState({ deckOpen: false })} disabled={showYouTube} title={showYouTube ? "YouTube's player stays in view while it plays" : "Make it small"} aria-label="Make the deck small">
-          –
-        </button>
-      </header>
-
+    <>
       <div className="dj-top">
         <Turntable side="a" id={deck.a} playing={deck.playing} live={deck.xfade < 0.98} cued={cued === "a"} />
-        <div className={`dj-screen ${showYouTube ? "yt" : ""}`}>
-          {showYouTube ? (
-            <>
-              <div className="party-player dj-yt" ref={ytHost} />
-              {status === "blocked" && (
-                <button className="dj-pad dj-yt-enable" onClick={onEnableYouTube}>
-                  Turn the sound on
-                </button>
-              )}
-            </>
-          ) : (
-            <Visualizer deck={deck} section={section} music={music} />
-          )}
+        <div className="dj-screen">
+          <Visualizer deck={deck} section={section} />
         </div>
         <Turntable side="b" id={deck.b} playing={deck.playing} live={deck.xfade > 0.02} cued={cued === "b"} />
       </div>
 
       <div className="dj-mixer">
-        <button className={`dj-pad dj-play ${deck.playing ? "on" : ""}`} onClick={() => setDeck({ playing: !deck.playing })} aria-pressed={deck.playing}>
-          <span aria-hidden>{deck.playing ? "❚❚" : "▶"}</span>
-          {deck.playing ? "Pause" : "Play"}
-        </button>
+        <PlayPad deck={deck} />
         <div className="dj-fader">
           <span className="dj-label">A</span>
           <input
@@ -142,47 +173,70 @@ export function DjConsole({ deck: shared, music, engine, showYouTube, ytHost, on
         </div>
       </div>
 
-      <div className="dj-crate" role="list" aria-label={`Records: pick one to load it onto deck ${cued.toUpperCase()}`}>
-        {DECK_TRACKS.map((t) => {
-          const on = [deck.a === t.id ? "A" : "", deck.b === t.id ? "B" : ""].filter(Boolean).join("+");
-          return (
-            <button key={t.id} role="listitem" className={`dj-sleeve ${on ? "loaded" : ""}`} style={{ "--c": t.color } as CSSProperties} onClick={() => setDeck({ [cued]: t.id } as DeckSet)} title={`Load onto deck ${cued.toUpperCase()}`}>
-              <span className="dj-sleeve-art" aria-hidden />
-              <span className="dj-sleeve-name">{t.name}</span>
-              <span className="dj-sleeve-style">{t.style}</span>
-              {on && <span className="dj-sleeve-tag">{on}</span>}
-            </button>
-          );
-        })}
-      </div>
+      <Crate label={`Records: pick one to load it onto deck ${cued.toUpperCase()}`} tagOf={(id) => [deck.a === id ? "A" : "", deck.b === id ? "B" : ""].filter(Boolean).join("+")} onPick={(id) => setDeck({ [cued]: id } as DeckSet)} title={`Load onto deck ${cued.toUpperCase()}`} />
+    </>
+  );
+}
 
-      <footer className="dj-foot">
-        <label className="dj-vol">
-          <span>Volume</span>
-          <input type="range" min={0} max={100} value={volume} onChange={(e) => setMusicPrefs({ volume: Number(e.target.value) })} aria-label="Volume, just for you" />
-        </label>
-        <button className={`dj-chip ${muted ? "on" : ""}`} onClick={() => setMusicPrefs({ muted: !muted })} aria-pressed={muted}>
-          {muted ? "Muted" : "Mute"}
+/** A music player: whichever record is on air, play and skip, and a crate where a pick goes straight on. */
+function PlayerPage({ deck, section }: { deck: Deck; section: Section }) {
+  const air: "a" | "b" = deck.xfade < 0.5 ? "a" : "b";
+  const on = deck[air];
+  const pick = (id: DeckTrackId) => setDeck({ [air]: id, xfade: air === "a" ? 0 : 1, playing: true } as DeckSet);
+  const skip = () => {
+    const i = DECK_TRACKS.findIndex((t) => t.id === on);
+    pick(DECK_TRACKS[(i + 1) % DECK_TRACKS.length]!.id);
+  };
+  return (
+    <>
+      <div className="dj-top dj-top-player">
+        <Turntable side={air} id={on} playing={deck.playing} live cued={false} label="On air" />
+        <div className="dj-screen">
+          <Visualizer deck={deck} section={section} />
+        </div>
+      </div>
+      <div className="dj-mixer">
+        <PlayPad deck={deck} />
+        <button className="dj-pad" onClick={skip}>
+          <span aria-hidden>⏭</span> Skip
         </button>
-        <button className={`dj-chip ${fade ? "on" : ""}`} onClick={() => setMusicPrefs({ fade: !fade })} aria-pressed={fade} title="Quieter the further you walk from the speakers">
-          Fade
-        </button>
-        <span className="dj-note">Just you</span>
-        <button className="dj-chip dj-leave" onClick={() => usePartyUi.setState({ listening: false, deckOpen: false })}>
-          Leave
-        </button>
-      </footer>
-      {!heard && deck.playing && !showYouTube && (
-        <button className="dj-hear" onClick={() => engine.start()}>
-          Tap to hear the music
-        </button>
-      )}
-    </section>
+        <span className="dj-note dj-mixer-note">Pick a record to put it on. The DJ booth has the full deck.</span>
+      </div>
+      <Crate label="Records: pick one to play it" tagOf={(id) => (id === on ? "On" : "")} onPick={pick} title="Play this one" />
+    </>
+  );
+}
+
+function PlayPad({ deck }: { deck: Deck }) {
+  return (
+    <button className={`dj-pad dj-play ${deck.playing ? "on" : ""}`} onClick={() => setDeck({ playing: !deck.playing })} aria-pressed={deck.playing}>
+      <span aria-hidden>{deck.playing ? "❚❚" : "▶"}</span>
+      {deck.playing ? "Pause" : "Play"}
+    </button>
+  );
+}
+
+/** The house's records as sleeves; `tagOf` says what to mark on one (where it's loaded). */
+function Crate({ label, title, tagOf, onPick }: { label: string; title: string; tagOf: (id: DeckTrackId) => string; onPick: (id: DeckTrackId) => void }) {
+  return (
+    <div className="dj-crate" role="list" aria-label={label}>
+      {DECK_TRACKS.map((t) => {
+        const tag = tagOf(t.id);
+        return (
+          <button key={t.id} role="listitem" className={`dj-sleeve ${tag ? "loaded" : ""}`} style={{ "--c": t.color } as CSSProperties} onClick={() => onPick(t.id)} title={title}>
+            <span className="dj-sleeve-art" aria-hidden />
+            <span className="dj-sleeve-name">{t.name}</span>
+            <span className="dj-sleeve-style">{t.style}</span>
+            {tag && <span className="dj-sleeve-tag">{tag}</span>}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
 /** One turntable: a record that turns while the deck plays, with the record's name, and a level meter. */
-function Turntable({ side, id, playing, live, cued }: { side: "a" | "b"; id: DeckTrackId; playing: boolean; live: boolean; cued: boolean }) {
+function Turntable({ side, id, playing, live, cued, label }: { side: "a" | "b"; id: DeckTrackId; playing: boolean; live: boolean; cued: boolean; label?: string }) {
   const t = deckTrack(id);
   return (
     <div className={`dj-table dj-${side} ${live ? "live" : ""} ${cued ? "cued" : ""}`}>
@@ -198,7 +252,7 @@ function Turntable({ side, id, playing, live, cued }: { side: "a" | "b"; id: Dec
         ))}
       </div>
       <div className="dj-track">
-        <span className="dj-deck-name">Deck {side.toUpperCase()}</span>
+        <span className="dj-deck-name">{label ?? `Deck ${side.toUpperCase()}`}</span>
         <b>{t.name}</b>
         <span>{cued ? "Cued: pick a record" : t.style}</span>
       </div>
@@ -207,7 +261,7 @@ function Turntable({ side, id, playing, live, cued }: { side: "a" | "b"; id: Dec
 }
 
 /** The screen between the decks: what's on air, the section, the beat and how far round the phrase it is. */
-function Visualizer({ deck, section, music }: { deck: Deck; section: Section; music: Music | undefined }) {
+function Visualizer({ deck, section }: { deck: Deck; section: Section }) {
   const air = deck.xfade < 0.35 ? deckTrack(deck.a).name : deck.xfade > 0.65 ? deckTrack(deck.b).name : `${deckTrack(deck.a).name} × ${deckTrack(deck.b).name}`;
   return (
     <div className="dj-vis">
@@ -226,11 +280,6 @@ function Visualizer({ deck, section, music }: { deck: Deck; section: Section; mu
         {deck.filter < -0.05 && <span>Low-pass</span>}
         {deck.filter > 0.05 && <span>High-pass</span>}
       </div>
-      {music?.current && !music.playing && (
-        <button className="dj-yt-chip" onClick={() => partyCmd({ cmd: "play" })} title="Play the YouTube video (the decks wait)">
-          ▶ YouTube
-        </button>
-      )}
     </div>
   );
 }
@@ -283,24 +332,5 @@ function Knob({ label, value, onChange, onRelease }: { label: string; value: num
       </div>
       <span className="dj-label">{label}</span>
     </div>
-  );
-}
-
-/** The deck made small: a turning record, what's on, and a way back in. */
-export function DeckBar({ deck, music, listening }: { deck: Deck | undefined; music: Music | undefined; listening: boolean }) {
-  const d = deck ?? DEFAULT_DECK;
-  const youtube = Boolean(music?.current && music.playing);
-  const playing = d.playing || youtube;
-  const label = d.playing ? deckTrack(d.xfade < 0.5 ? d.a : d.b).name : youtube ? "YouTube" : "DJ deck";
-  return (
-    <button className={`dj-bar ${playing ? "is-playing" : ""}`} onClick={openDeck} style={{ "--a": deckTrack(d.a).color, "--spin": `${(1.8 * 124) / d.bpm}s` } as CSSProperties}>
-      <span className={`dj-vinyl small ${d.playing ? "spin" : ""}`} aria-hidden>
-        <span className="dj-label-dot" />
-      </span>
-      <span className="dj-bar-text">
-        <b>{label}</b>
-        <span>{!listening && playing ? "Music is playing · tap to join" : playing ? "Playing · open the deck" : "Open the deck"}</span>
-      </span>
-    </button>
   );
 }

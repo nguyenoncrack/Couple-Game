@@ -4,6 +4,8 @@ Branch: `feature/edm-party` (from main `c136f18`). Nothing is merged, pushed or 
 
 A "Party" category of furniture, a compact party panel, dancing, and a shared YouTube music queue.
 
+> **Since replaced:** the party panel and the YouTube player are gone from the client. Music and lights are now worked from the DJ booth or a music player, only while your sim uses them; see `dj-deck.md`. The YouTube notes below describe the old feature, and the server still accepts its commands for old saves.
+
 ## What's in it
 
 **Items** (category `party`, each with two more finishes, search terms and a thumbnail drawn from its own model)

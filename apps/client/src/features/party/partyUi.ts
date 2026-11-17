@@ -1,26 +1,17 @@
 import { create } from "zustand";
 
-/** What this screen is doing with the party: panel, and how its own player is going. Nothing here is shared. */
-
-export type MusicStatus = "off" | "loading" | "ready" | "buffering" | "playing" | "paused" | "blocked" | "error";
+/** This player's own party settings and which page of the console is showing. Nothing here is shared. */
 
 interface PartyUi {
-  open: boolean;
-  tab: "lights" | "dance" | "music";
-  /** This screen has joined the music: its player is up (and must stay visible while it plays). */
-  listening: boolean;
-  status: MusicStatus;
-  /** Why the player can't play something, in words. */
-  message: string | null;
+  /** The console's page: the decks (or the music player's records), or the lights. */
+  tab: "music" | "lights";
   volume: number;
   muted: boolean;
   /** The music gets quieter the further your character is from the speakers (on by default). */
   fade: boolean;
-  /** The DJ console is open (otherwise it's a small bar). */
-  deckOpen: boolean;
 }
 
-/** (not "cg.music": that one is the lo-fi background music switch) */
+/** (not "cg.music": that one is the game's music switch) */
 const KEY = "cg.party.music";
 
 function loadPrefs(): Pick<PartyUi, "volume" | "muted" | "fade"> {
@@ -33,7 +24,7 @@ function loadPrefs(): Pick<PartyUi, "volume" | "muted" | "fade"> {
   return { volume: 60, muted: false, fade: true };
 }
 
-export const usePartyUi = create<PartyUi>(() => ({ open: false, tab: "lights", listening: false, status: "off", message: null, deckOpen: false, ...loadPrefs() }));
+export const usePartyUi = create<PartyUi>(() => ({ tab: "music", ...loadPrefs() }));
 
 /** Each player keeps their own volume and mute, on this device. */
 export function setMusicPrefs(prefs: Partial<Pick<PartyUi, "volume" | "muted" | "fade">>) {
@@ -46,14 +37,11 @@ export function setMusicPrefs(prefs: Partial<Pick<PartyUi, "volume" | "muted" | 
   }
 }
 
-export const openParty = (tab?: PartyUi["tab"]) => usePartyUi.setState({ open: true, ...(tab ? { tab } : {}) });
-export const closeParty = () => usePartyUi.setState({ open: false });
-/** Open the DJ console and start hearing the music (a click, which is also what lets the browser play sound). */
-export const openDeck = () => usePartyUi.setState({ deckOpen: true, listening: true });
+export const setConsoleTab = (tab: PartyUi["tab"]) => usePartyUi.setState({ tab });
 
-/** Back to nothing: leaving a house. */
+/** Back to the start: leaving a house. */
 export function resetPartyUi() {
-  usePartyUi.setState({ open: false, listening: false, status: "off", message: null, deckOpen: false });
+  usePartyUi.setState({ tab: "music" });
 }
 
 // (a handle for poking at it from the browser's console while developing)

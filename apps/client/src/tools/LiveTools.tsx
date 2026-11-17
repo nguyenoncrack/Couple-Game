@@ -8,7 +8,6 @@ import { FLOOR_Y, Furniture, objectTransform, Walls } from "../render/House";
 import { Roofs } from "../render/Roof";
 import { openRoofs } from "../render/Storeys";
 import { openFort } from "../features/fort/fortUi";
-import { openParty } from "../features/party/partyUi";
 import { act, fortCmd, openChat, serverNow, sharePresence, useGame } from "../state/game";
 import { together } from "../state/together";
 import { floorName } from "../ui/FloorPicker";
@@ -35,12 +34,11 @@ const VERB: Record<Action, string> = {
   wash: "Wash your hands",
   groove: "Dance",
   dj: "Work the decks",
+  tune: "Play some music",
   fort: "Enter fort",
   rain: "Watch the rain",
 };
 
-/** What an item does for a party (see party/definitions.ts). */
-const partyRoles = (o: PlacedObject) => catalog.furniture.get(o.catalogId)?.party ?? [];
 /** The blanket fort a piece belongs to: the frame itself, or the frame a kit piece snaps onto. */
 function fortFrameOf(level: Level, o: PlacedObject): PlacedObject | null {
   const role = catalog.furniture.get(o.catalogId)?.fort;
@@ -57,7 +55,7 @@ const offers = (level: Level, o: PlacedObject): Action[] => [...new Set(actionsO
 /** Open what you can do with a piece of furniture, if anything. True if there's a menu. */
 export function openObjectMenu(level: Level, id: string) {
   const o = level.objects[id];
-  if (!o || (!offers(level, o).length && !isFridge(o) && !liftIs(o) && !partyRoles(o).length && !fortFrameOf(level, o))) return false;
+  if (!o || (!offers(level, o).length && !isFridge(o) && !liftIs(o) && !fortFrameOf(level, o))) return false;
   const { position, item } = objectTransform(o);
   const h = (item.model as { height?: unknown }).height;
   const base = useGame.getState().floor * STOREY;
@@ -201,7 +199,7 @@ function Menu() {
     const out = mine?.use?.action === "bathe" || mine?.use?.action === "shower" || mine?.use?.action === "swim";
     const playing = mine?.use?.action === "play" && (mine.use.consoleId === o.id || mine.use.tv === o.id || using);
     if (playing) options.push({ label: "Stop playing", run: () => act({ do: "stop" }) });
-    else if (using) options.push({ label: mine?.use?.action === "pingpong" || mine?.use?.action === "blackjack" ? "Leave table" : mine?.use?.action === "fort" ? "Leave fort" : out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });
+    else if (using) options.push({ label: mine?.use?.action === "pingpong" || mine?.use?.action === "blackjack" ? "Leave table" : mine?.use?.action === "fort" ? "Leave fort" : mine?.use?.action === "dj" || mine?.use?.action === "tune" ? "Step away" : out ? "Get out" : "Get up", run: () => act({ do: "stop" }) });
     // watching this TV from a seat across the room
     else if (mine?.use?.tv === o.id) options.push({ label: "Stop watching", run: () => act({ do: "stop" }) });
     if (us.inBed && us.here && mine?.use?.objectId === o.id)
@@ -210,7 +208,7 @@ function Menu() {
           ? { label: "Stop cuddling", run: () => act({ do: "social", action: "uncuddle" }) }
           : { label: "Cuddle up ♥", run: () => act({ do: "social", action: "cuddle" }) },
       );
-    // dance floors offer each dance; party gear opens the party panel
+    // dance floors offer each dance (the party's music and lights are worked from the DJ booth or the music player)
     if (offers(level, o).includes("groove"))
       for (const d of DANCES) options.push({ group: "Dance", label: d.name, run: () => act({ do: "dance", objectId: o.id, move: d.id }) });
     // blanket forts (and the pieces on them): lights, and the panel for the blanket, name and sign
@@ -232,9 +230,6 @@ function Menu() {
         if (us.here) options.push({ group: "Rain", label: `Ask ${partnerName} to watch with you ♥`, run: () => act({ do: "rain", objectId: o.id, invite: true }) });
       }
     }
-    const roles = partyRoles(o);
-    if (roles.includes("lights") || roles.includes("dance")) options.push({ group: "Party", label: "Light controls…", run: () => { useGame.setState({ menu: null }); openParty("lights"); } });
-    if (roles.includes("music")) options.push({ group: "Party", label: "Music…", run: () => { useGame.setState({ menu: null }); openParty("music"); } });
     for (const action of offers(level, o)) {
       if (action === "groove") continue;
       if (action === "cook" || action === "prep") {

@@ -23,7 +23,6 @@ import { MaterialPanel } from "../features/buildMaterials/MaterialPanel";
 import { FloorPicker } from "./FloorPicker";
 import { MusicDock } from "../features/party/MusicDock";
 import { FortHud } from "../features/fort/FortPanel";
-import { PartyHud } from "../features/party/PartyPanel";
 import { colorsOf, familyOf, groupVariants, VariantSwatches } from "./VariantSwatches";
 
 /** The on-screen controls, in the museum's paper-and-ink style. Everything here just reads and sets game state. */
@@ -50,7 +49,6 @@ export function Hud({ onLeave }: { onLeave: () => void }) {
       {firstPerson ? <FirstPersonHint /> : <CameraButtons />}
       {live ? <LiveBar /> : <Toolbar />}
       <ChatPanel />
-      <PartyHud />
       <FortHud />
       <MusicDock />
       <WelcomeBack />

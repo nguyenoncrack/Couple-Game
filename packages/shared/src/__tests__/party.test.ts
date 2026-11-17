@@ -316,6 +316,19 @@ describe("using party furniture", () => {
     expect(slots[2]!.pose.z).toBeGreaterThan(9);
   });
 
+  it("has every music player worked from in front of it, facing it", () => {
+    const players = [...catalog.furniture.values()].filter((i) => i.party?.includes("music") && i.model.kind !== "dj_booth" && i.id.startsWith("music_player"));
+    expect(players.length).toBe(3);
+    for (const item of players) expect(item.interactions?.map((i) => i.action)).toEqual(["tune"]);
+    const house = partyHouse();
+    house.place("mus0000001", "music_player", 10, 4);
+    const slots = slotsOf(house.bp.levels[0]!.objects.mus0000001!, "tune");
+    expect(slots).toHaveLength(1);
+    // the player sits at z 4 facing +z; whoever works it stands in front (south), looking back north at it
+    expect(slots[0]!.pose).toMatchObject({ face: 2 });
+    expect(slots[0]!.pose.z).toBeGreaterThan(5);
+  });
+
   it("lets dance floors and rugs go under furniture, and walks over them", () => {
     const house = partyHouse();
     // (a rug-layer item doesn't block, so a chair can stand on a tile)
