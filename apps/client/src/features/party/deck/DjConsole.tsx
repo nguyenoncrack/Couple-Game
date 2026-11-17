@@ -406,6 +406,12 @@ function MixPanel({ deck, clock }: { deck: Deck; clock: Clock }) {
       </div>
       {timed ? <QueuedMix deck={deck} mix={timed} beat={beat} /> : !mix && <TimedMix deck={deck} beat={beat} to={to} style={mixStyle} bars={mixBars} />}
       {blocked && !live && <p className="dj-note dj-mixhint">{blocked} (or time one below)</p>}
+      <p className="dj-note dj-mixhint">
+        More than two songs?{" "}
+        <button className="dj-linkbtn" onClick={() => setConsoleTab("sets")}>
+          Link songs 1 ➜ 2 ➜ 3 ➜ … in My Sets
+        </button>
+      </p>
     </div>
   );
 }

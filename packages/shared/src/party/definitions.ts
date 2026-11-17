@@ -130,9 +130,7 @@ const Bars = z
   .int()
   .refine((n) => (MIX_BARS as readonly number[]).includes(n), "not a length a transition comes in");
 /** A saved DJ set: records in order, each with where it starts, its cue points and its transition to the next. */
-const DeckSetSchema = z.object({
-  name: z.string().max(32),
-  steps: z
+const SetStepsSchema = z
     .array(
       z.object({
         track: z.enum(DECK_TRACK_IDS),
@@ -142,8 +140,8 @@ const DeckSetSchema = z.object({
       }),
     )
     .min(1)
-    .max(MAX_SET_STEPS),
-});
+    .max(MAX_SET_STEPS);
+const DeckSetSchema = z.object({ name: z.string().max(32), steps: SetStepsSchema });
 
 export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({
@@ -209,6 +207,11 @@ export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("mark"), track: z.enum(DECK_TRACK_IDS), pos: Place, remove: z.literal(true).optional() }),
   /** Put a saved set in the decks, paused at its start. */
   z.object({ cmd: z.literal("setload"), set: DeckSetSchema }),
+  /**
+   * Link records after the one on air: it hands over to the next, that one to the one after, and so on. The first
+   * step is the record on air (its `next` is its transition); whatever was queued after it is replaced.
+   */
+  z.object({ cmd: z.literal("setchain"), steps: SetStepsSchema }),
   /** A screen saw the set's transition finish: time for the set to move on. */
   z.object({ cmd: z.literal("setstep") }),
   /** Jump a deck to another part of its record: `pos` track beats in (at the default tempo). */

@@ -2,10 +2,11 @@ import { deckTrack, marksOf, MIX_STYLES, trackPosition, type Deck, type DeckSet,
 import { useState } from "react";
 import { partyCmd } from "../../../state/game";
 import { deleteSet, duplicateSet, renameSet, saveSet, setConsoleTab, usePartyUi, type SavedSet } from "../partyUi";
+import { ChainEditor } from "./ChainEditor";
 import { preciseClock } from "./deckTime";
 
 /**
- * My Sets: the set in the decks (one you loaded, or the one your mixing records as you go: each record, where it
+ * My Sets: linking songs into a chain (`ChainEditor`), the set in the decks (one you loaded, or the one your mixing records as you go: each record, where it
  * started, and each transition's time, style and length), saved to this device with its cue points, and your saved
  * sets to load, rename, copy or delete. A loaded set opens paused, with its first transition queued.
  */
@@ -43,6 +44,7 @@ export function SetsPage({ deck, beat, air }: { deck: Deck; beat: number; air: D
 
   return (
     <div className="dj-sets">
+      <ChainEditor deck={deck} beat={beat} air={air} />
       <section className="dj-setnow" aria-label="The set in the decks">
         <h3>
           In the decks{known ? `: ${known}` : deck.set ? ": this mix (not saved yet)" : ""}
