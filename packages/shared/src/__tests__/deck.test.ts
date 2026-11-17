@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyLife, type LifeState } from "../life/state";
-import { applyParty, BUILD_BEATS, deckBeat, deckPump, DEFAULT_DECK, DROP_BEATS, pauseMusic, PartyCmd, restoredParty, savedParty, sectionAt, type PartyContext, type PartyRole } from "../party";
+import { applyParty, BUILD_BEATS, cueFor, deckBeat, deckPump, DEFAULT_BPM, DEFAULT_DECK, DROP_BEATS, mixAt, pauseMusic, PartyCmd, restoredDeck, restoredParty, savedParty, sectionAt, sectionOf, trackBeats, trackPosition, type Deck, type PartyContext, type PartyRole } from "../party";
 
 const T0 = 1_000_000;
 const gear = (music = true): Record<PartyRole, boolean> => ({ lights: true, music, dance: false, speaker: true });
@@ -58,8 +58,9 @@ describe("the DJ deck", () => {
     const saved = savedParty(s.party!, T0 + 10 * BEAT);
     const restored = restoredParty(JSON.parse(JSON.stringify(saved)))!;
     expect(restored.deck).toMatchObject({ a: "atlasaudio-edm", b: "kulakovka-hard-edm", cueA: 4, cueB: 8, beat: 10, playing: false });
+    // a built-in record is cued too, from the bar it was loaded in
     send(s, { cmd: "deck", set: { a: "night-bus" } }, T0 + 11 * BEAT);
-    expect(s.party!.deck!.cueA).toBeUndefined();
+    expect(s.party!.deck!.cueA).toBe(8);
   });
 
   it("takes turns with the YouTube music", () => {
@@ -119,5 +120,141 @@ describe("the DJ deck", () => {
     expect(pauseMusic(s, T0 + 6 * BEAT)).toBe(true);
     expect(s.party!.deck).toMatchObject({ playing: false, beat: 6 });
     expect(pauseMusic(s, T0 + 9 * BEAT)).toBe(false);
+  });
+});
+
+describe("transitions", () => {
+  /** A deck playing at 120 bpm from T0, on deck A, with a record on B. */
+  const playing = () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { bpm: 120, playing: true } }, T0);
+    return { s, d: s.party!.deck! };
+  };
+
+  it("start on the next bar line and take the crossfader over to the other deck", () => {
+    const { s, d } = playing();
+    expect(send(s, { cmd: "mix", style: "blend", bars: 2 }, T0 + 1.5 * BEAT).changed).toBe(true);
+    expect(d.mix).toMatchObject({ style: "blend", from: 0, to: 1, start: 4, beats: 8 });
+    expect(mixAt(d, 2).xfade).toBe(0);
+    expect(mixAt(d, 8).xfade).toBeCloseTo(0.5);
+    expect(mixAt(d, 8).progress).toBeCloseTo(0.5);
+    expect(mixAt(d, 12)).toMatchObject({ xfade: 1, progress: null });
+    // one at a time
+    expect(send(s, { cmd: "mix", style: "cut", bars: 1 }, T0 + 6 * BEAT).changed).toBe(false);
+    // the next command after it ends puts it away, and the next mix goes back the other way
+    send(s, { cmd: "deck", set: { echo: true } }, T0 + 13 * BEAT);
+    expect(d).toMatchObject({ xfade: 1, mix: null });
+    send(s, { cmd: "mix", style: "cut", bars: 1 }, T0 + 13 * BEAT);
+    expect(d.mix).toMatchObject({ from: 1, to: 0, start: 16, beats: 4 });
+  });
+
+  it("each have a sound of their own", () => {
+    const d = { ...DEFAULT_DECK, mix: null } as Deck;
+    const at = (style: "blend" | "bass" | "echo" | "filter" | "cut", beat: number) => mixAt({ ...d, mix: { style, from: 0, to: 1, start: 0, beats: 16 } }, beat);
+    // a cut waits for the end and then switches
+    expect(at("cut", 15.9).xfade).toBe(0);
+    expect(at("cut", 16).xfade).toBe(1);
+    // a bass swap: only one bass line at a time, the new one's held back until halfway
+    expect(at("bass", 4).fx.b.low).toBe(-1);
+    expect(at("bass", 4).fx.a.low).toBe(0);
+    expect(at("bass", 12).fx.a.low).toBe(-1);
+    expect(at("bass", 12).fx.b.low).toBe(0);
+    // echo out sends the old deck into the echo
+    expect(at("echo", 4).fx.a.echo).toBe(1);
+    expect(at("echo", 4).fx.b.echo).toBe(0);
+    // filter out thins the old deck first, and the new one only comes up late
+    expect(at("filter", 8).fx.a.low).toBeLessThan(-0.7);
+    expect(at("filter", 8).xfade).toBe(0);
+    expect(at("filter", 14).xfade).toBeGreaterThan(0.5);
+  });
+
+  it("stop when a hand takes the crossfader, and need music playing and a record to go to", () => {
+    const { s, d } = playing();
+    send(s, { cmd: "mix", style: "blend", bars: 4 }, T0);
+    send(s, { cmd: "deck", set: { xfade: 0.3 } }, T0 + 4 * BEAT);
+    expect(d).toMatchObject({ xfade: 0.3, mix: null });
+    send(s, { cmd: "deck", set: { b: null } }, T0 + 5 * BEAT);
+    expect(send(s, { cmd: "mix", style: "blend", bars: 4 }, T0 + 5 * BEAT).changed).toBe(false);
+    send(s, { cmd: "deck", set: { b: "night-bus", playing: false } }, T0 + 6 * BEAT);
+    expect(send(s, { cmd: "mix", style: "blend", bars: 4 }, T0 + 6 * BEAT).changed).toBe(false);
+    expect(PartyCmd.safeParse({ cmd: "mix", style: "blend", bars: 3 }).success).toBe(false);
+    expect(PartyCmd.safeParse({ cmd: "mix", style: "spin", bars: 4 }).success).toBe(false);
+  });
+
+  it("are finished when a saved deck comes back", () => {
+    const d = restoredDeck({ ...DEFAULT_DECK, xfade: 0.4, mix: { style: "blend", from: 0, to: 1, start: 0, beats: 16 } });
+    expect(d.xfade).toBe(1);
+    expect(d.mix).toBeUndefined();
+  });
+});
+
+describe("records on the decks", () => {
+  it("can be taken off, so one record plays on its own", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { b: null } }, T0);
+    const d = s.party!.deck!;
+    expect(d.b).toBeNull();
+    expect(d.cueB).toBeUndefined();
+    expect(trackPosition(d, "b", 10)).toBeNull();
+    // and stay off through a save
+    expect(restoredDeck(JSON.parse(JSON.stringify(d))).b).toBeNull();
+  });
+
+  it("start from the beginning when loaded, a built-in one on the bar line", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { bpm: 120, playing: true } }, T0);
+    send(s, { cmd: "deck", set: { a: "night-bus", b: "back-to-u" } }, T0 + 9.5 * BEAT);
+    const d = s.party!.deck!;
+    expect(d.cueA).toBe(8);
+    expect(d.cueB).toBeCloseTo(9.5);
+    expect(trackPosition(d, "a", 9.5)).toBeCloseTo(1.5);
+    expect(trackPosition(d, "b", 9.5)).toBeCloseTo(0);
+  });
+
+  it("jump to another part: a recording to the moment, a built-in record to the bar", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { bpm: 120, playing: true, a: "night-bus", b: "take-me" } }, T0);
+    const d = s.party!.deck!;
+    const at = 40;
+    // a minute into the recording (in its own time, at the default tempo)
+    const minute = DEFAULT_BPM;
+    send(s, { cmd: "cue", side: "b", pos: minute }, T0 + at * BEAT);
+    expect(trackPosition(d, "b", at)).toBeCloseTo(minute);
+    // the built-in record goes to bar 17 (the "full" part), keeping in step with the deck's bars
+    send(s, { cmd: "cue", side: "a", pos: 64 }, T0 + at * BEAT);
+    expect(trackPosition(d, "a", at)).toBe(64);
+    expect(Math.abs(d.cueA! % 4)).toBe(0);
+    expect(sectionOf(trackPosition(d, "a", at)!, at, null)).toBe("full");
+    // past the end is the end
+    expect(cueFor("take-me", 100, 1e6)).toBeCloseTo(100 - (trackBeats("take-me") - 0.01));
+    // a deck with nothing on it has nowhere to go
+    send(s, { cmd: "deck", set: { a: null } }, T0 + at * BEAT);
+    expect(send(s, { cmd: "cue", side: "a", pos: 4 }, T0 + at * BEAT).changed).toBe(false);
+  });
+
+  it("know how long they are", () => {
+    expect(trackBeats("night-bus")).toBe(128);
+    // Take Me is 3:12
+    expect((trackBeats("take-me") * 60) / DEFAULT_BPM).toBeCloseTo(192.05);
+  });
+
+  it("let a drop take over a built-in record's own section", () => {
+    expect(sectionOf(64, 10, null)).toBe("full");
+    expect(sectionOf(64, 10, 8)).toBe("build");
+    expect(sectionAt(64, null)).toBe("full");
+  });
+});
+
+describe("deck channels", () => {
+  it("keep each deck's volume and EQ, changed a knob at a time", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { chA: { low: -1 } } }, T0);
+    send(s, { cmd: "deck", set: { chA: { vol: 0.5 }, chB: { high: 0.4 } } }, T0);
+    const d = s.party!.deck!;
+    expect(d.chA).toEqual({ vol: 0.5, low: -1, mid: 0, high: 0 });
+    expect(d.chB).toEqual({ vol: 1, low: 0, mid: 0, high: 0.4 });
+    expect(PartyCmd.safeParse({ cmd: "deck", set: { chA: { low: -2 } } }).success).toBe(false);
+    expect(PartyCmd.safeParse({ cmd: "deck", set: { chA: { bass: 1 } } }).success).toBe(false);
+    expect(restoredDeck(JSON.parse(JSON.stringify(d))).chA).toEqual(d.chA);
   });
 });

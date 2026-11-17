@@ -1,6 +1,6 @@
 # DJ deck
 
-Branch: `feature/dj-deck` (from main `5092d49`). Nothing is merged, pushed or deployed until approved.
+Branch: `feature/dj-deck`. Nothing is merged, pushed or deployed until approved.
 
 The party's music dock was a big YouTube video with a row of pill buttons. It's now a game-style DJ console that plays the game's own music.
 
@@ -20,8 +20,11 @@ The music is heard by everyone in the house whenever the deck plays. There is no
 
 ## The console
 
-- **Two turntables**: each record turns while the deck plays (at the deck's tempo), with the record's name and an eight-cell level meter fed by that deck's real output.
-- **Screen**: shows what's on air, the section (Intro, Groove, Full, Breakdown, Rising, Build-up, Drop!), four beat lights and the 32-bar phrase.
+- **Two turntables**: each record turns while the deck plays (at the deck's tempo), with the record's name and an eight-cell level meter fed by that deck's real output. Each deck also has:
+  - a **place bar**: where the deck is in its record. Click it (or use the arrow keys, Home for the start) to jump to another part. A recording shows its time (`2:11 / 4:19`) and jumps to the moment. A built-in record shows its bar and section, with the sections marked, and jumps to the start of a bar so it stays in time with the other deck.
+  - a **channel**: Hi, Mid and Low EQ knobs (left cuts the band right out, right lifts it a little; double-click resets) and its own volume.
+  - an **eject** (⏏): takes the record off. The other deck plays on its own, and the next record picked goes onto the empty deck.
+- **Screen**: shows what's on air, its section (Intro, Groove, Full, Breakdown, Rising, Build-up, Drop!) or a recording's time, four beat lights, how far through the record it is, and a transition under way.
 - **Mixer**:
   - *Play/Pause* pad.
   - *Crossfader* (A to B, equal power; double-click centres it).
@@ -29,14 +32,23 @@ The music is heard by everyone in the house whenever the deck plays. There is no
   - *Echo* pad.
   - *Drop* pad: a two-bar build-up with a snare roll and a riser, then a four-bar drop with a crash.
   - *Tempo*: −/+ 2 BPM, from 100 to 140.
-- **Record crate**: six records. Clicking one loads it onto the *cued* deck (whichever the crossfader is away from), as a DJ would.
+- **Transitions**: one press takes the music over to the other deck, starting on the next bar line.
+  - Five built-in presets: *Smooth* (blend, 8 bars), *Bass swap* (8), *Echo out* (4), *Filter fade* (8) and *Quick cut* (1).
+  - Or pick a style and a length (1, 2, 4, 8 or 16 bars) for the *Mix* pad. *+ Save* keeps that as a preset of your own (up to six, on this device, deletable with ×).
+  - Styles: *Blend* fades one into the other. *Bass swap* has both play but only one bass line at a time, swapping halfway. *Echo out* sends the old track into the echo as the new one comes up. *Filter out* strips the old track's bass and then its middle, then the new one takes over. *Cut* switches on the bar line at the end.
+  - While it runs, the Mix pad fills up bar by bar; pressing it (or grabbing the crossfader) stops the transition where it is. A transition needs the music playing and a record on the other deck.
+- **Record crate**: one row that scrolls sideways. Clicking a record loads it onto an empty deck if there is one, otherwise the deck that isn't on air, and it starts from its beginning. Recordings show their length.
 - **Just you**: volume, Mute and Fade (quieter away from the speakers).
 
-Everything on the deck is shared and synced through the house, except the "just you" row.
+Everything on the deck is shared and synced through the house, except the "just you" row and your saved transitions.
+
+The music player's simpler console has the place bar too, so you can jump around the song on air there.
 
 ## The music
 
-The six records are Neon Drift (house), Sunset Loop (deep house), Pillow Fort (lo-fi house), Rain on Glass (chill), Disco Kettle (nu-disco) and Night Bus (techno).
+Six built-in records: Neon Drift (house), Sunset Loop (deep house), Pillow Fort (lo-fi house), Rain on Glass (chill), Disco Kettle (nu-disco) and Night Bus (techno). There are also seven recordings (MP3s in `public/audio/dj/`, added separately); the 72-minute live set streams, the rest are decoded whole. Their lengths are written down in `party/deck.ts`, so every screen and the server know them before they load.
+
+Built-in records:
 
 - They're written as patterns in `features/party/deck/tracks.ts`: drums, bass, lead and a four-bar chord run.
 - They're synthesized in Web Audio on each screen (`deckEngine.ts`), so nothing is downloaded or streamed.
@@ -45,7 +57,11 @@ The six records are Neon Drift (house), Sunset Loop (deep house), Pillow Fort (l
 
 **Sync.** The house keeps an anchor: at server time `t` the beat was `beat`, at `bpm`. Each screen schedules notes about 160 ms ahead, at the audio time that matches the server time of their sixteenth. Both players hear the same note at the same moment. Any change of tempo, play or pause re-anchors, so the beat never jumps. A drop starts on the next bar line and is stored in beats.
 
-**Saving.** The deck is saved paused at its beat, with its records and mix. A house saved before the deck existed gets a fresh one.
+**Places in a record.** Each deck keeps a cue: the deck beat its record started on, so the record is `beat - cue` "track beats" in (counted at the default 124 BPM, so a tempo change speeds a record up rather than jumping it). Loading a record sets the cue; jumping moves it. A built-in record's cue is always on a bar line.
+
+**Transitions** are stored as `{style, from, to, start, beats}` in beats, and every screen works out the crossfader and each deck's EQ and echo from them at any beat (`mixAt`). So a transition moves on both screens at once with nothing more sent. Pausing holds it where it is. The next command after it ends writes down where the crossfader finished.
+
+**Saving.** The deck is saved paused at its beat, with its records, cues, channels and crossfader. A transition under way is saved finished. A house saved before the deck existed gets a fresh one.
 
 ## Music gear moves with the music
 
@@ -64,11 +80,12 @@ Steady light stops the pulses. A device that asks for reduced motion stops the c
 
 - **Shared:**
   - `catalog/party.json`, `catalog/index.ts`, `life/needs.ts`: the music player's `tune` place and what it does for fun.
-  - `party/deck.ts`: tracks, deck state, beat clock, sections, pump.
-  - `party/definitions.ts`: the `deck` and `drop` commands, `PartyState.deck`.
-  - `party/reducer.ts`: deck commands, taking turns, save and restore, holding when the house empties.
+  - `party/deck.ts`: tracks and their lengths, deck state, beat clock, sections, pump, channels, cues, transitions (`mixAt`).
+  - `party/definitions.ts`: the `deck`, `drop`, `mix` and `cue` commands, `PartyState.deck`.
+  - `party/reducer.ts`: deck commands, loading and ejecting, jumping, transitions, taking turns, save and restore, holding when the house empties.
 - **Client:**
-  - `features/party/deck/`: engine, tracks, console (`DjConsole.tsx`, with the booth and music-player pages), lights page (`LightsPage.tsx`), styles.
+  - `features/party/deck/`: engine (a three-band EQ and an echo send per deck, set every tick from the channel and the transition), tracks, recordings, console (`DjConsole.tsx`: booth and music-player pages, place bars, channel strips, transitions), lights page (`LightsPage.tsx`), styles.
+  - `partyUi.ts`: the transition you've picked and your saved presets (`cg.party.mix` in local storage).
   - `MusicDock.tsx`: runs the engine and the spatial mix, and shows the console only while your sim works the gear.
   - `partyHooks.ts`: `useGearInUse`, `usePartyGear`, `useSlider`.
   - `tools/LiveTools.tsx`: the "Play some music" verb; the old "Light controls…" and "Music…" menu items are gone.

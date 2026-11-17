@@ -1,7 +1,7 @@
 import type { Blueprint } from "../blueprint";
 import type { Catalog } from "../catalog";
 import type { LifeState } from "../life/state";
-import { anchorDeck, BUILD_BEATS, deckBeat, DEFAULT_DECK, DROP_BEATS, RECORDED_TRACKS, restoredDeck, type Deck } from "./deck";
+import { anchorDeck, BUILD_BEATS, channelOf, cueFor, deckBeat, DEFAULT_DECK, DROP_BEATS, restoredDeck, settleMix, type Deck, type DeckSide, type DeckTrackId } from "./deck";
 import { emptyParty, MAX_QUEUE, musicPosition, PARTY_ROLES, type PartyCmd, type PartyReject, type PartyRole, type PartyState, type Track } from "./definitions";
 
 /** What party gear the house has: any item with that role, on any floor. */
@@ -37,7 +37,7 @@ function advance(p: PartyState, now: number) {
  */
 export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): { reject: PartyReject | null; changed: boolean } {
   const p = partyOf(state);
-  if (cmd.cmd === "deck" || cmd.cmd === "drop") {
+  if (cmd.cmd === "deck" || cmd.cmd === "drop" || cmd.cmd === "mix" || cmd.cmd === "cue") {
     if (!ctx.gear.music) return { reject: "no-music", changed: false };
     let changed = applyDeck(deckOf(p), cmd, ctx.now);
     // the deck starting puts the YouTube music on hold (only one plays at a time)
@@ -48,7 +48,7 @@ export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): 
     }
     return { reject: null, changed };
   }
-  const result = applyMusic(p, cmd, ctx);
+  const result = applyMusic(p, cmd as Exclude<PartyCmd, { cmd: DeckCmd }>, ctx);
   // and the YouTube music starting puts the deck on hold
   if (p.music.playing && p.deck?.playing) {
     anchorDeck(p.deck, ctx.now);
@@ -61,29 +61,56 @@ export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): 
 /** The deck as it stands, made for a party saved before there was one. */
 export const deckOf = (p: PartyState): Deck => (p.deck ??= { ...DEFAULT_DECK });
 
+type DeckCmd = "deck" | "drop" | "mix" | "cue";
+
+/** Load a record onto a deck (or empty it). A record starts from its beginning: a built-in one on the bar line. */
+function load(d: Deck, side: DeckSide, id: DeckTrackId | null, beat: number) {
+  if (id === d[side]) return;
+  d[side] = id;
+  const cue = side === "a" ? "cueA" : "cueB";
+  if (id) d[cue] = cueFor(id, beat, 0);
+  else delete d[cue];
+}
+
 /** Work the deck. Reports whether anything changed. */
-function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: "deck" | "drop" }>, now: number): boolean {
+function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, now: number): boolean {
+  const beat = deckBeat(d, now);
+  settleMix(d, beat);
   if (cmd.cmd === "drop") {
     if (!d.playing) return false;
-    const beat = deckBeat(d, now);
     // one drop at a time
     if (d.drop !== null && beat < d.drop + BUILD_BEATS + DROP_BEATS) return false;
     // the build starts on the next bar line
     d.drop = Math.ceil(beat / 4) * 4;
     return true;
   }
-  const before = JSON.stringify(d);
-  const { playing, bpm, a, b, ...rest } = cmd.set;
-  const beat = deckBeat(d, now);
-  if (a !== undefined && a !== d.a) {
-    d.a = a;
-    if (RECORDED_TRACKS.some((track) => track.id === a)) d.cueA = beat;
-    else delete d.cueA;
+  if (cmd.cmd === "mix") {
+    // one transition at a time, while the music plays, and only to a deck with a record on it
+    if (!d.playing || d.mix) return false;
+    const to: 0 | 1 = d.xfade < 0.5 ? 1 : 0;
+    if (!d[to === 1 ? "b" : "a"]) return false;
+    d.mix = { style: cmd.style, from: d.xfade, to, start: Math.ceil(beat / 4 - 1e-9) * 4, beats: cmd.bars * 4 };
+    return true;
   }
-  if (b !== undefined && b !== d.b) {
-    d.b = b;
-    if (RECORDED_TRACKS.some((track) => track.id === b)) d.cueB = beat;
-    else delete d.cueB;
+  if (cmd.cmd === "cue") {
+    const id = d[cmd.side];
+    if (!id) return false;
+    const key = cmd.side === "a" ? "cueA" : "cueB";
+    const cue = cueFor(id, beat, cmd.pos);
+    if (cue === d[key]) return false;
+    d[key] = cue;
+    return true;
+  }
+  const before = JSON.stringify(d);
+  const { playing, bpm, a, b, chA, chB, xfade, ...rest } = cmd.set;
+  if (a !== undefined) load(d, "a", a, beat);
+  if (b !== undefined) load(d, "b", b, beat);
+  if (chA) d.chA = { ...channelOf(d, "a"), ...chA };
+  if (chB) d.chB = { ...channelOf(d, "b"), ...chB };
+  // a hand on the crossfader takes over from a transition; it starts from where the transition had got to
+  if (xfade !== undefined) {
+    d.xfade = xfade;
+    if (d.mix) d.mix = null;
   }
   // the beat is re-anchored before the tempo changes or the music stops or starts, so it carries on from where it is
   if ((playing !== undefined && playing !== d.playing) || (bpm !== undefined && bpm !== d.bpm)) anchorDeck(d, now);
@@ -93,7 +120,7 @@ function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: "deck" | "drop" }>, no
   return JSON.stringify(d) !== before;
 }
 
-function applyMusic(p: PartyState, cmd: Exclude<PartyCmd, { cmd: "deck" | "drop" }>, ctx: PartyContext): { reject: PartyReject | null; changed: boolean } {
+function applyMusic(p: PartyState, cmd: Exclude<PartyCmd, { cmd: DeckCmd }>, ctx: PartyContext): { reject: PartyReject | null; changed: boolean } {
   const m = p.music;
   const { now } = ctx;
   const done = (changed: boolean) => ({ reject: null, changed });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Id } from "../ops";
-import { DECK_TRACK_IDS, DEFAULT_DECK, MAX_BPM, MIN_BPM, type Deck } from "./deck";
+import { DECK_TRACK_IDS, DEFAULT_DECK, MAX_BPM, MIN_BPM, MIX_BARS, MIX_STYLE_IDS, type Deck } from "./deck";
 import { isVideoId } from "./youtube";
 
 /**
@@ -118,6 +118,12 @@ export function musicPosition(m: Pick<Music, "playing" | "at">, now: number): nu
 const TrackId = Id;
 
 /** What a player may ask of the party. The server checks each one against the house as it stands. */
+/** A change to one deck's channel: volume and EQ. */
+const Channel = z
+  .object({ vol: z.number().min(0).max(1), low: z.number().min(-1).max(1), mid: z.number().min(-1).max(1), high: z.number().min(-1).max(1) })
+  .partial()
+  .strict();
+
 export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({
     cmd: z.literal("lights"),
@@ -151,19 +157,26 @@ export const PartyCmd = z.discriminatedUnion("cmd", [
     cmd: z.literal("deck"),
     set: z
       .object({
-        a: z.enum(DECK_TRACK_IDS),
-        b: z.enum(DECK_TRACK_IDS),
+        /** null empties the deck */
+        a: z.enum(DECK_TRACK_IDS).nullable(),
+        b: z.enum(DECK_TRACK_IDS).nullable(),
         xfade: z.number().min(0).max(1),
         bpm: z.number().int().min(MIN_BPM).max(MAX_BPM),
         filter: z.number().min(-1).max(1),
         echo: z.boolean(),
         playing: z.boolean(),
+        chA: Channel,
+        chB: Channel,
       })
       .partial()
       .strict(),
   }),
   /** Start a build-up on the next bar; the drop lands two bars later. */
   z.object({ cmd: z.literal("drop") }),
+  /** Go over to the other deck: from the next bar line, over `bars`, in a style. */
+  z.object({ cmd: z.literal("mix"), style: z.enum(MIX_STYLE_IDS), bars: z.number().int().refine((n) => (MIX_BARS as readonly number[]).includes(n), "not a length a transition comes in") }),
+  /** Jump a deck to another part of its record: `pos` track beats in (at the default tempo). */
+  z.object({ cmd: z.literal("cue"), side: z.enum(["a", "b"]), pos: z.number().min(0).max(1e6) }),
 ]);
 export type PartyCmd = z.infer<typeof PartyCmd>;
 

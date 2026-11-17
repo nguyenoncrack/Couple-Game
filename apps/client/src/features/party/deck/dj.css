@@ -20,7 +20,10 @@
 }
 
 .dj {
-  width: min(660px, calc(100vw - 28px));
+  width: min(760px, calc(100vw - 28px));
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px 12px 10px;
   border: var(--border);
   border-radius: 22px;
@@ -520,11 +523,17 @@
 }
 
 /* record crate */
+/* one row of sleeves that scrolls sideways */
 .dj-crate {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(62px, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: 96px;
   gap: 8px;
   margin-top: 10px;
+  padding: 4px 2px 8px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #4a4555 transparent;
 }
 .dj-sleeve {
   position: relative;
@@ -559,6 +568,17 @@
     repeating-linear-gradient(135deg, var(--c) 0 6px, color-mix(in srgb, var(--c) 70%, black) 6px 12px);
   box-shadow: inset 0 0 0 1.5px var(--dj-line);
   margin-bottom: 3px;
+}
+.dj-sleeve-name,
+.dj-sleeve-style {
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.dj-sleeve-style {
+  -webkit-line-clamp: 1;
 }
 .dj-sleeve-name {
   font-size: 12px;
@@ -639,6 +659,295 @@
   font: 600 16px var(--logo);
   box-shadow: var(--shadow);
   cursor: pointer;
+}
+
+/* an empty deck, and taking a record off */
+.dj-table {
+  position: relative;
+}
+.dj-table.is-empty {
+  opacity: 0.6;
+}
+.dj-vinyl-empty {
+  background: repeating-radial-gradient(circle, #24212c 0 2px, #2b2834 2px 4px);
+  box-shadow: inset 0 0 0 2px #3a3646;
+}
+.dj-eject {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 2px solid var(--dj-line);
+  background: #3a3646;
+  color: var(--dj-text);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+.dj-eject:hover {
+  background: var(--dj-drop);
+  color: var(--dj-well);
+}
+
+/* where a deck is in its record */
+.dj-place {
+  justify-self: stretch;
+  display: grid;
+  gap: 3px;
+  padding: 0 4px;
+}
+.dj-placebar {
+  position: relative;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--dj-well);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+.dj-placebar:focus-visible {
+  outline: 2px solid var(--dj-echo);
+  outline-offset: 2px;
+}
+.dj-placefill {
+  position: absolute;
+  inset: 2px auto 2px 2px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c) 45%, transparent), var(--c));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--c) 55%, transparent);
+  max-width: calc(100% - 4px);
+}
+.dj-placemark {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: #ffffff40;
+}
+.dj-placetext {
+  font: 10px var(--mono);
+  color: var(--dj-soft);
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+.dj-section.s-rec {
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+}
+
+/* a deck's channel: EQ knobs and volume */
+.dj-channel {
+  justify-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 6px 0;
+  border-top: 2px solid #ffffff0d;
+}
+.dj-knob-wrap.small .dj-knob {
+  width: 30px;
+  height: 30px;
+}
+.dj-knob-wrap.small .dj-knob-cap {
+  width: 20px;
+  height: 20px;
+}
+.dj-knob-wrap.small .dj-knob-cap::after {
+  height: 6px;
+}
+.dj-knob-wrap.small .dj-label {
+  font-size: 9px;
+}
+.dj-chvol {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 48px;
+}
+.dj-chvol input {
+  width: 100%;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #2c2935, var(--c));
+  box-shadow: inset 0 0 0 1.5px var(--dj-line);
+  cursor: pointer;
+}
+.dj-chvol input::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 18px;
+  border-radius: 4px;
+  border: 2px solid var(--dj-line);
+  background: #cfcad8;
+}
+.dj-chvol .dj-label {
+  font-size: 9px;
+}
+
+/* transitions */
+.dj-mixpanel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: #1b1921;
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+}
+.dj-mixrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.dj-mixlabel {
+  margin-right: 2px;
+}
+.dj-preset-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.dj-preset {
+  display: grid;
+  justify-items: start;
+  gap: 0;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 2px solid var(--dj-line);
+  background: linear-gradient(180deg, #3f3a49, #2f2b38);
+  box-shadow: 0 3px 0 var(--dj-line);
+  color: var(--dj-text);
+  font: 600 12px var(--logo);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.06s;
+}
+.dj-preset small {
+  font: 9px var(--mono);
+  color: var(--dj-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dj-preset-wrap.mine .dj-preset {
+  border-color: color-mix(in srgb, var(--dj-echo) 60%, var(--dj-line));
+  padding-right: 22px;
+}
+.dj-preset:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--dj-line);
+}
+.dj-preset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.dj-preset.on {
+  opacity: 1;
+  background: var(--dj-echo);
+  color: var(--dj-well);
+}
+.dj-preset.on small {
+  color: var(--dj-well);
+}
+.dj-preset-x {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dj-soft);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dj-preset-x:hover {
+  color: var(--dj-drop);
+}
+.dj-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--dj-well);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+}
+.dj-segbtn {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dj-soft);
+  font: 600 11px var(--logo);
+  cursor: pointer;
+}
+.dj-segbtn.on {
+  background: #3a3646;
+  color: var(--dj-text);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+}
+.dj-seg-unit {
+  padding: 0 6px 0 2px;
+  font-size: 9px;
+}
+.dj-save {
+  display: inline-flex;
+  gap: 4px;
+}
+.dj-save input {
+  width: 120px;
+  padding: 3px 8px;
+  border-radius: 9px;
+  border: 2px solid var(--dj-line);
+  background: var(--dj-well);
+  color: var(--dj-text);
+  font: 12px var(--logo);
+}
+.dj-mixgo {
+  --glow: var(--dj-echo);
+  position: relative;
+  margin-left: auto;
+  height: 40px;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--dj-echo) 75%, white);
+}
+.dj-mixgo small {
+  font: 9px var(--mono);
+  opacity: 0.8;
+}
+.dj-mixgo.is-running {
+  color: var(--dj-text);
+  background: #2f2b38;
+  text-shadow: 0 1px 2px #000000aa;
+}
+.dj-mixbar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--mixk, 0) * 100%);
+  background: var(--dj-echo);
+  z-index: -1;
+}
+.dj-mixgo.is-running {
+  isolation: isolate;
+}
+.dj-mixhint {
+  margin: 0;
+}
+.dj-fx .dj-fx-mix {
+  background: var(--dj-echo);
+}
+.dj-fader.is-mixing input::-webkit-slider-thumb {
+  box-shadow: 0 3px 0 var(--dj-line), 0 0 12px var(--dj-echo);
 }
 
 /* page tabs and stepping away */
@@ -795,9 +1104,6 @@
   .dj-fader {
     order: 5;
     flex-basis: 100%;
-  }
-  .dj-crate {
-    grid-template-columns: repeat(3, 1fr);
   }
   .dj-top-player {
     grid-template-columns: 1fr 1fr;

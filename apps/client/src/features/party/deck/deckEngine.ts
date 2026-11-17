@@ -1,4 +1,4 @@
-import { BUILD_BEATS, DEFAULT_BPM, deckBeat, sectionAt, type Deck, type DeckTrackId } from "@cg/shared";
+import { BUILD_BEATS, channelOf, cueOf, DEFAULT_BPM, deckBeat, mixAt, sectionOf, type Deck, type DeckSide, type DeckTrackId } from "@cg/shared";
 import { recordingOffset, RECORDING_URLS, STREAMED_RECORDINGS } from "./recordings";
 import { StreamedRecording } from "./streamedRecording";
 import { bassNote, chordVoicing, hitAt, LAYERS, leadNote, midiHz, TRACK_DEFS, type TrackDef } from "./tracks";
@@ -7,9 +7,14 @@ import { bassNote, chordVoicing, hitAt, LAYERS, leadNote, midiHz, TRACK_DEFS, ty
  * The DJ deck's sound, made in Web Audio from the shared deck state. Notes are scheduled ahead by beat.
  * Recordings start at the offset given by the same clock and feed the same mixer.
  *
- *   deck A voices ─ gain A ─ meter A ┐
- *                                    ├─ low-pass ─ high-pass ─┬─────────────── out ─ compressor ─ speakers
- *   deck B voices ─ gain B ─ meter B ┘                        └─ echo (delay) ─┘
+ *   deck A ─ EQ (low, mid, high) ─ gain A ─┬─ meter A
+ *                                          ├──────────┐
+ *                                          └─ echo send A ─┐
+ *                                                     ├─ low-pass ─ high-pass ─┬──────────── out ─ compressor ─ speakers
+ *   deck B ─ EQ ─ gain B ─ (the same) ────────────────┘                        └─ echo ───┘
+ *
+ * A deck's gain is the crossfader times its channel volume. Its EQ is its channel's, plus what a transition is doing
+ * to it. Both are worked out again every tick, so a transition moves smoothly on every screen at once.
  */
 
 /** How far ahead notes are scheduled (seconds). */
@@ -26,6 +31,9 @@ export function stepsDue(next: number, nowBeat: number, horizonBeat: number): [f
 /** Equal-power crossfade: how loud each deck is for a crossfader position. */
 export const xfadeGains = (x: number): [number, number] => [Math.cos((x * Math.PI) / 2), Math.sin((x * Math.PI) / 2)];
 
+/** An EQ knob (-1 to 1) in decibels: the left half cuts the band right down, the right half lifts it a little. */
+export const eqDb = (v: number) => (v >= 0 ? v * 6 : v * 30);
+
 /** Filter knob to cut-offs: left closes a low-pass down to 180 Hz, right opens a high-pass up to 2.4 kHz. */
 export function filterCutoffs(k: number): { low: number; high: number } {
   return { low: k < 0 ? 20_000 * (180 / 20_000) ** -k : 20_000, high: k > 0 ? 20 * (2_400 / 20) ** k : 20 };
@@ -36,7 +44,10 @@ const PATTERNS: Readonly<Partial<Record<DeckTrackId, TrackDef>>> = TRACK_DEFS;
 
 interface DeckBus {
   input: GainNode;
+  /** The EQ, low to high; a new input feeds `eq[0]`. */
+  eq: [BiquadFilterNode, BiquadFilterNode, BiquadFilterNode];
   gain: GainNode;
+  echoSend: GainNode;
   meter: AnalyserNode;
   recording?: AudioBufferSourceNode;
   stream?: StreamedRecording;
@@ -189,13 +200,29 @@ export class DeckEngine {
     tone.connect(this.out);
     const bus = (): DeckBus => {
       const input = c.createGain();
+      const band = (type: BiquadFilterType, frequency: number) => {
+        const f = c.createBiquadFilter();
+        f.type = type;
+        f.frequency.value = frequency;
+        f.gain.value = 0;
+        return f;
+      };
+      const eq: DeckBus["eq"] = [band("lowshelf", 220), band("peaking", 1100), band("highshelf", 3800)];
+      eq[1].Q.value = 0.8;
       const gain = c.createGain();
+      const echoSend = c.createGain();
+      echoSend.gain.value = 0;
       const meter = c.createAnalyser();
       meter.fftSize = 512;
-      input.connect(gain);
+      input.connect(eq[0]);
+      eq[0].connect(eq[1]);
+      eq[1].connect(eq[2]);
+      eq[2].connect(gain);
       gain.connect(meter);
       gain.connect(this.low);
-      return { input, gain, meter };
+      gain.connect(echoSend);
+      echoSend.connect(this.delay);
+      return { input, eq, gain, echoSend, meter };
     };
     this.buses = [bus(), bus()];
     const len = c.sampleRate * 2;
@@ -204,15 +231,23 @@ export class DeckEngine {
     for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
   }
 
-  /** Set the mixer from the deck: crossfader, filter, echo, volume. */
-  private apply() {
+  /** Set the mixer from the deck at `beat` (now, if not given): crossfader, channels, transition, filter, echo, volume. */
+  private apply(beat?: number) {
     const c = this.ctx;
     const d = this.deck;
     if (!c || !this.buses) return;
     const at = c.currentTime;
-    const [ga, gb] = d ? xfadeGains(d.xfade) : [0, 0];
-    this.buses[0].gain.gain.setTargetAtTime(ga, at, 0.04);
-    this.buses[1].gain.gain.setTargetAtTime(gb, at, 0.04);
+    const now = d ? mixAt(d, beat ?? deckBeat(d, this.now())) : null;
+    const gains = now ? xfadeGains(now.xfade) : [0, 0];
+    (["a", "b"] as DeckSide[]).forEach((side, i) => {
+      const bus = this.buses![i]!;
+      const ch = d ? channelOf(d, side) : null;
+      const fx = now?.fx[side];
+      bus.gain.gain.setTargetAtTime(d?.[side] && ch ? gains[i]! * ch.vol : 0, at, 0.04);
+      const bands = [(ch?.low ?? 0) + (fx?.low ?? 0), (ch?.mid ?? 0) + (fx?.mid ?? 0), (ch?.high ?? 0) + (fx?.high ?? 0)];
+      bus.eq.forEach((f, j) => f.gain.setTargetAtTime(eqDb(Math.max(-1, Math.min(1, bands[j]!))), at, 0.05));
+      bus.echoSend.gain.setTargetAtTime((fx?.echo ?? 0) * 0.55, at, 0.08);
+    });
     const { low, high } = filterCutoffs(d?.filter ?? 0);
     this.low.frequency.setTargetAtTime(low, at, 0.05);
     this.high.frequency.setTargetAtTime(high, at, 0.05);
@@ -234,7 +269,7 @@ export class DeckEngine {
     bus.stream = undefined;
     window.setTimeout(() => old.disconnect(), 300);
     bus.input = c.createGain();
-    bus.input.connect(bus.gain);
+    bus.input.connect(bus.eq[0]);
   }
 
   private async loadRecording(c: AudioContext, id: DeckTrackId, url: string) {
@@ -291,28 +326,38 @@ export class DeckEngine {
     // server time to audio time: measured each tick, so a clock correction is followed
     const offset = c.currentTime - serverMs / 1000;
     const beatNow = deckBeat(d, serverMs);
-    this.syncRecording(c, this.buses[0], d.a, d.cueA ?? 0, beatNow, d.bpm);
-    this.syncRecording(c, this.buses[1], d.b, d.cueB ?? 0, beatNow, d.bpm);
-    const [from, to] = stepsDue(this.next, beatNow, beatNow + (LOOKAHEAD * d.bpm) / 60);
-    const [ga, gb] = xfadeGains(d.xfade);
-    const patternA = PATTERNS[d.a];
-    const patternB = PATTERNS[d.b];
+    if (d.a) this.syncRecording(c, this.buses[0], d.a, cueOf(d, "a"), beatNow, d.bpm);
+    if (d.b) this.syncRecording(c, this.buses[1], d.b, cueOf(d, "b"), beatNow, d.bpm);
+    // the crossfader and EQ move with a transition
+    this.apply(beatNow);
+    const horizon = beatNow + (LOOKAHEAD * d.bpm) / 60;
+    const [from, to] = stepsDue(this.next, beatNow, horizon);
+    // a deck that's silent now and over the next moment gets no notes (a transition may be bringing it in)
+    const xNow = mixAt(d, beatNow).xfade;
+    const xAhead = mixAt(d, horizon).xfade;
+    const [ga] = xfadeGains(Math.min(xNow, xAhead));
+    const [, gb] = xfadeGains(Math.max(xNow, xAhead));
+    const patternA = d.a ? PATTERNS[d.a] : undefined;
+    const patternB = d.b ? PATTERNS[d.b] : undefined;
+    // a built-in record plays from its own place: the deck's sixteenths, less where the record was cued
+    const cueA = Math.round(cueOf(d, "a") * 4);
+    const cueB = Math.round(cueOf(d, "b") * 4);
     for (let s = from; s < to; s++) {
       const serverAt = d.t + ((s / 4 - d.beat) * 60_000) / d.bpm;
       const at = Math.max(c.currentTime, serverAt / 1000 + offset);
-      if (ga > 0.01 && patternA) this.step(c, this.buses[0].input, patternA, d, s, at);
-      if (gb > 0.01 && patternB) this.step(c, this.buses[1].input, patternB, d, s, at);
+      if (ga > 0.01 && patternA) this.step(c, this.buses[0].input, patternA, d, s - cueA, s, at);
+      if (gb > 0.01 && patternB) this.step(c, this.buses[1].input, patternB, d, s - cueB, s, at);
       this.fx(c, d, s, at);
     }
     this.next = to;
   }
 
-  /** One sixteenth of one record. */
-  private step(c: AudioContext, out: AudioNode, def: TrackDef, d: Deck, s: number, at: number) {
-    const beat = s / 4;
+  /** One sixteenth of one record: `s` is the record's own sixteenth, `deckS` the deck's (a drop follows the deck). */
+  private step(c: AudioContext, out: AudioNode, def: TrackDef, d: Deck, s: number, deckS: number, at: number) {
+    const beat = deckS / 4;
     const bar = Math.floor(s / 16);
     const pos = ((s % 16) + 16) % 16;
-    const section = sectionAt(beat, d.drop);
+    const section = sectionOf(s / 4, beat, d.drop);
     const L = LAYERS[section];
     const sixteenth = 15 / d.bpm;
     const t = at + (pos % 2 ? def.swing * sixteenth : 0);
