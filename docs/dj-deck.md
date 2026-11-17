@@ -48,6 +48,11 @@ The music is heard by everyone in the house whenever the deck plays. There is no
   - *Preview cue* plays the incoming record from its start point, and *Preview transition* plays the transition from 16 beats before it, both on a second, private engine at the deck's tempo: only you hear it, and the live mix is turned down to 30% for you meanwhile. Nothing is sent to the house.
   - *Queue transition* queues it as a timed transition (replacing one already queued), so it saves with the set like any other.
   - **Suggested mix**: once both records are analyzed, up to three suggestions with exact times, a style, a length and a short reason ("At 0:31.2 on Deck B, bring in Deck A at 0:13.3 with an 8-bar bass swap." / "The next 8-bar phrase on B; A's drop lands as it ends."). Each has *Preview*, *Edit* (puts it on the waveforms to adjust) and *Apply* (queues it without starting it).
+- **Link songs** (at the top of My Sets): a chain of any number of records (up to 24), each handing over to the next: 1 ➜ 2 ➜ 3 ➜ …. It starts from the record on air and whatever is queued after it.
+  - *+ Add a song* puts a record at the end and works its link out at once. ↑ ↓ reorder, × removes.
+  - Each link has its time (on the outgoing record), style and length, and each record a start time, all editable. *Auto* (or *Auto-link all*) works a link out like a suggested mix: late in the outgoing record (its outro), with the next one's drop landing as the link ends. With no analysis yet it's an 8-bar blend just before the end. A link before its record gets there, or past its end, is flagged.
+  - *Link to what's playing* carries the mix on into the chain without stopping (`setchain`). *Play from the start* loads it and plays from the first record. *Save* keeps it in My Sets.
+  - Each link plays out in turn: when one finishes, the next record goes onto the free deck, parked at its start, with its link queued.
 - **My Sets** (a tab at the booth): a set is records in order, each with where it starts, its cue points, and its transition to the next (the time on it, style and length).
   - *In the decks* shows the set being played, or the one your mixing records as you go: every transition you queue or start adds the next record, and calling one off drops it.
   - *Save Set* (separate from *+ Save preset*, which keeps a transition preset) keeps it on this device under a name; saving under the same name updates it.
@@ -78,7 +83,7 @@ Built-in records:
 
 A **timed** transition also has `at` (the place in the outgoing record) and `inAt` (the place in the incoming one). After every deck command the house works out `start` from where the outgoing record is (`null` while that deck is paused on its own), and parks the incoming deck: its cue is set so it is at `inAt` on `start`, and `wait` keeps it there until then (`trackPosition` and the engine both respect it; a parked recording is fetched ahead so it comes in on the beat). *Mix now* sets `start` to now; *Cancel* (`unmix`) turns the park into a hold.
 
-**Sets.** The set in the decks is `set: {name, steps, step}` on the deck, where `step` is the record on air. When a set's transition finishes, any screen sends `setstep` (the house also checks before every deck command). The house then moves `step` on, puts the next record on the deck that's free, and queues the next transition as a timed one. Saved sets live on each device in `cg.party.sets`, and `setload` sends one to the house. Saved cues come back with their records.
+**Sets.** The set in the decks is `set: {name, steps, step}` on the deck, where `step` is the record on air. `setchain` replaces everything after the record on air with a chain (keeping the steps already played), and queues its first link; it's refused while a transition is under way, or if the chain doesn't start with the record on air. When a set's transition finishes, any screen sends `setstep` (the house also checks before every deck command). The house then moves `step` on, puts the next record on the deck that's free, and queues the next transition as a timed one. Saved sets live on each device in `cg.party.sets`, and `setload` sends one to the house. Saved cues come back with their records.
 
 **Song analysis** (`features/party/deck/analysis/`). Every record gets a waveform, tempo, beat grid, downbeat and a per-second energy curve:
 - Recordings are fetched and decoded at 11 kHz mono in the background while the booth's console is open (the records on the decks first; the 72-minute set in 1.5 MB byte ranges). They play as usual meanwhile.
@@ -113,12 +118,12 @@ Steady light stops the pulses. A device that asks for reduced motion stops the c
 - **Shared:**
   - `catalog/party.json`, `catalog/index.ts`, `life/needs.ts`: the music player's `tune` place and what it does for fun.
   - `party/deck.ts`: tracks and their lengths, deck state, beat clock, sections, pump, channels, cues, transitions (`mixAt`).
-  - `party/definitions.ts`: the `deck`, `drop`, `mix`, `cue`, `drop-cue`, `transport`, `mark`, `mixnow`, `unmix`, `setload` and `setstep` commands (`mix` takes optional `at` and `inAt`), `PartyState.deck`.
+  - `party/definitions.ts`: the `deck`, `drop`, `mix`, `cue`, `drop-cue`, `transport`, `mark`, `mixnow`, `unmix`, `setload`, `setchain` and `setstep` commands (`mix` takes optional `at` and `inAt`), `PartyState.deck`.
   - `party/reducer.ts`: deck commands, loading and ejecting, jumping, transitions, taking turns, save and restore, holding when the house empties.
 - **Client:**
   - `features/party/deck/`: engine (a three-band EQ and an echo send per deck, set every tick from the channel and the transition), tracks, recordings, console (`DjConsole.tsx`: booth and music-player pages, place bars, channel strips, transitions), lights page (`LightsPage.tsx`), styles.
   - `partyUi.ts`: the transition you've picked and your saved presets (`cg.party.mix` in local storage), and your saved sets (`cg.party.sets`).
-  - `deck/SetsPage.tsx`: the My Sets tab.
+  - `deck/SetsPage.tsx`: the My Sets tab. `deck/ChainEditor.tsx`: Link songs. `deck/analysis/chain.ts`: working links out.
   - `deck/SoundPage.tsx`: the Sound tab (waveform lanes on canvas, points, preview, suggestions). `deck/preview.ts`: the private preview engine and the duck. `deck/analysis/`: `analyze.ts` (listening), `trackAnalysis.ts` (the background queue and IndexedDB cache), `suggest.ts` (suggested transitions).
   - `MusicDock.tsx`: runs the engine and the spatial mix, moves a set on when its transition ends, and shows the console only while your sim works the gear.
   - `partyHooks.ts`: `useGearInUse`, `usePartyGear`, `useSlider`.
@@ -129,5 +134,5 @@ Steady light stops the pulses. A device that asks for reduced motion stops the c
   - `shared/__tests__/deck.test.ts`
   - `client/features/party/deck/deckTime.test.ts` (typed times)
   - `client/features/party/deck/deck.test.ts`
-  - `client/features/party/deck/analysis/analyze.test.ts` and `suggest.test.ts`
+  - `client/features/party/deck/analysis/analyze.test.ts`, `suggest.test.ts` and `chain.test.ts`
   - the server wire test in `server/__tests__/party.test.ts`

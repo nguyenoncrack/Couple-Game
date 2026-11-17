@@ -92,7 +92,7 @@ export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): 
 export const deckOf = (p: PartyState): Deck => (p.deck ??= { ...DEFAULT_DECK });
 
 type DeckCmd = (typeof DECK_CMDS)[number];
-const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark", "mixnow", "unmix", "setload", "setstep"] as const;
+const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark", "mixnow", "unmix", "setload", "setchain", "setstep"] as const;
 export const isDeckCmd = (cmd: PartyCmd): cmd is Extract<PartyCmd, { cmd: DeckCmd }> => (DECK_CMDS as readonly string[]).includes(cmd.cmd);
 
 const S = (side: DeckSide) => (side === "a" ? "A" : "B");
@@ -395,6 +395,23 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
       d.xfade = 0;
       d.set = { name: cmd.set.name.trim().slice(0, 32) || null, steps: steps.map((s) => ({ ...s, cues: [] })), step: 0 };
       queueStep(d, "b");
+      return;
+    }
+    case "setchain": {
+      const chain = restoredSteps(cmd.steps);
+      const onAir: DeckSide = d.xfade < 0.5 ? "a" : "b";
+      const first = chain[0];
+      if (!first || chain.length < 2 || d[onAir] !== first.track) return false;
+      // (a transition under way finishes first; a queued one is replaced by the chain's)
+      if (d.mix && !mixQueued(d.mix, beat)) return false;
+      d.mix = null;
+      const s = d.set;
+      const continuing = s && s.steps[s.step]?.track === first.track;
+      const done = continuing ? s.steps.slice(0, s.step) : [];
+      const from = continuing ? s.steps[s.step]!.from : (d[`entry${S(onAir)}`] ?? 0);
+      const steps = [...done, { ...first, from, cues: [] }, ...chain.slice(1).map((x) => ({ ...x, cues: [] }))].slice(0, MAX_SET_STEPS);
+      d.set = { name: continuing ? s.name : null, steps, step: done.length };
+      queueStep(d, otherSide(onAir));
       return;
     }
     case "setstep":
