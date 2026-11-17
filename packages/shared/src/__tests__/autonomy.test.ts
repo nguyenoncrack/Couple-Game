@@ -134,6 +134,29 @@ describe("free will", () => {
     expect(life.command("ben", bp, T0 + 200, () => life.use("ben", bp, chair.id, "sit", T0 + 200))).toBe("taken");
   });
 
+  it("keeps a character at the DJ booth or a music player however long their player's away, needs or not", () => {
+    for (const [catalogId, action] of [
+      ["dj_booth", "dj"],
+      ["music_player", "tune"],
+    ] as const) {
+      const { bp: start, life } = house(14, ["ana", "ben"]);
+      const bp = apply(start, { t: "object.place", level: 0, id: "gear000001", catalogId, x: 1, z: 18, rot: 0 });
+      // bursting, worn out and lonely, with as much fun as anyone needs
+      setNeeds(life, "ana", { bladder: URGENT - 2, energy: 12, social: 10, fun: 99 });
+      expect(life.command("ana", bp, T0, () => life.use("ana", bp, "gear000001", action, T0))).toBeNull();
+      const a = life.state.avatars.ana!;
+      const at = arrivalTime(a);
+      const spot = a.use!.slot;
+      let left = 0;
+      run(life, bp, T0, 15 * 60_000, (t) => {
+        if (!left && t > at && (a.use?.action !== action || a.use.slot !== spot)) left = t;
+      });
+      expect(left).toBe(0);
+      // never acting on their own there, so their partner (on free will) doesn't pull them away either
+      expect(a.auto).toBeUndefined();
+    }
+  });
+
   it("lets what the player chose carry on once they go quiet, until it's done its job or something's pressing", () => {
     const { bp, life } = house(6);
     const tv = Object.values(bp.levels[0]!.objects).find((o) => o.catalogId === "tv_stand")!;
