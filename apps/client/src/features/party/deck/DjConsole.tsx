@@ -208,7 +208,7 @@ export function DjConsole({ deck: shared, engine, mode }: ConsoleProps) {
         <button className={`dj-chip ${fade ? "on" : ""}`} onClick={() => setMusicPrefs({ fade: !fade })} aria-pressed={fade} title="Quieter the further you walk from the speakers">
           Fade
         </button>
-        <span className="dj-note">{musicOn ? "Just you" : "Music is switched off in the game"}</span>
+        <span className="dj-note">{musicOn ? "Just you" : "Sound is switched off in the game"}</span>
       </footer>
       {!heard && deck.playing && musicOn && (
         <button className="dj-hear" onClick={() => engine.start()}>

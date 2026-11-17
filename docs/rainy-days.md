@@ -15,7 +15,7 @@ The "Rainy Days" update: a shared day and night, rain, a cozy Build catalog, and
 - Rain can be forced on or off (`WorldCmd` `weather`, eased over 6 s from whatever it was) or handed back to the natural pattern. The house stores only that forced setting.
 - Rain is drawn as GPU-animated streaks. A **shelter map** from the house (roofs, upper floors, rooms shut in by walls) hides streaks below whatever covers them, so hiding the roof in cutaway mode never lets rain in.
 - Puddles with ripples gather on footpaths and on paved cells you lay, and dry out over about 90 s. The sky goes overcast, light softens, the ground darkens.
-- Rain audio is filtered noise in the ambience layer (so it follows the music switch): low and quiet indoors, bright and loud outside, judged from your character (Live) or where the camera looks (Build).
+- Rain audio is filtered noise in the ambience layer (so it follows the Sound switch, and the phone's Rain switch turns it and the falling rain off just for you): low and quiet indoors, bright and loud outside, judged from your character (Live) or where the camera looks (Build).
 - Dev controls (`ui/DevWorld.tsx`, development builds only) jump to sunrise, noon, sunset or midnight and force rain, clear or auto. The server accepts the `world` intent from any member; only the buttons are dev-only.
 
 ## Cozy Build catalog

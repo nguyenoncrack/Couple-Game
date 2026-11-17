@@ -1,7 +1,7 @@
 /**
  * Quiet country sounds under the music: a faint breeze that swells and drops, and now and then a bird calling
  * from somewhere off to one side. Everything is made in Web Audio, so there's nothing to download, and it comes
- * and goes with the music (the same switch), fading rather than cutting.
+ * and goes with the game's Sound switch, fading rather than cutting (the rain has its own switch too).
  */
 
 const LEVEL = 0.9;
@@ -16,9 +16,22 @@ let running = false;
 let rainLayer: { source: AudioBufferSourceNode; low: BiquadFilterNode; high: BiquadFilterNode; level: GainNode } | null = null;
 /** What the weather wants: how hard it's raining (0..1) and whether the listener is indoors (0 outside, 1 inside). */
 let rainWant = { level: 0, indoors: 0 };
+/** The player's Rain switch. */
+let rainOn = true;
+
+/** Switch the rain's sound on or off (it fades). */
+export function setAmbienceRain(on: boolean) {
+  if (on === rainOn) return;
+  rainOn = on;
+  applyRain();
+}
 
 export function startAmbience() {
-  if (running) return;
+  if (running) {
+    // (made before a click, it may still be waiting for one)
+    if (ctx?.state === "suspended") void ctx.resume().catch(() => {});
+    return;
+  }
   try {
     ctx ??= new AudioContext();
   } catch {
@@ -107,12 +120,12 @@ function applyRain() {
   if (!running || !ctx || !master) return;
   const c = ctx;
   if (!rainLayer) {
-    if (rainWant.level <= 0.01) return;
+    if (rainWant.level <= 0.01 || !rainOn) return;
     rainLayer = startRain(c, master);
   }
   const { level, indoors } = rainWant;
   const r = rainLayer;
-  const gain = RAIN_LEVEL * level * (1 - (1 - RAIN_INDOOR_GAIN) * indoors);
+  const gain = rainOn ? RAIN_LEVEL * level * (1 - (1 - RAIN_INDOOR_GAIN) * indoors) : 0;
   // geometric blend between the bright and the muffled cutoff
   const hz = RAIN_OUTDOORS_HZ * Math.pow(RAIN_INDOORS_HZ / RAIN_OUTDOORS_HZ, indoors);
   r.level.gain.setTargetAtTime(gain, c.currentTime, 0.5);
@@ -123,7 +136,7 @@ function applyRain() {
 if (import.meta.env.DEV) {
   Object.assign(window, {
     /** What the rain sounds like right now: whether the layer's running, and its level and cutoff (development only). */
-    __rainSound: () => ({ running, want: rainWant, gain: rainLayer?.level.gain.value ?? null, cutoff: rainLayer?.low.frequency.value ?? null, state: ctx?.state ?? null }),
+    __rainSound: () => ({ running, rainOn, want: rainWant, gain: rainLayer?.level.gain.value ?? null, cutoff: rainLayer?.low.frequency.value ?? null, state: ctx?.state ?? null }),
   });
 }
 

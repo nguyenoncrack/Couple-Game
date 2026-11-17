@@ -14,7 +14,7 @@ Nothing about the party is on screen otherwise: no Party button, no panel, no ba
 - **Step away** (on the console, or "Step away" on the gear's menu) ends the action and puts the controls away. The music plays on.
 - Dancing is from a dance-floor tile's menu, as before. The party panel's "dance where you are" is gone.
 
-The music is heard by everyone in the house whenever the deck plays. There is no "join" step: like the game's lo-fi music, it starts on your first click or key press, and the game's music switch silences it. The lo-fi music steps aside while it plays.
+The music is heard by everyone in the house whenever the deck plays. There is no "join" step: like the game's lo-fi music, it starts on your first click or key press, and the game's Sound switch (on the phone) silences it; the phone's separate Music switch only turns off the lo-fi background music. The lo-fi music steps aside while it plays.
 
 **YouTube is gone from the game.** Its client code (player, sync planner, queue panel) is removed. The server still accepts the old YouTube commands and keeps any queue a house saved, so old saves load. Nothing on screen sends those commands any more.
 
