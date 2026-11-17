@@ -101,6 +101,9 @@ export interface Deck {
    */
   cueA?: number;
   cueB?: number;
+  /** The saved drop position on each loaded record, in track beats. */
+  dropCueA?: number;
+  dropCueB?: number;
   /** Each deck's channel (flat when missing). */
   chA?: DeckChannel;
   chB?: DeckChannel;
@@ -122,6 +125,7 @@ export function deckBeat(d: Pick<Deck, "playing" | "t" | "beat" | "bpm">, now: n
   return d.playing ? d.beat + (Math.max(0, now - d.t) * d.bpm) / 60_000 : d.beat;
 }
 
+export const dropCueOf = (d: Deck, side: DeckSide): number | undefined => side === "a" ? d.dropCueA : d.dropCueB;
 export const cueOf = (d: Pick<Deck, "cueA" | "cueB">, side: DeckSide) => (side === "a" ? d.cueA : d.cueB) ?? 0;
 export const channelOf = (d: Pick<Deck, "chA" | "chB">, side: DeckSide): DeckChannel => (side === "a" ? d.chA : d.chB) ?? FLAT_CHANNEL;
 
@@ -266,6 +270,10 @@ export function restoredDeck(saved: Partial<Deck> | undefined): Deck {
   d.beat = num(saved.beat, 0, 1e7, 0);
   if (saved.cueA !== undefined) d.cueA = num(saved.cueA, -1e7, d.beat, 0);
   if (saved.cueB !== undefined) d.cueB = num(saved.cueB, -1e7, d.beat, 0);
+  if (d.a && typeof saved.dropCueA === "number" && Number.isFinite(saved.dropCueA)) d.dropCueA = num(saved.dropCueA, 0, trackBeats(d.a) - 0.01, 0);
+  if (d.b && typeof saved.dropCueB === "number" && Number.isFinite(saved.dropCueB)) d.dropCueB = num(saved.dropCueB, 0, trackBeats(d.b) - 0.01, 0);
+  if (d.a && !d.b) d.xfade = 0;
+  if (!d.a && d.b) d.xfade = 1;
   const channel = (c: unknown): DeckChannel | undefined => {
     if (!c || typeof c !== "object") return undefined;
     const v = c as Partial<DeckChannel>;

@@ -307,6 +307,27 @@ describe("party night, over the wire", () => {
     await old.close();
   });
 
+  it("syncs a marked jump to the 4B set and ejects it without stopping the other deck", async () => {
+    const { a, b } = await couple();
+    await a.connect();
+    await b.connect();
+    await furnish(a, b);
+    a.party({ cmd: "deck", set: { b: "hard-summer-2017-live" } });
+    await b.life((life) => life.party?.deck?.b === "hard-summer-2017-live");
+    b.party({ cmd: "drop-cue", side: "b", track: "hard-summer-2017-live", pos: 4500 });
+    await a.life((life) => life.party?.deck?.dropCueB === 4500);
+    a.party({ cmd: "drop-cue", side: "b", track: "hard-summer-2017-live" });
+    const onAir = (await b.life((life) => life.party?.deck?.playing === true)).life.party!.deck!;
+    expect(onAir).toMatchObject({ xfade: 1, dropCueB: 4500 });
+    expect(onAir.beat - onAir.cueB!).toBeCloseTo(4500);
+    b.party({ cmd: "deck", set: { b: null } });
+    const removed = (await a.life((life) => life.party?.deck?.b === null)).life.party!.deck!;
+    expect(removed).toMatchObject({ a: "neon-drift", b: null, xfade: 0, playing: true });
+    expect(removed.dropCueB).toBeUndefined();
+    await a.disconnect();
+    await b.disconnect();
+  });
+
   it("lets both players dance and work the booth, ends one for the other, and stops cleanly", async () => {
     const { a, b } = await couple();
     const wa = await a.connect();

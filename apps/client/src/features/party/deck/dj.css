@@ -1126,3 +1126,68 @@
     transition: none;
   }
 }
+
+/* Transport, drop cues and in-game guide */
+.dj-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 3px 0;
+  background: var(--dj-body);
+}
+.dj-transport,
+.dj-load {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.dj-transport .dj-chip {
+  flex: 1 0 auto;
+  min-height: 24px;
+  padding-inline: 5px;
+}
+.dj-placebar:active {
+  cursor: grabbing;
+}
+.dj-placebar .dj-drop-mark {
+  background: var(--dj-drop);
+  box-shadow: 0 0 4px var(--dj-drop);
+}
+.dj-drop-cue:enabled {
+  background: var(--dj-drop);
+  color: var(--dj-well);
+}
+.dj-load {
+  margin: 8px 0 2px;
+  color: var(--dj-soft);
+  font-size: 12px;
+}
+.dj-load span {
+  margin-right: 4px;
+}
+.dj-guide {
+  padding: 16px;
+  background: var(--dj-well);
+  border-radius: 14px;
+}
+.dj-guide h2 {
+  margin: 0 0 12px;
+  font-size: 19px;
+}
+.dj-guide dl {
+  margin: 0;
+}
+.dj-guide dt {
+  color: var(--dj-play);
+  font-weight: 600;
+  font-size: 13px;
+}
+.dj-guide dd {
+  margin: 3px 0 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.dj-guide dd:last-child {
+  margin-bottom: 0;
+}

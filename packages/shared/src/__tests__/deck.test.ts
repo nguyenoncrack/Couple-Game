@@ -188,6 +188,36 @@ describe("transitions", () => {
   });
 });
 
+describe("saved drop cues", () => {
+  it("keeps each deck's cue through a save, then brings that deck on air at the marked position", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { b: "hard-summer-2017-live", chB: { vol: 0.6 } } }, T0);
+    const cue = { cmd: "drop-cue", side: "b", track: "hard-summer-2017-live" };
+    send(s, { ...cue, pos: 6250 }, T0);
+    const deck = restoredParty(savedParty(s.party!, T0))!.deck!;
+    expect(deck).toMatchObject({ dropCueB: 6250, playing: false, chB: { vol: 0.6 } });
+    s.party!.deck = deck;
+    send(s, cue, T0 + 500);
+    expect(deck).toMatchObject({ xfade: 1, playing: true, mix: null });
+    expect(trackPosition(deck, "b", deckBeat(deck, T0 + 500))).toBeCloseTo(6250);
+    expect(trackPosition(deck, "a", deckBeat(deck, T0 + 500))).toBe(0);
+    send(s, { cmd: "deck", set: { b: "take-me" } }, T0 + 800);
+    expect(deck.dropCueB).toBeUndefined();
+    expect(send(s, cue, T0 + 800).changed).toBe(false);
+    expect(send(s, { cmd: "cue", side: "b", track: "hard-summer-2017-live", pos: 10 }, T0 + 800).changed).toBe(false);
+  });
+
+  it("hands playback to the remaining track and pauses when the last one is removed", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { playing: true, xfade: 0.6 } }, T0);
+    send(s, { cmd: "mix", style: "blend", bars: 4 }, T0);
+    send(s, { cmd: "deck", set: { b: null } }, T0 + 100);
+    expect(s.party!.deck).toMatchObject({ xfade: 0, playing: true, mix: null, b: null });
+    send(s, { cmd: "deck", set: { a: null } }, T0 + 200);
+    expect(s.party!.deck).toMatchObject({ a: null, b: null, playing: false });
+  });
+});
+
 describe("records on the decks", () => {
   it("can be taken off, so one record plays on its own", () => {
     const s = fresh();

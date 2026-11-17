@@ -123,8 +123,14 @@ export class DeckEngine {
       if (!was?.playing) this.next = 0;
     }
     if (was?.playing && this.buses) {
-      if (!deck?.playing || deck.a !== was.a || deck.cueA !== was.cueA) this.cut(this.buses[0]);
-      if (!deck?.playing || deck.b !== was.b || deck.cueB !== was.cueB) this.cut(this.buses[1]);
+      for (const [index, side] of (["a", "b"] as const).entries()) {
+        const bus = this.buses[index]!;
+        if (!deck?.playing || deck[side] !== was[side]) this.cut(bus);
+        else if (cueOf(deck, side) !== cueOf(was, side)) {
+          if (bus.stream) bus.stream.requestSeek();
+          else this.cut(bus);
+        }
+      }
     }
     this.apply();
   }

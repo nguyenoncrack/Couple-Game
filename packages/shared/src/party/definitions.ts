@@ -176,7 +176,9 @@ export const PartyCmd = z.discriminatedUnion("cmd", [
   /** Go over to the other deck: from the next bar line, over `bars`, in a style. */
   z.object({ cmd: z.literal("mix"), style: z.enum(MIX_STYLE_IDS), bars: z.number().int().refine((n) => (MIX_BARS as readonly number[]).includes(n), "not a length a transition comes in") }),
   /** Jump a deck to another part of its record: `pos` track beats in (at the default tempo). */
-  z.object({ cmd: z.literal("cue"), side: z.enum(["a", "b"]), pos: z.number().min(0).max(1e6) }),
+  z.object({ cmd: z.literal("cue"), side: z.enum(["a", "b"]), track: z.enum(DECK_TRACK_IDS).optional(), pos: z.number().min(0).max(1e6) }),
+  /** A position saves the point. Omitting it jumps to the saved point and brings that deck on air. */
+  z.object({ cmd: z.literal("drop-cue"), side: z.enum(["a", "b"]), track: z.enum(DECK_TRACK_IDS), pos: z.number().min(0).max(1e6).optional() }),
 ]);
 export type PartyCmd = z.infer<typeof PartyCmd>;
 

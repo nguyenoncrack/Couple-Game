@@ -4,6 +4,7 @@ import {
   DECK_TRACKS,
   deckBeat,
   deckTrack,
+  dropCueOf,
   DEFAULT_BPM,
   DEFAULT_DECK,
   isRecording,
@@ -31,6 +32,7 @@ import { useMusicOn } from "../../../state/music";
 import { usePartyGear, useSlider, type GearInUse } from "../partyHooks";
 import { BUILT_IN_PRESETS, removePreset, savePreset, setConsoleTab, setMixChoice, setMusicPrefs, usePartyUi, type MixPreset } from "../partyUi";
 import type { DeckEngine } from "./deckEngine";
+import { DjGuide } from "./DjGuide";
 import { LightsPage } from "./LightsPage";
 import "./dj.css";
 
@@ -142,14 +144,15 @@ export function DjConsole({ deck: shared, engine, mode }: ConsoleProps) {
   const { volume, muted, fade, tab: chosen } = usePartyUi(useShallow((s) => ({ volume: s.volume, muted: s.muted, fade: s.fade, tab: s.tab })));
   const gear = usePartyGear();
   const hasLights = gear.lights || gear.dance;
-  const tab = hasLights ? chosen : "music";
+  const tab = chosen === "lights" && !hasLights ? "music" : chosen;
   const musicOn = useMusicOn();
   const djs = useGame(useShallow((s) => Object.values(s.life?.avatars ?? {}).filter((a) => a.use?.action === "dj").map((a) => s.members.find((m) => m.id === a.memberId)?.name ?? "Someone")));
   const color = (side: DeckSide) => (deck[side] ? deckTrack(deck[side]).color : EMPTY_COLOR);
   const style = { "--a": color("a"), "--b": color("b"), "--spin": `${(1.8 * 124) / deck.bpm}s`, "--build": `${(BUILD_BEATS * 60) / deck.bpm}s` } as CSSProperties;
   const tabs = [
     { id: "music", label: mode === "dj" ? "Decks" : "Records" },
-    { id: "lights", label: "Lights" },
+    ...(hasLights ? [{ id: "lights", label: "Lights" } as const] : []),
+    { id: "guide", label: "Guide" },
   ] as const;
 
   return (
@@ -158,22 +161,20 @@ export function DjConsole({ deck: shared, engine, mode }: ConsoleProps) {
         <span className="dj-logo">
           <span className="dj-led" aria-hidden /> {mode === "dj" ? "DJ deck" : "Music"}
         </span>
-        {hasLights && (
-          <div className="dj-tabs" role="tablist">
-            {tabs.map((t) => (
-              <button key={t.id} role="tab" aria-selected={tab === t.id} className={`dj-tab ${tab === t.id ? "on" : ""}`} onClick={() => setConsoleTab(t.id)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="dj-tabs" role="tablist">
+          {tabs.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} className={`dj-tab ${tab === t.id ? "on" : ""}`} onClick={() => setConsoleTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
         <span className="dj-on">{djs.length ? `${djs.join(" & ")} on the decks` : deck.playing ? "Live" : "Ready"}</span>
         <button className="dj-chip dj-away" onClick={() => act({ do: "stop" })} title="Put the controls away (the music plays on)">
           Step away
         </button>
       </header>
 
-      {tab === "lights" ? <LightsPage /> : mode === "dj" ? <DeckPage deck={deck} clock={clock} /> : <PlayerPage deck={deck} clock={clock} />}
+      {tab === "guide" ? <DjGuide simple={mode !== "dj"} /> : tab === "lights" ? <LightsPage /> : mode === "dj" ? <DeckPage deck={deck} clock={clock} /> : <PlayerPage deck={deck} clock={clock} />}
 
       <footer className="dj-foot">
         <label className="dj-vol">
@@ -211,17 +212,18 @@ function DeckPage({ deck, clock }: { deck: Deck; clock: Clock }) {
   const filter = useSlider(deck.filter, (v) => setDeck({ filter: v }), 120);
   const { section, air, x, statuses, beat } = clock;
   const mixing = Boolean(deck.mix && beat < deck.mix.start + deck.mix.beats);
-  const cued: DeckSide = air === "a" ? "b" : "a";
-  const target = loadTarget(deck, air);
+  const [selection, setSelection] = useState<DeckSide | "auto">("auto");
+  const autoTarget = loadTarget(deck, air);
+  const target = selection === "auto" ? autoTarget : selection;
   const dropping = deck.playing && (section === "build" || section === "drop");
   return (
     <>
       <div className="dj-top">
-        <Turntable side="a" deck={deck} beat={beat} status={statuses.a} live={x < 0.98} cued={cued === "a"} full />
+        <Turntable side="a" deck={deck} beat={beat} status={statuses.a} live={x < 0.98} cued={target === "a"} full />
         <div className="dj-screen">
           <Visualizer deck={deck} clock={clock} />
         </div>
-        <Turntable side="b" deck={deck} beat={beat} status={statuses.b} live={x > 0.02} cued={cued === "b"} full />
+        <Turntable side="b" deck={deck} beat={beat} status={statuses.b} live={x > 0.02} cued={target === "b"} full />
       </div>
 
       <div className="dj-mixer">
@@ -232,6 +234,7 @@ function DeckPage({ deck, clock }: { deck: Deck; clock: Clock }) {
             type="range"
             min={0}
             max={100}
+            disabled={!deck.a || !deck.b}
             value={Math.round((deck.mix && !xfade.held ? x : xfade.value) * 100)}
             onChange={(e) => xfade.onChange(Number(e.target.value) / 100)}
             onPointerUp={xfade.onRelease}
@@ -246,8 +249,8 @@ function DeckPage({ deck, clock }: { deck: Deck; clock: Clock }) {
         <button className={`dj-pad dj-echo ${deck.echo ? "on" : ""}`} onClick={() => setDeck({ echo: !deck.echo })} aria-pressed={deck.echo}>
           Echo
         </button>
-        <button className={`dj-pad dj-drop ${dropping ? section : ""}`} onClick={() => partyCmd({ cmd: "drop" })} disabled={!deck.playing || dropping} title="Build up for two bars, then drop">
-          {section === "build" && deck.playing ? "Build…" : section === "drop" && deck.playing ? "Drop!" : "Drop"}
+        <button className={`dj-pad dj-drop ${dropping ? section : ""}`} onClick={() => partyCmd({ cmd: "drop" })} disabled={!deck.playing || dropping} title="Add a build-up and crash to the mix">
+          {section === "build" && deck.playing ? "Build…" : section === "drop" && deck.playing ? "Drop!" : "Drop FX"}
         </button>
         <div className="dj-tempo" aria-label="Tempo">
           <button className="dj-nudge" onClick={() => setDeck({ bpm: Math.max(MIN_BPM, deck.bpm - 2) })} disabled={deck.bpm <= MIN_BPM} aria-label="Slower">
@@ -265,6 +268,14 @@ function DeckPage({ deck, clock }: { deck: Deck; clock: Clock }) {
 
       <MixPanel deck={deck} clock={clock} />
 
+      <div className="dj-load" role="group" aria-label="Choose which deck to load">
+        <span>Load to</span>
+        {(["auto", "a", "b"] as const).map((choice) => (
+          <button key={choice} className={`dj-chip ${selection === choice ? "on" : ""}`} aria-pressed={selection === choice} onClick={() => setSelection(choice)}>
+            {choice === "auto" ? `Auto (${upper(autoTarget)})` : upper(choice)}
+          </button>
+        ))}
+      </div>
       <Crate
         label={`Records: pick one to load it onto deck ${upper(target)}`}
         tagOf={(id) => [deck.a === id ? "A" : "", deck.b === id ? "B" : ""].filter(Boolean).join("+")}
@@ -476,7 +487,7 @@ function Turntable({ side, deck, beat, live, cued, label, status, full }: { side
         <b>{t.name}</b>
         <span>{status === "loading" ? "Loading…" : status === "error" ? "Could not load audio." : t.style}</span>
       </div>
-      <PlaceBar deck={deck} side={side} id={id} beat={beat} />
+      <PlaceBar key={id} deck={deck} side={side} id={id} beat={beat} drops={full} />
       {full && <ChannelStrip deck={deck} side={side} />}
     </div>
   );
@@ -486,32 +497,74 @@ function Turntable({ side, deck, beat, live, cued, label, status, full }: { side
  * Where the deck is in its record, to click (or arrow) to another part. A recording shows its time; a built-in
  * record its bar and section, with the sections marked.
  */
-function PlaceBar({ deck, side, id, beat }: { deck: Deck; side: DeckSide; id: DeckTrackId; beat: number }) {
+function PlaceBar({ deck, side, id, beat, drops }: { deck: Deck; side: DeckSide; id: DeckTrackId; beat: number; drops?: boolean }) {
+  const [draft, setDraft] = useState<number | null>(null);
   const len = trackBeats(id);
   const rec = isRecording(id);
-  const pos = trackPosition(deck, side, beat) ?? 0;
-  const jump = (p: number) => partyCmd({ cmd: "cue", side, pos: Math.max(0, Math.min(len - 0.01, p)) });
-  const down = (e: PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    jump(((e.clientX - r.left) / r.width) * len);
+  const current = trackPosition(deck, side, beat) ?? 0;
+  const drop = dropCueOf(deck, side);
+  const pos = draft ?? current;
+  const clamp = (p: number) => Math.max(0, Math.min(len - 0.01, p));
+  const jump = (p: number) => partyCmd({ cmd: "cue", side, track: id, pos: clamp(p) });
+  const pickPosition = (e: PointerEvent<HTMLDivElement>) => {
+    const bounds = e.currentTarget.getBoundingClientRect();
+    return clamp(((e.clientX - bounds.left) / bounds.width) * len);
   };
-  // ten seconds, or four bars
-  const by = rec ? (10 * DEFAULT_BPM) / 60 : 16;
+  const by = rec ? (10 * DEFAULT_BPM) / 60 : 4;
   const key = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "ArrowRight") jump(pos + by);
-    else if (e.key === "ArrowLeft") jump(pos - by);
-    else if (e.key === "Home") jump(0);
-    else return;
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
     e.preventDefault();
+    if (e.repeat) return;
+    if (e.key === "ArrowRight") jump(current + by);
+    else if (e.key === "ArrowLeft") jump(current - by);
+    else jump(e.key === "Home" ? 0 : len);
   };
   const text = rec ? `${trackClock(pos)} / ${trackClock(len)}` : `Bar ${Math.floor(pos / 4) + 1} of ${len / 4} · ${SECTION_TEXT[sectionAt(pos, null)]}`;
+  const label = `deck ${upper(side)}`;
   return (
     <div className="dj-place">
-      <div className="dj-placebar" role="slider" tabIndex={0} aria-label={`Place in the record on deck ${upper(side)}: click to jump there`} aria-valuemin={0} aria-valuemax={Math.round(len)} aria-valuenow={Math.round(pos)} aria-valuetext={text} onPointerDown={down} onKeyDown={key}>
-        <i className="dj-placefill" style={{ width: `calc(var(--pos-${side}, 0) * 100%)` }} />
+      <div
+        className="dj-placebar"
+        role="slider"
+        tabIndex={0}
+        aria-label={`Playback position on ${label}`}
+        aria-valuemin={0}
+        aria-valuemax={Math.round(len)}
+        aria-valuenow={Math.round(pos)}
+        aria-valuetext={text}
+        onKeyDown={key}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setDraft(pickPosition(e));
+        }}
+        onPointerMove={(e) => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) setDraft(pickPosition(e));
+        }}
+        onPointerUp={(e) => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) jump(pickPosition(e));
+          setDraft(null);
+        }}
+        onLostPointerCapture={() => setDraft(null)}
+      >
+        <i className="dj-placefill" style={{ width: draft === null ? `calc(var(--pos-${side}, 0) * 100%)` : `${(pos / len) * 100}%` }} />
         {!rec && [8, 16, 24, 28].map((bar) => <i key={bar} className="dj-placemark" style={{ left: `${((bar * 4) / len) * 100}%` }} />)}
+        {drop !== undefined && <i className="dj-placemark dj-drop-mark" style={{ left: `${(drop / len) * 100}%` }} />}
       </div>
       <span className="dj-placetext">{text}</span>
+      <div className="dj-transport">
+        <button className="dj-chip" onClick={() => jump(0)} aria-label={`Restart ${label}`}>↶ Start</button>
+        <button className="dj-chip" onClick={() => jump(current - by)} aria-label={`Jump back on ${label}`}>{rec ? "−10 s" : "−1 bar"}</button>
+        <button className="dj-chip" onClick={() => jump(current + by)} aria-label={`Jump forward on ${label}`}>{rec ? "+10 s" : "+1 bar"}</button>
+      </div>
+      {drops && (
+        <div className="dj-transport">
+          <button className="dj-chip" onClick={() => partyCmd({ cmd: "drop-cue", side, track: id, pos: trackPosition(deck, side, deckBeat(deck, serverNow())) ?? 0 })} aria-label={`Set drop on ${label}`}>Set drop</button>
+          <button className="dj-chip dj-drop-cue" onClick={() => partyCmd({ cmd: "drop-cue", side, track: id })} disabled={drop === undefined} aria-label={`Drop now on ${label}`}>
+            {drop === undefined ? "Drop now" : rec ? `Drop at ${trackClock(drop)}` : `Drop at bar ${Math.floor(drop / 4) + 1}`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

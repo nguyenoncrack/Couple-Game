@@ -1,7 +1,7 @@
 import type { Blueprint } from "../blueprint";
 import type { Catalog } from "../catalog";
 import type { LifeState } from "../life/state";
-import { anchorDeck, BUILD_BEATS, channelOf, cueFor, deckBeat, DEFAULT_DECK, DROP_BEATS, restoredDeck, settleMix, type Deck, type DeckSide, type DeckTrackId } from "./deck";
+import { anchorDeck, BUILD_BEATS, channelOf, cueFor, deckBeat, DEFAULT_DECK, DROP_BEATS, isRecording, restoredDeck, settleMix, trackBeats, type Deck, type DeckSide, type DeckTrackId } from "./deck";
 import { emptyParty, MAX_QUEUE, musicPosition, PARTY_ROLES, type PartyCmd, type PartyReject, type PartyRole, type PartyState, type Track } from "./definitions";
 
 /** What party gear the house has: any item with that role, on any floor. */
@@ -37,7 +37,7 @@ function advance(p: PartyState, now: number) {
  */
 export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): { reject: PartyReject | null; changed: boolean } {
   const p = partyOf(state);
-  if (cmd.cmd === "deck" || cmd.cmd === "drop" || cmd.cmd === "mix" || cmd.cmd === "cue") {
+  if (cmd.cmd === "deck" || cmd.cmd === "drop" || cmd.cmd === "mix" || cmd.cmd === "cue" || cmd.cmd === "drop-cue") {
     if (!ctx.gear.music) return { reject: "no-music", changed: false };
     let changed = applyDeck(deckOf(p), cmd, ctx.now);
     // the deck starting puts the YouTube music on hold (only one plays at a time)
@@ -61,12 +61,13 @@ export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): 
 /** The deck as it stands, made for a party saved before there was one. */
 export const deckOf = (p: PartyState): Deck => (p.deck ??= { ...DEFAULT_DECK });
 
-type DeckCmd = "deck" | "drop" | "mix" | "cue";
+type DeckCmd = "deck" | "drop" | "mix" | "cue" | "drop-cue";
 
 /** Load a record onto a deck (or empty it). A record starts from its beginning: a built-in one on the bar line. */
 function load(d: Deck, side: DeckSide, id: DeckTrackId | null, beat: number) {
   if (id === d[side]) return;
   d[side] = id;
+  delete d[side === "a" ? "dropCueA" : "dropCueB"];
   const cue = side === "a" ? "cueA" : "cueB";
   if (id) d[cue] = cueFor(id, beat, 0);
   else delete d[cue];
@@ -94,11 +95,32 @@ function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, now: numbe
   }
   if (cmd.cmd === "cue") {
     const id = d[cmd.side];
-    if (!id) return false;
+    if (!id || (cmd.track !== undefined && cmd.track !== id)) return false;
     const key = cmd.side === "a" ? "cueA" : "cueB";
     const cue = cueFor(id, beat, cmd.pos);
     if (cue === d[key]) return false;
     d[key] = cue;
+    return true;
+  }
+  if (cmd.cmd === "drop-cue") {
+    const { side, track, pos } = cmd;
+    if (d[side] !== track) return false;
+    const marker = side === "a" ? "dropCueA" : "dropCueB";
+    if (pos !== undefined) {
+      const withinTrack = Math.min(pos, trackBeats(track) - 0.01);
+      const drop = isRecording(track) ? withinTrack : Math.floor(withinTrack / 4) * 4;
+      if (d[marker] === drop) return false;
+      d[marker] = drop;
+      return true;
+    }
+    const drop = d[marker];
+    if (drop === undefined) return false;
+    d[side === "a" ? "cueA" : "cueB"] = cueFor(track, beat, drop);
+    anchorDeck(d, now);
+    d.playing = true;
+    d.xfade = side === "a" ? 0 : 1;
+    d.mix = null;
+    d.drop = null;
     return true;
   }
   const before = JSON.stringify(d);
@@ -117,6 +139,16 @@ function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, now: numbe
   if (bpm !== undefined) d.bpm = bpm;
   if (playing !== undefined) d.playing = playing;
   Object.assign(d, rest);
+  if (!d.a || !d.b) {
+    d.mix = null;
+    if (d.a) d.xfade = 0;
+    else if (d.b) d.xfade = 1;
+    else {
+      if (d.playing) anchorDeck(d, now);
+      d.playing = false;
+      d.drop = null;
+    }
+  }
   return JSON.stringify(d) !== before;
 }
 

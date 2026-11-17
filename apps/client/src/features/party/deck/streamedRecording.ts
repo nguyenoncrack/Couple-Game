@@ -6,6 +6,7 @@ export class StreamedRecording {
   private readonly audio = new Audio();
   private readonly source: MediaElementAudioSourceNode;
   private requested = false;
+  private pendingSeek = true;
   private stopped = false;
   private failed = false;
   blocked = false;
@@ -24,6 +25,10 @@ export class StreamedRecording {
     if (!this.blocked && (this.audio.paused || this.audio.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)) return "loading";
   }
 
+  requestSeek() {
+    this.pendingSeek = true;
+  }
+
   sync(beat: number, cue: number, bpm: number) {
     const { audio } = this;
     if (this.failed || audio.error || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
@@ -31,8 +36,11 @@ export class StreamedRecording {
     const rate = bpm / DEFAULT_BPM;
     if (audio.playbackRate !== rate) audio.playbackRate = rate;
     const offset = recordingOffset(beat, cue, audio.duration);
-    if (!this.requested) {
+    if (this.pendingSeek) {
       audio.currentTime = offset;
+      this.pendingSeek = false;
+    }
+    if (!this.requested) {
       this.play();
     } else if (!audio.paused && !audio.seeking && audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
       const drift = Math.abs(audio.currentTime - offset);
