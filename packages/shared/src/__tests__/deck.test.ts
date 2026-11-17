@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyLife, type LifeState } from "../life/state";
-import { applyParty, BUILD_BEATS, cueFor, deckBeat, deckPump, DEFAULT_BPM, DEFAULT_DECK, DROP_BEATS, mixAt, pauseMusic, PartyCmd, restoredDeck, restoredParty, savedParty, sectionAt, sectionOf, trackBeats, trackPosition, type Deck, type PartyContext, type PartyRole } from "../party";
+import { applyParty, BUILD_BEATS, cueFor, deckBeat, deckPump, deckRunning, DEFAULT_BPM, DEFAULT_DECK, DROP_BEATS, mixAt, pauseMusic, PartyCmd, placeIn, restoredDeck, restoredParty, savedParty, sectionAt, sectionOf, trackBeats, trackPosition, type Deck, type PartyContext, type PartyRole } from "../party";
 
 const T0 = 1_000_000;
 const gear = (music = true): Record<PartyRole, boolean> => ({ lights: true, music, dance: false, speaker: true });
@@ -286,5 +286,51 @@ describe("deck channels", () => {
     expect(PartyCmd.safeParse({ cmd: "deck", set: { chA: { low: -2 } } }).success).toBe(false);
     expect(PartyCmd.safeParse({ cmd: "deck", set: { chA: { bass: 1 } } }).success).toBe(false);
     expect(restoredDeck(JSON.parse(JSON.stringify(d))).chA).toEqual(d.chA);
+  });
+});
+
+/** Seconds into a record, in track beats. */
+const sec = (s: number) => (s * DEFAULT_BPM) / 60;
+const posOf = (d: Deck, side: "a" | "b", now: number) => trackPosition(d, side, deckBeat(d, now))!;
+/** Real time for some track beats at the default tempo (ms). */
+const msFor = (beats: number) => (beats * 60_000) / DEFAULT_BPM;
+
+describe("each deck's own transport", () => {
+  it("pauses one deck while the other plays on, and carries on from the same place", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { a: "back-to-u", b: "take-me", playing: true } }, T0);
+    const d = s.party!.deck!;
+    send(s, { cmd: "transport", side: "b", playing: false }, T0 + 10_000);
+    expect(posOf(d, "b", T0 + 40_000)).toBeCloseTo(sec(10), 1);
+    expect(posOf(d, "a", T0 + 40_000)).toBeCloseTo(sec(40), 1);
+    expect(deckRunning(d, "b", deckBeat(d, T0 + 40_000))).toBe(false);
+    // jumping a paused deck moves where it waits
+    send(s, { cmd: "cue", side: "b", pos: sec(84.5) }, T0 + 40_000);
+    expect(posOf(d, "b", T0 + 50_000)).toBeCloseTo(sec(84.5), 2);
+    send(s, { cmd: "transport", side: "b", playing: true }, T0 + 50_000);
+    expect(posOf(d, "b", T0 + 52_000)).toBeCloseTo(sec(86.5), 1);
+  });
+
+  it("plays only that deck when the music was paused", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { a: "back-to-u", b: "take-me" } }, T0);
+    const d = s.party!.deck!;
+    send(s, { cmd: "transport", side: "a", playing: true }, T0);
+    expect(d.playing).toBe(true);
+    expect(posOf(d, "a", T0 + 5000)).toBeCloseTo(sec(5), 1);
+    expect(posOf(d, "b", T0 + 5000)).toBe(0);
+  });
+
+  it("keeps saved cue points on each record, through a save", () => {
+    const s = fresh();
+    send(s, { cmd: "mark", track: "take-me", pos: sec(84.5) }, T0);
+    send(s, { cmd: "mark", track: "take-me", pos: sec(12) }, T0);
+    expect(send(s, { cmd: "mark", track: "take-me", pos: sec(12) }, T0).changed).toBe(false);
+    const d = restoredParty(savedParty(s.party!, T0))!.deck!;
+    expect(d.marks?.["take-me"]).toEqual([placeIn("take-me", sec(12)), placeIn("take-me", sec(84.5))]);
+    for (let i = 0; i < 10; i++) send(s, { cmd: "mark", track: "take-me", pos: sec(20 + i) }, T0);
+    expect(s.party!.deck!.marks?.["take-me"]).toHaveLength(8);
+    send(s, { cmd: "mark", track: "take-me", pos: sec(12), remove: true }, T0);
+    expect(s.party!.deck!.marks?.["take-me"]).toHaveLength(7);
   });
 });

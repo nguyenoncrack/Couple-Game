@@ -123,7 +123,12 @@ const Channel = z
   .object({ vol: z.number().min(0).max(1), low: z.number().min(-1).max(1), mid: z.number().min(-1).max(1), high: z.number().min(-1).max(1) })
   .partial()
   .strict();
-
+/** A place in a record, in track beats. */
+const Place = z.number().min(0).max(1e6);
+const Bars = z
+  .number()
+  .int()
+  .refine((n) => (MIX_BARS as readonly number[]).includes(n), "not a length a transition comes in");
 export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({
     cmd: z.literal("lights"),
@@ -174,9 +179,13 @@ export const PartyCmd = z.discriminatedUnion("cmd", [
   /** Start a build-up on the next bar; the drop lands two bars later. */
   z.object({ cmd: z.literal("drop") }),
   /** Go over to the other deck: from the next bar line, over `bars`, in a style. */
-  z.object({ cmd: z.literal("mix"), style: z.enum(MIX_STYLE_IDS), bars: z.number().int().refine((n) => (MIX_BARS as readonly number[]).includes(n), "not a length a transition comes in") }),
+  z.object({ cmd: z.literal("mix"), style: z.enum(MIX_STYLE_IDS), bars: Bars }),
+  /** Play or pause one deck on its own. */
+  z.object({ cmd: z.literal("transport"), side: z.enum(["a", "b"]), playing: z.boolean() }),
+  /** Save a cue point on a record (or, with `remove`, take one away). */
+  z.object({ cmd: z.literal("mark"), track: z.enum(DECK_TRACK_IDS), pos: Place, remove: z.literal(true).optional() }),
   /** Jump a deck to another part of its record: `pos` track beats in (at the default tempo). */
-  z.object({ cmd: z.literal("cue"), side: z.enum(["a", "b"]), track: z.enum(DECK_TRACK_IDS).optional(), pos: z.number().min(0).max(1e6) }),
+  z.object({ cmd: z.literal("cue"), side: z.enum(["a", "b"]), track: z.enum(DECK_TRACK_IDS).optional(), pos: Place }),
   /** A position saves the point. Omitting it jumps to the saved point and brings that deck on air. */
   z.object({ cmd: z.literal("drop-cue"), side: z.enum(["a", "b"]), track: z.enum(DECK_TRACK_IDS), pos: z.number().min(0).max(1e6).optional() }),
 ]);

@@ -21,7 +21,10 @@ The music is heard by everyone in the house whenever the deck plays. There is no
 ## The console
 
 - **Two turntables**: each record turns while the deck plays (at the deck's tempo), with the record's name and an eight-cell level meter fed by that deck's real output. Each deck also has:
-  - a **place bar**: where the deck is in its record. Click it (or use the arrow keys, Home for the start) to jump to another part. A recording shows its time (`2:11 / 4:19`) and jumps to the moment. A built-in record shows its bar and section, with the sections marked, and jumps to the start of a bar so it stays in time with the other deck.
+  - a **place bar**: where the deck is in its record. Click or drag it (or use the arrow keys, Home for the start) to jump to another part. A recording jumps to the moment. A built-in record jumps to the start of a bar so it stays in time with the other deck. At the booth it shows the time to a tenth (`2:40.5 / 4:19`).
+  - its own **Play/Pause**: pauses just this deck (the other plays on) and carries on from the same place. Pressing it while the music is paused starts the music with only this deck.
+  - a **time box**: type an exact time (`1:24.5`, `84.5` or `1:02:03`) and press Go (or Enter) to jump there.
+  - **saved cues**: *Save cue* keeps the typed time (or where the deck is now) as a cue on that record, up to eight. They show as chips (click to jump, × to delete) and as blue ticks on the place bar. Cues belong to the record, so they come back whenever it's loaded, on either deck, and they're shared and saved with the house.
   - a **channel**: Hi, Mid and Low EQ knobs (left cuts the band right out, right lifts it a little; double-click resets) and its own volume.
   - an **eject** (⏏): takes the record off. The other deck plays on its own, and the next record picked goes onto the empty deck.
 - **Screen**: shows what's on air, its section (Intro, Groove, Full, Breakdown, Rising, Build-up, Drop!) or a recording's time, four beat lights, how far through the record it is, and a transition under way.
@@ -57,7 +60,7 @@ Built-in records:
 
 **Sync.** The house keeps an anchor: at server time `t` the beat was `beat`, at `bpm`. Each screen schedules notes about 160 ms ahead, at the audio time that matches the server time of their sixteenth. Both players hear the same note at the same moment. Any change of tempo, play or pause re-anchors, so the beat never jumps. A drop starts on the next bar line and is stored in beats.
 
-**Places in a record.** Each deck keeps a cue: the deck beat its record started on, so the record is `beat - cue` "track beats" in (counted at the default 124 BPM, so a tempo change speeds a record up rather than jumping it). Loading a record sets the cue; jumping moves it. A built-in record's cue is always on a bar line.
+**Places in a record.** Each deck keeps a cue: the deck beat its record started on, so the record is `beat - cue` "track beats" in (counted at the default 124 BPM, so a tempo change speeds a record up rather than jumping it). Loading a record sets the cue; jumping moves it. A built-in record's cue is always on a bar line. A deck paused on its own keeps a `hold` (where its record stopped) instead: the clock runs on for the other deck, and Play sets the cue so the record carries on from the hold. The master Pause stops the clock itself, so both decks (and a transition) freeze and carry on from the same point. Saved cue points live in `marks`, per record.
 
 **Transitions** are stored as `{style, from, to, start, beats}` in beats, and every screen works out the crossfader and each deck's EQ and echo from them at any beat (`mixAt`). So a transition moves on both screens at once with nothing more sent. Pausing holds it where it is. The next command after it ends writes down where the crossfader finished.
 
@@ -81,7 +84,7 @@ Steady light stops the pulses. A device that asks for reduced motion stops the c
 - **Shared:**
   - `catalog/party.json`, `catalog/index.ts`, `life/needs.ts`: the music player's `tune` place and what it does for fun.
   - `party/deck.ts`: tracks and their lengths, deck state, beat clock, sections, pump, channels, cues, transitions (`mixAt`).
-  - `party/definitions.ts`: the `deck`, `drop`, `mix` and `cue` commands, `PartyState.deck`.
+  - `party/definitions.ts`: the `deck`, `drop`, `mix`, `cue`, `drop-cue`, `transport` and `mark` commands, `PartyState.deck`.
   - `party/reducer.ts`: deck commands, loading and ejecting, jumping, transitions, taking turns, save and restore, holding when the house empties.
 - **Client:**
   - `features/party/deck/`: engine (a three-band EQ and an echo send per deck, set every tick from the channel and the transition), tracks, recordings, console (`DjConsole.tsx`: booth and music-player pages, place bars, channel strips, transitions), lights page (`LightsPage.tsx`), styles.
@@ -93,5 +96,6 @@ Steady light stops the pulses. A device that asks for reduced motion stops the c
   - `render/party/*`: pulse uniforms, the equaliser and level-light materials, model changes.
 - **Tests:**
   - `shared/__tests__/deck.test.ts`
+  - `client/features/party/deck/deckTime.test.ts` (typed times)
   - `client/features/party/deck/deck.test.ts`
   - the server wire test in `server/__tests__/party.test.ts`

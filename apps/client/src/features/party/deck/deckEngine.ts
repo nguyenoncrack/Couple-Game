@@ -1,4 +1,4 @@
-import { BUILD_BEATS, channelOf, cueOf, DEFAULT_BPM, deckBeat, mixAt, sectionOf, type Deck, type DeckSide, type DeckTrackId } from "@cg/shared";
+import { BUILD_BEATS, channelOf, cueOf, DEFAULT_BPM, deckBeat, deckRunning, holdOf, mixAt, sectionOf, type Deck, type DeckSide, type DeckTrackId } from "@cg/shared";
 import { recordingOffset, RECORDING_URLS, STREAMED_RECORDINGS } from "./recordings";
 import { StreamedRecording } from "./streamedRecording";
 import { bassNote, chordVoicing, hitAt, LAYERS, leadNote, midiHz, TRACK_DEFS, type TrackDef } from "./tracks";
@@ -125,7 +125,8 @@ export class DeckEngine {
     if (was?.playing && this.buses) {
       for (const [index, side] of (["a", "b"] as const).entries()) {
         const bus = this.buses[index]!;
-        if (!deck?.playing || deck[side] !== was[side]) this.cut(bus);
+        // a record changed or paused: what's playing (or scheduled) stops
+        if (!deck?.playing || deck[side] !== was[side] || holdOf(deck, side) !== holdOf(was, side)) this.cut(bus);
         else if (cueOf(deck, side) !== cueOf(was, side)) {
           if (bus.stream) bus.stream.requestSeek();
           else this.cut(bus);
@@ -293,6 +294,12 @@ export class DeckEngine {
     }
   }
 
+  /** Fetch a recording ahead of time (a record parked for a transition comes in on the beat, not after a download). */
+  private preload(c: AudioContext, id: DeckTrackId) {
+    const url = RECORDING_URLS[id];
+    if (url && !STREAMED_RECORDINGS.has(id) && !this.recordings.has(id)) void this.loadRecording(c, id, url);
+  }
+
   private syncRecording(c: AudioContext, bus: DeckBus, id: DeckTrackId, cue: number, beat: number, bpm: number) {
     const url = RECORDING_URLS[id];
     if (!url) return;
@@ -332,8 +339,17 @@ export class DeckEngine {
     // server time to audio time: measured each tick, so a clock correction is followed
     const offset = c.currentTime - serverMs / 1000;
     const beatNow = deckBeat(d, serverMs);
-    if (d.a) this.syncRecording(c, this.buses[0], d.a, cueOf(d, "a"), beatNow, d.bpm);
-    if (d.b) this.syncRecording(c, this.buses[1], d.b, cueOf(d, "b"), beatNow, d.bpm);
+    // a record paused on its own stays silent (and gets ready to come back in)
+    (["a", "b"] as const).forEach((side, i) => {
+      const id = d[side];
+      const bus = this.buses![i]!;
+      if (!id) return;
+      if (deckRunning(d, side, beatNow)) this.syncRecording(c, bus, id, cueOf(d, side), beatNow, d.bpm);
+      else {
+        if (bus.recording || bus.stream) this.cut(bus);
+        this.preload(c, id);
+      }
+    });
     // the crossfader and EQ move with a transition
     this.apply(beatNow);
     const horizon = beatNow + (LOOKAHEAD * d.bpm) / 60;
@@ -351,8 +367,8 @@ export class DeckEngine {
     for (let s = from; s < to; s++) {
       const serverAt = d.t + ((s / 4 - d.beat) * 60_000) / d.bpm;
       const at = Math.max(c.currentTime, serverAt / 1000 + offset);
-      if (ga > 0.01 && patternA) this.step(c, this.buses[0].input, patternA, d, s - cueA, s, at);
-      if (gb > 0.01 && patternB) this.step(c, this.buses[1].input, patternB, d, s - cueB, s, at);
+      if (ga > 0.01 && patternA && deckRunning(d, "a")) this.step(c, this.buses[0].input, patternA, d, s - cueA, s, at);
+      if (gb > 0.01 && patternB && deckRunning(d, "b")) this.step(c, this.buses[1].input, patternB, d, s - cueB, s, at);
       this.fx(c, d, s, at);
     }
     this.next = to;

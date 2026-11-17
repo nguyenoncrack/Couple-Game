@@ -82,6 +82,8 @@ export interface DeckMix {
   beats: number;
 }
 
+export const MAX_MARKS = 8;
+
 export interface Deck {
   /** The record on each deck, or null for an empty deck (one record can play on its own). */
   a: DeckTrackId | null;
@@ -104,6 +106,11 @@ export interface Deck {
   /** The saved drop position on each loaded record, in track beats. */
   dropCueA?: number;
   dropCueB?: number;
+  /** A deck paused on its own: its record held at this place (track beats), whatever the deck's clock does. */
+  holdA?: number;
+  holdB?: number;
+  /** Saved cue points for each record, in track beats, in order. */
+  marks?: Partial<Record<DeckTrackId, number[]>>;
   /** Each deck's channel (flat when missing). */
   chA?: DeckChannel;
   chB?: DeckChannel;
@@ -129,12 +136,29 @@ export const dropCueOf = (d: Deck, side: DeckSide): number | undefined => side =
 export const cueOf = (d: Pick<Deck, "cueA" | "cueB">, side: DeckSide) => (side === "a" ? d.cueA : d.cueB) ?? 0;
 export const channelOf = (d: Pick<Deck, "chA" | "chB">, side: DeckSide): DeckChannel => (side === "a" ? d.chA : d.chB) ?? FLAT_CHANNEL;
 
-/** How far into its record a deck is at `beat`, in track beats (it goes round when it gets to the end), or null if empty. */
+export const holdOf = (d: Pick<Deck, "holdA" | "holdB">, side: DeckSide) => (side === "a" ? d.holdA : d.holdB);
+export const marksOf = (d: Pick<Deck, "marks">, id: DeckTrackId | null): number[] => (id ? (d.marks?.[id] ?? []) : []);
+
+/** Whether a deck's record is moving: the deck is playing, and this record isn't paused on its own. */
+export const deckRunning = (d: Deck, side: DeckSide, _beat?: number) => Boolean(d[side]) && d.playing && holdOf(d, side) === undefined;
+
+/**
+ * How far into its record a deck is at `beat`, in track beats (it goes round when it gets to the end), or null if
+ * empty. A paused deck stays where it was held.
+ */
 export function trackPosition(d: Deck, side: DeckSide, beat: number): number | null {
   const id = d[side];
   if (!id) return null;
   const len = trackBeats(id);
+  const hold = holdOf(d, side);
+  if (hold !== undefined) return Math.min(Math.max(0, hold), len - 0.01);
   return (((beat - cueOf(d, side)) % len) + len) % len;
+}
+
+/** A place in a record, kept inside it. Built-in records keep to sixteenths, so their notes stay on the grid. */
+export function placeIn(id: DeckTrackId, pos: number): number {
+  const p = Math.min(Math.max(0, pos), trackBeats(id) - 0.01);
+  return isRecording(id) ? Math.round(p * 1000) / 1000 : Math.round(p * 4) / 4;
 }
 
 /**
@@ -274,6 +298,16 @@ export function restoredDeck(saved: Partial<Deck> | undefined): Deck {
   if (d.b && typeof saved.dropCueB === "number" && Number.isFinite(saved.dropCueB)) d.dropCueB = num(saved.dropCueB, 0, trackBeats(d.b) - 0.01, 0);
   if (d.a && !d.b) d.xfade = 0;
   if (!d.a && d.b) d.xfade = 1;
+  for (const side of ["a", "b"] as const) {
+    const id = d[side];
+    if (!id) continue;
+    const S = side === "a" ? "A" : "B";
+    const len = trackBeats(id);
+    const hold = saved[`hold${S}`];
+    if (typeof hold === "number" && Number.isFinite(hold)) d[`hold${S}`] = num(hold, 0, len - 0.01, 0);
+  }
+  const marks = restoredMarks(saved.marks);
+  if (marks) d.marks = marks;
   const channel = (c: unknown): DeckChannel | undefined => {
     if (!c || typeof c !== "object") return undefined;
     const v = c as Partial<DeckChannel>;
@@ -290,4 +324,26 @@ export function restoredDeck(saved: Partial<Deck> | undefined): Deck {
   d.t = 0;
   d.drop = null;
   return d;
+}
+
+const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const goodTrack = (v: unknown): v is DeckTrackId => DECK_TRACK_IDS.includes(v as DeckTrackId);
+
+/** A list of cue points on a record, checked: in order, inside the record, no more than `MAX_MARKS`. */
+export function restoredCues(id: DeckTrackId, v: unknown): number[] {
+  if (!Array.isArray(v)) return [];
+  const out: number[] = [];
+  for (const p of v) if (finite(p) && !out.some((q) => Math.abs(q - placeIn(id, p)) < 0.05)) out.push(placeIn(id, p));
+  return out.sort((x, y) => x - y).slice(0, MAX_MARKS);
+}
+
+function restoredMarks(v: unknown): Deck["marks"] | null {
+  if (!v || typeof v !== "object") return null;
+  const marks: NonNullable<Deck["marks"]> = {};
+  for (const [id, list] of Object.entries(v)) {
+    if (!goodTrack(id)) continue;
+    const cues = restoredCues(id, list);
+    if (cues.length) marks[id] = cues;
+  }
+  return Object.keys(marks).length ? marks : null;
 }

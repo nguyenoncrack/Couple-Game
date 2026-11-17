@@ -7,8 +7,11 @@ import {
   dropCueOf,
   DEFAULT_BPM,
   DEFAULT_DECK,
+  deckRunning,
   isRecording,
+  marksOf,
   MAX_BPM,
+  MAX_MARKS,
   MIN_BPM,
   MIX_BARS,
   MIX_STYLES,
@@ -33,6 +36,7 @@ import { usePartyGear, useSlider, type GearInUse } from "../partyHooks";
 import { BUILT_IN_PRESETS, removePreset, savePreset, setConsoleTab, setMixChoice, setMusicPrefs, usePartyUi, type MixPreset } from "../partyUi";
 import type { DeckEngine } from "./deckEngine";
 import { DjGuide } from "./DjGuide";
+import { parseClock, preciseClock, secondsToBeats } from "./deckTime";
 import { LightsPage } from "./LightsPage";
 import "./dj.css";
 
@@ -349,8 +353,8 @@ function MixPanel({ deck, clock }: { deck: Deck; clock: Clock }) {
           <span className="dj-label dj-seg-unit">bars</span>
         </div>
         {naming === null ? (
-          <button className="dj-chip" onClick={() => setNaming(`${styleName(mixStyle)} ${mixBars}`)} title="Keep this style and length as a preset (on this device)">
-            + Save
+          <button className="dj-chip" onClick={() => setNaming(`${styleName(mixStyle)} ${mixBars}`)} title="Keep this style and length as a transition preset (on this device)">
+            + Save preset
           </button>
         ) : (
           <form
@@ -472,7 +476,7 @@ function Turntable({ side, deck, beat, live, cued, label, status, full }: { side
         </button>
       )}
       <div className="dj-platter" aria-hidden>
-        <div className={`dj-vinyl ${deck.playing ? "spin" : ""}`}>
+        <div className={`dj-vinyl ${deckRunning(deck, side, beat) ? "spin" : ""}`}>
           <span className="dj-label-dot" />
         </div>
         <span className="dj-arm" />
@@ -493,9 +497,15 @@ function Turntable({ side, deck, beat, live, cued, label, status, full }: { side
   );
 }
 
+/** What a deck's own Play button can do: pause it, or play it. */
+function deckState(deck: Deck, side: DeckSide, beat: number): "running" | "held" {
+  return deckRunning(deck, side, beat) ? "running" : "held";
+}
+
 /**
- * Where the deck is in its record, to click (or arrow) to another part. A recording shows its time; a built-in
- * record its bar and section, with the sections marked.
+ * Where the deck is in its record: drag (or click, or arrow) to another part. A recording shows its time; a built-in
+ * record its bar and section, with the sections marked. At the booth each deck also has its own Play and Pause, a
+ * box to type an exact time into, and saved cue points to jump back to.
  */
 function PlaceBar({ deck, side, id, beat, drops }: { deck: Deck; side: DeckSide; id: DeckTrackId; beat: number; drops?: boolean }) {
   const [draft, setDraft] = useState<number | null>(null);
@@ -503,6 +513,7 @@ function PlaceBar({ deck, side, id, beat, drops }: { deck: Deck; side: DeckSide;
   const rec = isRecording(id);
   const current = trackPosition(deck, side, beat) ?? 0;
   const drop = dropCueOf(deck, side);
+  const cues = marksOf(deck, id);
   const pos = draft ?? current;
   const clamp = (p: number) => Math.max(0, Math.min(len - 0.01, p));
   const jump = (p: number) => partyCmd({ cmd: "cue", side, track: id, pos: clamp(p) });
@@ -521,6 +532,7 @@ function PlaceBar({ deck, side, id, beat, drops }: { deck: Deck; side: DeckSide;
   };
   const text = rec ? `${trackClock(pos)} / ${trackClock(len)}` : `Bar ${Math.floor(pos / 4) + 1} of ${len / 4} · ${SECTION_TEXT[sectionAt(pos, null)]}`;
   const label = `deck ${upper(side)}`;
+  const state = deckState(deck, side, beat);
   return (
     <div className="dj-place">
       <div
@@ -549,14 +561,32 @@ function PlaceBar({ deck, side, id, beat, drops }: { deck: Deck; side: DeckSide;
       >
         <i className="dj-placefill" style={{ width: draft === null ? `calc(var(--pos-${side}, 0) * 100%)` : `${(pos / len) * 100}%` }} />
         {!rec && [8, 16, 24, 28].map((bar) => <i key={bar} className="dj-placemark" style={{ left: `${((bar * 4) / len) * 100}%` }} />)}
+        {cues.map((c) => (
+          <i key={c} className="dj-placemark dj-cue-mark" style={{ left: `${(c / len) * 100}%` }} />
+        ))}
         {drop !== undefined && <i className="dj-placemark dj-drop-mark" style={{ left: `${(drop / len) * 100}%` }} />}
       </div>
-      <span className="dj-placetext">{text}</span>
+      <span className="dj-placetext">
+        {drops ? preciseClock(pos) : rec ? trackClock(pos) : text}
+        {drops && <> / {rec ? trackClock(len) : `bar ${Math.floor(pos / 4) + 1} of ${len / 4}`}</>}
+        {state === "held" && deck.playing && " · paused"}
+      </span>
       <div className="dj-transport">
+        {drops && (
+          <button
+            className={`dj-chip dj-deckplay ${state === "running" ? "on" : ""}`}
+            onClick={() => partyCmd({ cmd: "transport", side, playing: state !== "running" })}
+            aria-label={state === "running" ? `Pause ${label}` : `Play ${label}`}
+            title={state === "running" ? `Pause ${label} (the other deck plays on)` : `Play ${label}`}
+          >
+            {state === "running" ? "❚❚ Pause" : "▶ Play"}
+          </button>
+        )}
         <button className="dj-chip" onClick={() => jump(0)} aria-label={`Restart ${label}`}>↶ Start</button>
         <button className="dj-chip" onClick={() => jump(current - by)} aria-label={`Jump back on ${label}`}>{rec ? "−10 s" : "−1 bar"}</button>
         <button className="dj-chip" onClick={() => jump(current + by)} aria-label={`Jump forward on ${label}`}>{rec ? "+10 s" : "+1 bar"}</button>
       </div>
+      {drops && <CueRow side={side} id={id} cues={cues} label={label} jump={jump} at={() => trackPosition(deck, side, deckBeat(deck, serverNow())) ?? 0} />}
       {drops && (
         <div className="dj-transport">
           <button className="dj-chip" onClick={() => partyCmd({ cmd: "drop-cue", side, track: id, pos: trackPosition(deck, side, deckBeat(deck, serverNow())) ?? 0 })} aria-label={`Set drop on ${label}`}>Set drop</button>
@@ -566,6 +596,68 @@ function PlaceBar({ deck, side, id, beat, drops }: { deck: Deck; side: DeckSide;
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Type an exact time to go to (or to save as a cue), and the record's saved cues: click one to jump back to it.
+ * Cues belong to the record, so they're there whenever it's loaded, on either deck.
+ */
+function CueRow({ side, id, cues, label, jump, at }: { side: DeckSide; id: DeckTrackId; cues: number[]; label: string; jump: (p: number) => void; at: () => number }) {
+  const [typed, setTyped] = useState("");
+  const len = trackBeats(id);
+  const seconds = typed.trim() ? parseClock(typed) : null;
+  const bad = typed.trim() !== "" && (seconds === null || secondsToBeats(seconds) >= len);
+  const target = seconds !== null && !bad ? secondsToBeats(seconds) : null;
+  const go = () => {
+    if (target !== null) jump(target);
+  };
+  const save = () => {
+    partyCmd({ cmd: "mark", track: id, pos: target ?? at() });
+    setTyped("");
+  };
+  const full = cues.length >= MAX_MARKS;
+  return (
+    <>
+      <form
+        className="dj-transport dj-timebox"
+        onSubmit={(e) => {
+          e.preventDefault();
+          go();
+        }}
+      >
+        <input
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder="1:24.5"
+          inputMode="decimal"
+          aria-label={`Exact time on ${label} (like 1:24.5)`}
+          aria-invalid={bad}
+          className={bad ? "bad" : ""}
+          title={bad ? `Not a time in this record (it's ${trackClock(len)} long)` : "Type a time like 1:24.5, then Go"}
+        />
+        <button className="dj-chip" type="submit" disabled={target === null}>
+          Go
+        </button>
+        <button className="dj-chip" type="button" onClick={save} disabled={bad || full} title={full ? `Up to ${MAX_MARKS} cues per record` : target !== null ? `Save ${preciseClock(target)} as a cue` : "Save where the deck is now as a cue"}>
+          Save cue
+        </button>
+      </form>
+      {cues.length > 0 && (
+        <div className="dj-cues" role="group" aria-label={`Saved cues on ${label}`}>
+          {cues.map((c) => (
+            <span key={c} className="dj-cue">
+              <button onClick={() => jump(c)} title={`Jump ${label} to ${preciseClock(c)}`}>
+                {preciseClock(c)}
+              </button>
+              <button className="dj-cue-x" onClick={() => partyCmd({ cmd: "mark", track: id, pos: c, remove: true })} aria-label={`Delete the cue at ${preciseClock(c)} on ${side.toUpperCase()}`}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

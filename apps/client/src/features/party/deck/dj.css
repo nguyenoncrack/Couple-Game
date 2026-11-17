@@ -1191,3 +1191,58 @@
 .dj-guide dd:last-child {
   margin-bottom: 0;
 }
+
+/* each deck's own play, typed times and saved cues */
+.dj-deckplay.on {
+  background: var(--dj-play);
+  color: var(--dj-well);
+}
+.dj-timebox input {
+  flex: 1 1 64px;
+  min-width: 0;
+  width: 64px;
+  padding: 2px 6px;
+  border-radius: 9px;
+  border: 2px solid var(--dj-line);
+  background: var(--dj-well);
+  color: var(--dj-text);
+  font: 12px var(--mono);
+}
+.dj-timebox input.bad {
+  border-color: var(--dj-drop);
+}
+.dj-timebox .dj-chip {
+  flex: 0 0 auto;
+}
+.dj-cues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.dj-cue {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9px;
+  border: 2px solid var(--dj-line);
+  background: color-mix(in srgb, var(--dj-echo) 22%, #2f2b38);
+}
+.dj-cue button {
+  border: 0;
+  background: transparent;
+  color: var(--dj-text);
+  font: 11px var(--mono);
+  padding: 2px 3px 2px 7px;
+  cursor: pointer;
+}
+.dj-cue .dj-cue-x {
+  padding: 2px 6px 2px 2px;
+  color: var(--dj-soft);
+  font-size: 12px;
+}
+.dj-cue .dj-cue-x:hover {
+  color: var(--dj-drop);
+}
+.dj-placebar .dj-cue-mark {
+  background: var(--dj-echo);
+  box-shadow: 0 0 4px var(--dj-echo);
+}
