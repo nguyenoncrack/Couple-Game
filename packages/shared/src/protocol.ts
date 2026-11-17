@@ -135,6 +135,8 @@ export type ServerMsg =
       life: LifeState;
       /** The last things said in the house, oldest first. */
       chat: ChatMessage[];
+      /** Older house connections may still be running during a deployment. */
+      djSetNavigation?: true;
       /** The server clock, for working out where characters are between updates. */
       now: number;
     }

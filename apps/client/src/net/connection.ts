@@ -1,4 +1,4 @@
-import { CLOSE, type ClientMsg, type ServerMsg } from "@cg/shared";
+import { CLOSE, type ClientMsg, type PartyCmd, type ServerMsg } from "@cg/shared";
 
 export interface ConnectionHandlers {
   /** Version to ask the server to catch up from (0 = send everything). */
@@ -20,6 +20,8 @@ export interface ConnectionHandlers {
 const HIDDEN_MS = 5 * 60_000;
 /** Dropped this soon after a welcome counts as not having settled in. */
 const SETTLE_MS = 5_000;
+/** Don't apply a click later if the player's house takes longer than this to reconnect. */
+const DJ_RETRY_MS = 5_000;
 /** How long to wait when the server says we've been trying too often. */
 const BUSY_MS = 20_000;
 
@@ -41,6 +43,8 @@ export class Connection {
   private hiddenTimer: number | undefined;
   private disposed = false;
   private asleep = false;
+  private djSetNavigation = false;
+  private pendingDjCommand: { msg: ClientMsg; until: number; onUnavailable: () => void } | null = null;
 
   constructor(
     private houseId: string,
@@ -72,12 +76,19 @@ export class Connection {
       }
       if (msg.type === "welcome") {
         this.welcomed = true;
+        this.djSetNavigation = msg.djSetNavigation === true;
         this.welcomedAt = performance.now();
         this.attemptsBefore = this.attempts;
         this.attempts = 0;
         this.h.onStatus("online");
       }
       this.h.onMessage(msg);
+      if (msg.type === "welcome" && this.pendingDjCommand) {
+        const pending = this.pendingDjCommand;
+        this.pendingDjCommand = null;
+        if (this.djSetNavigation && Date.now() <= pending.until) this.send(pending.msg);
+        else pending.onUnavailable();
+      }
     };
     ws.onclose = (e) => {
       if (this.ws !== ws) return;
@@ -124,6 +135,18 @@ export class Connection {
     if (this.welcomed) this.raw(msg);
   }
 
+  /** A pre-update room can't read the new set commands. Reconnect once before sending the player's action. */
+  sendDjSetCommand(cmd: PartyCmd, onUnavailable: () => void): boolean {
+    if (!this.welcomed || this.ws?.readyState !== WebSocket.OPEN || this.pendingDjCommand) return false;
+    const msg: ClientMsg = { type: "life", intent: { do: "party", cmd } };
+    if (this.djSetNavigation) this.send(msg);
+    else {
+      this.pendingDjCommand = { msg, until: Date.now() + DJ_RETRY_MS, onUnavailable };
+      this.resync();
+    }
+    return true;
+  }
+
   get ready() {
     return this.welcomed;
   }
@@ -137,6 +160,7 @@ export class Connection {
   sleep() {
     if (this.disposed || this.asleep) return;
     this.asleep = true;
+    this.pendingDjCommand = null;
     window.clearTimeout(this.retryTimer);
     window.clearInterval(this.pingTimer);
     const ws = this.ws;
@@ -155,6 +179,7 @@ export class Connection {
 
   dispose() {
     this.disposed = true;
+    this.pendingDjCommand = null;
     document.removeEventListener("visibilitychange", this.onVisibility);
     window.clearTimeout(this.hiddenTimer);
     window.clearTimeout(this.retryTimer);

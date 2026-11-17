@@ -1,5 +1,5 @@
 import type { AddressInfo } from "node:net";
-import type { ClientMsg, HouseSummary, LifeIntent, LifeState, Op, PartyCmd, ServerMsg } from "@cg/shared";
+import type { ClientMsg, HouseSummary, LifeIntent, LifeState, Op, PartyCmd, ServerMsg, SetStep } from "@cg/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { createApp } from "../app";
@@ -118,6 +118,37 @@ async function furnish(a: Player, b: Player, extra: [string, string, number, num
 }
 
 describe("party night, over the wire", () => {
+  it("advertises DJ set navigation and jumps both players to a later track while the set plays", async () => {
+    const { a, b } = await couple();
+    expect((await a.connect()).djSetNavigation).toBe(true);
+    await b.connect();
+    await furnish(a, b);
+    const steps: SetStep[] = [
+      { track: "take-me", from: 0, cues: [], next: { at: 347, style: "echo", bars: 1 } },
+      { track: "back-to-u", from: 66, cues: [], next: { at: 390, style: "blend", bars: 4 } },
+      { track: "take-me-to-the-moon", from: 124, cues: [], next: { at: 230, style: "blend", bars: 4 } },
+      { track: "sad-machine-ksk-edit", from: 69, cues: [], next: { at: 365, style: "echo", bars: 4 } },
+      { track: "black-out-days-stay-away", from: 0, cues: [] },
+    ];
+    a.party({ cmd: "setload", set: { name: "Five tracks", steps }, playing: true });
+    await a.life((l) => l.party?.deck?.set?.step === 0 && l.party.deck.playing);
+    a.party({ cmd: "setjump", step: 3, track: "sad-machine-ksk-edit" });
+    for (const player of [a, b]) {
+      const { life } = await player.life((l) => l.party?.deck?.set?.step === 3);
+      expect(life.party!.deck).toMatchObject({
+        a: "sad-machine-ksk-edit",
+        b: "black-out-days-stay-away",
+        playing: true,
+        entryA: 69,
+        mix: { at: 365, style: "echo" },
+        set: { step: 3 },
+      });
+      expect(life.party!.deck!.set!.steps).toHaveLength(5);
+    }
+    await a.disconnect();
+    await b.disconnect();
+  });
+
   it("won't touch the lights or the music in a house with no party gear", async () => {
     const { a, b } = await couple();
     await a.connect();

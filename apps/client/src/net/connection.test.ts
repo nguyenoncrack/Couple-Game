@@ -20,9 +20,9 @@ class FakeSocket {
   close() {
     this.drop(1005);
   }
-  welcome() {
+  welcome(djSetNavigation = false) {
     this.onopen?.();
-    this.onmessage?.({ data: JSON.stringify({ type: "welcome" }) });
+    this.onmessage?.({ data: JSON.stringify({ type: "welcome", ...(djSetNavigation ? { djSetNavigation: true } : {}) }) });
   }
   drop(code: number, reason = "") {
     this.readyState = 3;
@@ -54,6 +54,41 @@ afterEach(() => {
 });
 
 describe("connection", () => {
+  const jump = { cmd: "setjump", step: 3, track: "sad-machine-ksk-edit" } as const;
+
+  it("reconnects an older room before delivering the DJ jump exactly once", () => {
+    const { conn } = connect();
+    const unavailable = vi.fn();
+    const old = latest();
+    old.welcome();
+    expect(conn.sendDjSetCommand(jump, unavailable)).toBe(true);
+    expect(old.sent.map((s) => JSON.parse(s).type)).toEqual(["hello"]);
+
+    vi.advanceTimersByTime(1200);
+    const updated = latest();
+    expect(updated).not.toBe(old);
+    updated.welcome(true);
+    expect(updated.sent.map((s) => JSON.parse(s))).toEqual([
+      { type: "hello", knownVersion: 0 },
+      { type: "life", intent: { do: "party", cmd: jump } },
+    ]);
+    expect(unavailable).not.toHaveBeenCalled();
+    conn.dispose();
+  });
+
+  it("reports that the DJ command was not delivered if the next room still cannot use it", () => {
+    const { conn } = connect();
+    const unavailable = vi.fn();
+    latest().welcome();
+    conn.sendDjSetCommand(jump, unavailable);
+    vi.advanceTimersByTime(1200);
+    latest().welcome();
+    expect(unavailable).toHaveBeenCalledTimes(1);
+    expect(latest().sent.map((s) => JSON.parse(s).type)).toEqual(["hello"]);
+    expect(FakeSocket.all).toHaveLength(2);
+    conn.dispose();
+  });
+
   it("counts being dropped right after each welcome, and backs off instead of hammering", () => {
     const { conn, h } = connect();
     const gaps: number[] = [];

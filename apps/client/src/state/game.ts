@@ -580,6 +580,11 @@ export function setTool(tool: Tool) {
 /** Ask my character to do something; the server answers with new life (or a reason it can't). */
 /** The party panel's lights and shared music: a message to the house, not an order to my character. */
 export function partyCmd(cmd: PartyCmd) {
+  if (cmd.cmd === "setjump" || cmd.cmd === "setappend" || (cmd.cmd === "setload" && (cmd.step !== undefined || cmd.playing))) {
+    const sent = conn?.sendDjSetCommand(cmd, () => toast("The house didn’t receive that DJ command. Try again."));
+    if (!sent) toast("The house is reconnecting. Try your DJ control again when it’s back.");
+    return;
+  }
   conn?.send({ type: "life", intent: { do: "party", cmd } });
 }
 

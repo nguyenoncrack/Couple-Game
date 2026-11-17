@@ -215,6 +215,7 @@ export class HouseRoom {
         sync,
         life: this.life.state,
         chat,
+        djSetNavigation: true,
         now,
       });
       for (const pr of this.presence.values()) if (pr.memberId !== peer.memberId) peer.send({ type: "presence", ...pr });
