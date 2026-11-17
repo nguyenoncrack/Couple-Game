@@ -211,6 +211,12 @@ export function placeIn(id: DeckTrackId, pos: number): number {
   return isRecording(id) ? Math.round(p * 1000) / 1000 : Math.round(p * 4) / 4;
 }
 
+/** An eight-bar blend near the end of a record, leaving a bar before it loops when there is room. */
+export function defaultHandover(track: DeckTrackId, from: number): SetHandover {
+  const end = trackBeats(track);
+  return { at: placeIn(track, Math.max(Math.min(from + 4, end - 1), end - 36)), style: "blend", bars: 8 };
+}
+
 /** The side a transition leaves, and the side it brings in. */
 export const mixOut = (m: Pick<DeckMix, "to">): DeckSide => (m.to === 1 ? "a" : "b");
 export const mixInto = (m: Pick<DeckMix, "to">): DeckSide => (m.to === 1 ? "b" : "a");

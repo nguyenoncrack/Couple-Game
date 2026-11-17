@@ -211,7 +211,7 @@ export function SoundPage({ deck, beat, x, engine }: { deck: Deck; beat: number;
       {preview && <p className="dj-note dj-previewing">Previewing {preview.label}: only you hear it, and the party is turned down for you meanwhile.</p>}
       {queued && (
         <p className="dj-note">
-          Queued: at <b>{preciseClock(queued.at ?? 0)}</b> on {upper(out)} ➜ {upper(into)} from <b>{preciseClock(queued.inAt ?? inPos)}</b> · {styleName(queued.style)} · {barsText(queued.beats / 4)} (save the set in My Sets to keep it)
+          Queued: at <b>{preciseClock(queued.at ?? 0)}</b> on {upper(out)} ➜ {upper(into)} from <b>{preciseClock(queued.inAt ?? inPos)}</b> · {styleName(queued.style)} · {barsText(queued.beats / 4)}
         </p>
       )}
 

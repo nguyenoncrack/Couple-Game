@@ -1,4 +1,4 @@
-import { trackBeats, type DeckTrackId, type MixStyle, type SetStep } from "@cg/shared";
+import { defaultHandover, trackBeats, type DeckTrackId, type MixStyle, type SetStep } from "@cg/shared";
 import type { Analysis } from "./analyze";
 import { suggestMixes } from "./suggest";
 
@@ -29,10 +29,7 @@ export function autoLink(outId: DeckTrackId, outFrom: number, inId: DeckTrackId,
     const s = list[list.length - 1];
     if (s) return { at: s.at, style: s.style, bars: s.bars, inFrom: s.inAt, how: s.approximate ? "approximate" : "beats" };
   }
-  // no analysis (or nothing fits): an 8-bar blend that finishes a bar before the end
-  const len = trackBeats(outId);
-  const at = Math.max(Math.min(outFrom + 4, len - 1), len - 36);
-  return { at: Math.round(at * 1000) / 1000, style: "blend", bars: 8, inFrom: 0, how: "fallback" };
+  return { ...defaultHandover(outId, outFrom), inFrom: 0, how: "fallback" };
 }
 
 /** Link every record in a chain to the next (keeping the first one's start). */

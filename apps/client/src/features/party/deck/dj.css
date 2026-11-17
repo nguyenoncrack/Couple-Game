@@ -1289,6 +1289,42 @@
 }
 
 /* My Sets */
+.dj-setqueue {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  border: 1px solid var(--dj-line);
+  border-radius: 10px;
+  background: var(--dj-well);
+}
+.dj-setqueue h3 {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.dj-setqueue select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 8px;
+  background: var(--dj-body);
+  color: inherit;
+  border: 1px solid var(--dj-line);
+  border-radius: 6px;
+  font: inherit;
+}
+.dj-queue-tracks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.dj-queue-tracks span {
+  font: 11px var(--mono);
+  margin-right: 3px;
+}
 .dj-sets {
   display: grid;
   gap: 10px;
@@ -1337,8 +1373,8 @@
 .dj-setsteps li.on {
   box-shadow: inset 0 0 0 2px var(--dj-play);
 }
-.dj-setsteps li.done {
-  opacity: 0.55;
+.dj-setsteps .dj-setjump {
+  margin-left: auto;
 }
 .dj-setsteps span {
   color: var(--dj-soft);
@@ -1655,13 +1691,4 @@
 .dj-chainadd,
 .dj-chaingo {
   margin-top: 5px;
-}
-.dj-linkbtn {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--dj-echo);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
 }

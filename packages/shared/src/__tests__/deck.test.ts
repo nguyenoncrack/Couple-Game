@@ -541,6 +541,57 @@ describe("DJ sets", () => {
     expect(PartyCmd.safeParse({ cmd: "setchain", steps: [] }).success).toBe(false);
   });
 
+  it("appends songs from the crate without disrupting playback or an existing link", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { a: "back-to-u", b: null, xfade: 0, bpm: 120, playing: true } }, T0);
+    send(s, { cmd: "setappend", track: "take-me" }, T0 + 1000);
+    const d = s.party!.deck!;
+    expect(d).toMatchObject({ playing: true, a: "back-to-u", b: "take-me", set: { step: 0, name: null } });
+    expect(posOf(d, "a", T0 + 1000)).toBeCloseTo(2);
+    const firstLink = { ...d.mix };
+    send(s, { cmd: "setappend", track: "atlasaudio-edm" }, T0 + 2000);
+    expect(d.set!.steps.map((x) => x.track)).toEqual(["back-to-u", "take-me", "atlasaudio-edm"]);
+    expect(d.mix).toEqual(firstLink);
+    send(s, { cmd: "mixnow" }, T0 + 3000);
+    send(s, { cmd: "setappend", track: "night-bus" }, T0 + 4000);
+    expect(d.set!.steps).toHaveLength(4);
+    send(s, { cmd: "setstep" }, T0 + 20_000);
+    expect(d).toMatchObject({ a: "atlasaudio-edm", b: "take-me", xfade: 1, set: { step: 1 } });
+    const restored = restoredParty(JSON.parse(JSON.stringify(savedParty(s.party!, T0 + 21_000))))!;
+    expect(restored.deck!.set).toEqual(d.set);
+  });
+
+  it("starts a saved set at a selected record and jumps by index while keeping the rest of the set", () => {
+    const s = fresh();
+    const set = {
+      name: "Rehearsal",
+      steps: [
+        { track: "back-to-u", from: sec(40), cues: [sec(30)], next: { at: sec(90), style: "echo", bars: 4 } },
+        { track: "take-me", from: sec(20), cues: [], next: { at: sec(35), style: "bass", bars: 4 } },
+        { track: "back-to-u", from: sec(60), cues: [], next: { at: sec(80), style: "cut", bars: 1 } },
+        { track: "atlasaudio-edm", from: sec(5), cues: [] },
+      ],
+    };
+    send(s, { cmd: "setload", set, step: 2, playing: true }, T0);
+    const d = s.party!.deck!;
+    expect(d).toMatchObject({ a: "back-to-u", b: "atlasaudio-edm", playing: true, mix: { style: "cut" }, set: { step: 2 } });
+    expect(posOf(d, "a", T0)).toBeCloseTo(sec(60), 2);
+    expect(posOf(d, "b", T0)).toBeCloseTo(sec(5), 2);
+    expect(d.marks?.["back-to-u"]).toEqual([placeIn("back-to-u", sec(30))]);
+    send(s, { cmd: "setjump", step: 0, track: "take-me" }, T0 + 1000);
+    send(s, { cmd: "setload", set, step: 4 }, T0 + 1000);
+    expect(d).toMatchObject({ a: "back-to-u", b: "atlasaudio-edm", playing: true, set: { step: 2 } });
+    send(s, { cmd: "mixnow" }, T0 + 2000);
+    send(s, { cmd: "setjump", step: 0, track: "back-to-u" }, T0 + 2100);
+    expect(d).toMatchObject({ a: "back-to-u", b: "take-me", playing: true, mix: { style: "echo" }, set: { step: 0 } });
+    expect(posOf(d, "a", T0 + 2100)).toBeCloseTo(sec(40), 2);
+    expect(d.set!.steps).toHaveLength(4);
+    send(s, { cmd: "deck", set: { playing: false } }, T0 + 3000);
+    send(s, { cmd: "setjump", step: 3, track: "atlasaudio-edm" }, T0 + 4000);
+    expect(d).toMatchObject({ a: "atlasaudio-edm", b: null, playing: false, mix: null, set: { step: 3 } });
+    expect(posOf(d, "a", T0 + 6000)).toBeCloseTo(sec(5), 2);
+  });
+
   it("checks a set before loading it", () => {
     expect(PartyCmd.safeParse({ cmd: "setload", set: { name: "x", steps: [] } }).success).toBe(false);
     expect(PartyCmd.safeParse({ cmd: "setload", set: { name: "x", steps: [{ track: "nope", from: 0, cues: [] }] } }).success).toBe(false);

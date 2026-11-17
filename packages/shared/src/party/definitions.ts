@@ -142,6 +142,7 @@ const SetStepsSchema = z
     .min(1)
     .max(MAX_SET_STEPS);
 const DeckSetSchema = z.object({ name: z.string().max(32), steps: SetStepsSchema });
+const SetIndex = z.number().int().min(0).max(MAX_SET_STEPS - 1);
 
 export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({
@@ -205,8 +206,10 @@ export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("transport"), side: z.enum(["a", "b"]), playing: z.boolean() }),
   /** Save a cue point on a record (or, with `remove`, take one away). */
   z.object({ cmd: z.literal("mark"), track: z.enum(DECK_TRACK_IDS), pos: Place, remove: z.literal(true).optional() }),
-  /** Put a saved set in the decks, paused at its start. */
-  z.object({ cmd: z.literal("setload"), set: DeckSetSchema }),
+  /** Put a set in the decks at the selected record, paused unless asked to play. */
+  z.object({ cmd: z.literal("setload"), set: DeckSetSchema, step: SetIndex.optional(), playing: z.literal(true).optional() }),
+  z.object({ cmd: z.literal("setjump"), step: SetIndex, track: z.enum(DECK_TRACK_IDS) }),
+  z.object({ cmd: z.literal("setappend"), track: z.enum(DECK_TRACK_IDS) }),
   /**
    * Link records after the one on air: it hands over to the next, that one to the one after, and so on. The first
    * step is the record on air (its `next` is its transition); whatever was queued after it is replaced.

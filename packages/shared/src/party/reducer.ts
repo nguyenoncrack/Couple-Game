@@ -8,6 +8,7 @@ import {
   cueFor,
   deckBeat,
   DEFAULT_DECK,
+  defaultHandover,
   DROP_BEATS,
   holdOf,
   isParked,
@@ -92,7 +93,7 @@ export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): 
 export const deckOf = (p: PartyState): Deck => (p.deck ??= { ...DEFAULT_DECK });
 
 type DeckCmd = (typeof DECK_CMDS)[number];
-const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark", "mixnow", "unmix", "setload", "setchain", "setstep"] as const;
+const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark", "mixnow", "unmix", "setload", "setjump", "setappend", "setchain", "setstep"] as const;
 export const isDeckCmd = (cmd: PartyCmd): cmd is Extract<PartyCmd, { cmd: DeckCmd }> => (DECK_CMDS as readonly string[]).includes(cmd.cmd);
 
 const S = (side: DeckSide) => (side === "a" ? "A" : "B");
@@ -224,7 +225,57 @@ function queueStep(d: Deck, free: DeckSide) {
   d[free] = next.track;
   delete d[`dropCue${S(free)}`];
   holdAt(d, free, next.track, next.from);
-  d.mix = { style: cur.next.style, from: d.xfade, to: free === "b" ? 1 : 0, start: null, beats: cur.next.bars * 4, at: cur.next.at, inAt: next.from };
+  const mix: DeckMix = { style: cur.next.style, from: d.xfade, to: free === "b" ? 1 : 0, start: null, beats: cur.next.bars * 4, at: cur.next.at, inAt: next.from };
+  d.mix = mix;
+  return mix;
+}
+
+/** Cue a position in the set without discarding any of its earlier or upcoming links. */
+function cueSetStep(d: Deck, index: number, side: DeckSide, beat: number) {
+  const s = d.set!;
+  const step = s.steps[index]!;
+  const free = otherSide(side);
+  s.step = index;
+  d.mix = null;
+  d.drop = null;
+  d.xfade = side === "a" ? 0 : 1;
+  load(d, free, null, beat);
+  d[side] = step.track;
+  delete d[`dropCue${S(side)}`];
+  placeAt(d, side, step.track, step.from, beat);
+  queueStep(d, free);
+}
+
+/** Add to the tail without interrupting an existing transition or moving the playhead. */
+function appendSetTrack(d: Deck, track: DeckTrackId, beat: number) {
+  const side: DeckSide = d.xfade < 0.5 ? "a" : "b";
+  const onAir = d[side];
+  if (!onAir) {
+    d.set = { name: null, steps: [{ track, from: 0, cues: [] }], step: 0 };
+    return cueSetStep(d, 0, side, beat);
+  }
+  if (d.set?.steps[d.set.step]?.track !== onAir) {
+    if (d.mix) return;
+    const from = d[`entry${S(side)}`] ?? trackPosition(d, side, beat) ?? 0;
+    d.set = { name: null, steps: [{ track: onAir, from, cues: [] }], step: 0 };
+  }
+  const s = d.set!;
+  if (s.steps.length >= MAX_SET_STEPS) return;
+  const tail = s.steps[s.steps.length - 1]!;
+  const tailOnAir = s.step === s.steps.length - 1;
+  const pos = tailOnAir ? trackPosition(d, side, beat)! : tail.from;
+  tail.next = defaultHandover(tail.track, pos);
+  s.steps.push({ track, from: 0, cues: [] });
+  if (!tailOnAir || d.mix) return;
+  const mix = queueStep(d, otherSide(side));
+  // The last fraction of a beat can be past the latest representable cue.
+  if (mix && tail.next.at < pos) {
+    if (holdOf(d, side) !== undefined) mix.at = pos;
+    else {
+      mix.start = beat;
+      delete mix.at;
+    }
+  }
 }
 
 /** Work the deck. Reports whether anything changed. */
@@ -377,26 +428,19 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
     }
     case "setload": {
       const steps = restoredSteps(cmd.set.steps);
-      const first = steps[0];
-      if (!first) return false;
-      if (d.playing) anchorDeck(d, now);
-      d.playing = false;
-      d.mix = null;
-      d.drop = null;
+      const index = cmd.step ?? 0;
+      if (!steps[index]) return false;
+      if (d.playing !== Boolean(cmd.playing)) anchorDeck(d, now);
+      d.playing = Boolean(cmd.playing);
       for (const step of steps) if (step.cues.length) (d.marks ??= {})[step.track] = step.cues;
-      d.a = first.track;
-      delete d.dropCueA;
-      placeAt(d, "a", first.track, first.from, beat);
-      d.b = null;
-      release(d, "b");
-      delete d.cueB;
-      delete d.dropCueB;
-      delete d.entryB;
-      d.xfade = 0;
-      d.set = { name: cmd.set.name.trim().slice(0, 32) || null, steps: steps.map((s) => ({ ...s, cues: [] })), step: 0 };
-      queueStep(d, "b");
-      return;
+      d.set = { name: cmd.set.name.trim().slice(0, 32) || null, steps: steps.map((s) => ({ ...s, cues: [] })), step: index };
+      return cueSetStep(d, index, "a", beat);
     }
+    case "setjump":
+      if (d.set?.steps[cmd.step]?.track !== cmd.track) return false;
+      return cueSetStep(d, cmd.step, mixAt(d, beat).xfade < 0.5 ? "a" : "b", beat);
+    case "setappend":
+      return appendSetTrack(d, cmd.track, beat);
     case "setchain": {
       const chain = restoredSteps(cmd.steps);
       const onAir: DeckSide = d.xfade < 0.5 ? "a" : "b";

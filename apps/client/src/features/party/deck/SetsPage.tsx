@@ -50,7 +50,7 @@ export function SetsPage({ deck, beat, air }: { deck: Deck; beat: number; air: D
           In the decks{known ? `: ${known}` : deck.set ? ": this mix (not saved yet)" : ""}
         </h3>
         {steps.length ? (
-          <SetSteps steps={steps} at={deck.set ? deck.set.step : 0} />
+          <SetSteps steps={steps} at={deck.set ? deck.set.step : 0} onJump={deck.set ? (i) => partyCmd({ cmd: "setjump", step: i, track: steps[i]!.track }) : undefined} jumpLabel="Jump" />
         ) : (
           <p className="dj-note">Put a record on to start a set.</p>
         )}
@@ -73,11 +73,11 @@ export function SetsPage({ deck, beat, air }: { deck: Deck; beat: number; air: D
   );
 }
 
-function SetSteps({ steps, at }: { steps: SetStep[]; at: number }) {
+function SetSteps({ steps, at, onJump, jumpLabel }: { steps: SetStep[]; at: number; onJump?: (i: number) => void; jumpLabel: string }) {
   return (
     <ol className="dj-setsteps">
       {steps.map((s, i) => (
-        <li key={i} className={i === at ? "on" : i < at ? "done" : ""}>
+        <li key={i} className={i === at ? "on" : ""} aria-current={i === at ? "step" : undefined}>
           <span className="dj-setdot" style={{ background: deckTrack(s.track).color }} aria-hidden />
           <b>{deckTrack(s.track).name}</b>
           <span>from {preciseClock(s.from)}</span>
@@ -86,6 +86,11 @@ function SetSteps({ steps, at }: { steps: SetStep[]; at: number }) {
             <span className="dj-sethand">
               at {preciseClock(s.next.at)}: {styleName(s.next.style)}, {s.next.bars} bar{s.next.bars === 1 ? "" : "s"} ➜
             </span>
+          )}
+          {onJump && (
+            <button className="dj-chip dj-setjump" onClick={() => onJump(i)} aria-label={`${jumpLabel} track ${i + 1}: ${deckTrack(s.track).name}`}>
+              {jumpLabel}
+            </button>
           )}
         </li>
       ))}
@@ -97,8 +102,8 @@ function SavedSetRow({ set }: { set: SavedSet }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [open, setOpen] = useState(false);
-  const load = () => {
-    partyCmd({ cmd: "setload", set: { name: set.name, steps: set.steps } });
+  const load = (step?: number) => {
+    partyCmd({ cmd: "setload", set: { name: set.name, steps: set.steps }, step, playing: step === undefined ? undefined : true });
     setConsoleTab("music");
   };
   const summary = `${set.steps.length} record${set.steps.length === 1 ? "" : "s"}${set.steps.length > 1 ? ` · ${set.steps.length - 1} transition${set.steps.length === 2 ? "" : "s"}` : ""}`;
@@ -137,7 +142,7 @@ function SavedSetRow({ set }: { set: SavedSet }) {
           </>
         ) : (
           <>
-            <button className="dj-chip on" onClick={load} title="Put it in the decks, paused at the start">
+            <button className="dj-chip on" onClick={() => load()} title="Put it in the decks, paused at the start">
               Load
             </button>
             <button className="dj-chip" onClick={() => setRenaming(set.name)} disabled={renaming !== null}>
@@ -152,7 +157,7 @@ function SavedSetRow({ set }: { set: SavedSet }) {
           </>
         )}
       </div>
-      {open && <SetSteps steps={set.steps} at={-1} />}
+      {open && <SetSteps steps={set.steps} at={-1} onJump={load} jumpLabel="Play" />}
     </div>
   );
 }

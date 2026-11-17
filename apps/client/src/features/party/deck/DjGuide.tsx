@@ -15,6 +15,8 @@ export function DjGuide({ simple }: { simple: boolean }) {
             <dd>Use each deck’s volume and EQ to balance the mix. Filter and Echo affect the mix, and BPM changes playback speed.</dd>
             <dt>Transition between tracks</dt>
             <dd>Load both decks and press Play. Pick a transition preset or set a style and length, then press Mix to start it on the next bar.</dd>
+            <dt>Queue songs and jump ahead</dt>
+            <dd>Use Queue a song on Decks to add records. Pick a numbered track to jump to its start point. Use Mix now to start the next transition early, or Edit links to adjust its timing and style.</dd>
           </>
         )}
         {!simple && (

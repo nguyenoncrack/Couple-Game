@@ -10,8 +10,7 @@ import { parseClock, preciseClock, secondsToBeats } from "./deckTime";
  * Link songs: a chain of records, each handing over to the next (1 ➜ 2 ➜ 3 ➜ …). It starts from the record on air
  * and whatever is already queued after it. Add records, reorder them, and set each link's time, style and length (or
  * let Auto work it out from the records' beats and energy). *Link to what's playing* carries the mix on into the
- * chain without stopping; *Play from the start* starts it over from the first record; either way each record comes
- * in on its own, one after another.
+ * chain without stopping; start playback from any numbered record to hear its remaining links.
  */
 
 const upper = (side: DeckSide) => side.toUpperCase();
@@ -86,19 +85,18 @@ export function ChainEditor({ deck, beat, air }: { deck: Deck; beat: number; air
   const autoAll = () => edit(linkAll(steps, deck.bpm, analysis, live && running ? onAirPos : undefined));
 
   const canLink = live && steps.length > 1 && !mixing && liveProblems.every((p) => !p);
-  const canStart = steps.length > 1 && startProblems.every((p) => !p);
+  const canStartAt = (i: number) => steps.length > i && startProblems.slice(i).every((p) => !p);
   const linkUp = () => {
     if (!canLink) return;
     partyCmd({ cmd: "setchain", steps });
     setDraft(null);
     setNote(`Linked: ${steps.length} records, one after another`);
   };
-  const playFromStart = () => {
-    if (!canStart) return;
-    partyCmd({ cmd: "setload", set: { name: name.trim() || "Chain", steps } });
-    partyCmd({ cmd: "deck", set: { playing: true } });
+  const playFrom = (i: number) => {
+    if (!canStartAt(i)) return;
+    partyCmd({ cmd: "setload", set: { name: name.trim() || "Chain", steps }, step: i, playing: true });
     setDraft(null);
-    setNote("Playing the chain from the start");
+    setNote(`Playing from track ${i + 1}`);
   };
   const save = () => {
     if (steps.length < 1) return;
@@ -129,6 +127,11 @@ export function ChainEditor({ deck, beat, air }: { deck: Deck; beat: number; air
                   <ClockBox label="starts at" value={x.from} max={trackBeats(x.track)} onSet={(v) => setStep(i, { from: v })} />
                 )}
                 <span className="dj-chainbtns">
+                  {(draft || !s) && (
+                    <button className="dj-chip" onClick={() => playFrom(i)} disabled={!canStartAt(i)} aria-label={`Play from track ${i + 1}: ${t.name}`}>
+                      ▶
+                    </button>
+                  )}
                   {i > 0 && (
                     <>
                       <button className="dj-chip" onClick={() => move(i, -1)} disabled={i < 2} aria-label={`Move ${t.name} earlier`}>
@@ -201,9 +204,6 @@ export function ChainEditor({ deck, beat, air }: { deck: Deck; beat: number; air
       <div className="dj-mixrow dj-chaingo">
         <button className="dj-chip on" onClick={linkUp} disabled={!canLink} title={!live ? "The first song isn't the one on air: play the chain from the start instead" : mixing ? "Wait for the transition under way to finish" : "Carry the mix on into the chain, without stopping"}>
           Link to what's playing
-        </button>
-        <button className="dj-chip" onClick={playFromStart} disabled={!canStart} title="Start the chain over from its first song">
-          ▶ Play from the start
         </button>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder={`Chain ${sets.length + 1}`} maxLength={32} aria-label="Chain name" />
         <button className="dj-chip" onClick={save} disabled={!steps.length} title="Keep it in My Sets (on this device)">

@@ -45,6 +45,7 @@ import { DjGuide } from "./DjGuide";
 import { parseClock, preciseClock, secondsToBeats } from "./deckTime";
 import { LightsPage } from "./LightsPage";
 import { SetsPage } from "./SetsPage";
+import { SetQueue } from "./SetQueue";
 import { SoundPage } from "./SoundPage";
 import { requestAnalysis, useAnalysis } from "./analysis/trackAnalysis";
 import "./dj.css";
@@ -289,6 +290,8 @@ function DeckPage({ deck, clock }: { deck: Deck; clock: Clock }) {
 
       <MixPanel deck={deck} clock={clock} />
 
+      <SetQueue set={deck.set} />
+
       <div className="dj-load" role="group" aria-label="Choose which deck to load">
         <span>Load to</span>
         {(["auto", "a", "b"] as const).map((choice) => (
@@ -406,12 +409,6 @@ function MixPanel({ deck, clock }: { deck: Deck; clock: Clock }) {
       </div>
       {timed ? <QueuedMix deck={deck} mix={timed} beat={beat} /> : !mix && <TimedMix deck={deck} beat={beat} to={to} style={mixStyle} bars={mixBars} />}
       {blocked && !live && <p className="dj-note dj-mixhint">{blocked} (or time one below)</p>}
-      <p className="dj-note dj-mixhint">
-        More than two songs?{" "}
-        <button className="dj-linkbtn" onClick={() => setConsoleTab("sets")}>
-          Link songs 1 ➜ 2 ➜ 3 ➜ … in My Sets
-        </button>
-      </p>
     </div>
   );
 }
