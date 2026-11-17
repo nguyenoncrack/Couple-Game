@@ -23,6 +23,11 @@ export const RECORDED_TRACKS = [
   { id: "hard-summer-2017-live", name: "HARD SUMMER 2017 LIVE", style: "4B", color: "#bafa45", seconds: 4346.6 },
   { id: "back-to-u", name: "Back To U", style: "SLANDER & William Black", color: "#58a6ff", seconds: 259.45 },
   { id: "take-me", name: "Take Me", style: "William Black & Matte feat. RUNN", color: "#f693c5", seconds: 192.05 },
+  { id: "dont-leave-kiss-fm-edit", name: "Don't Leave (KISS FM Edit)", style: "Seven Lions & Ellie Goulding", color: "#fec86d", seconds: 189.15 },
+  { id: "where-you-are", name: "Where You Are", style: "John Summit", color: "#66dffc", seconds: 236.03 },
+  { id: "clarity-album-mix", name: "Clarity (Original Album Mix)", style: "Zedd feat. Foxes", color: "#f5a65b", seconds: 271.78 },
+  { id: "take-me-to-the-moon", name: "Take Me to the Moon", style: "Ian Asher & D a n n y", color: "#a4a7ff", seconds: 158.67 },
+  { id: "black-out-days-stay-away", name: "Black Out Days (Stay Away)", style: "Ian Asher & Phantogram", color: "#ee79a7", seconds: 172.66 },
 ] as const;
 export type PatternTrackId = (typeof PATTERN_TRACKS)[number]["id"];
 export type RecordedTrackId = (typeof RECORDED_TRACKS)[number]["id"];
