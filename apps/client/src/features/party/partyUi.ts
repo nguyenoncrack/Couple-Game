@@ -4,7 +4,7 @@ import { create } from "zustand";
 /** This player's own party settings and which page of the console is showing. Nothing here is shared. */
 
 interface PartyUi {
-  tab: "music" | "sound" | "sets" | "lights" | "guide";
+  tab: "music" | "lights" | "guide";
   volume: number;
   muted: boolean;
   /** The music gets quieter the further your character is from the speakers (on by default). */

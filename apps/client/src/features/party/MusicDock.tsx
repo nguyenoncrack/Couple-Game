@@ -7,6 +7,7 @@ import { DeckEngine } from "./deck/deckEngine";
 import { DjConsole } from "./deck/DjConsole";
 import { useGearInUse } from "./partyHooks";
 import { resetPartyUi, usePartyUi } from "./partyUi";
+import { resetWorkspace } from "./deck/workspace/workspaceStore";
 import { easeGain, levelAtHeight, musicGain, musicSources } from "./spatialMix";
 
 /**
@@ -89,6 +90,7 @@ export function MusicDock() {
       engine.stop();
       holdAmbient(false);
       resetPartyUi();
+      resetWorkspace();
     },
     [engine],
   );

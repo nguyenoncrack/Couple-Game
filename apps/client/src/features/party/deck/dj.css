@@ -792,86 +792,12 @@
   font-size: 9px;
 }
 
-/* transitions */
-.dj-mixpanel {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 8px 10px;
-  border-radius: 16px;
-  background: #1b1921;
-  box-shadow: inset 0 0 0 2px var(--dj-line);
-}
+/* rows of controls, and segmented choices */
 .dj-mixrow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-}
-.dj-mixlabel {
-  margin-right: 2px;
-}
-.dj-preset-wrap {
-  position: relative;
-  display: inline-flex;
-}
-.dj-preset {
-  display: grid;
-  justify-items: start;
-  gap: 0;
-  padding: 4px 10px;
-  border-radius: 10px;
-  border: 2px solid var(--dj-line);
-  background: linear-gradient(180deg, #3f3a49, #2f2b38);
-  box-shadow: 0 3px 0 var(--dj-line);
-  color: var(--dj-text);
-  font: 600 12px var(--logo);
-  text-align: left;
-  cursor: pointer;
-  transition: transform 0.06s;
-}
-.dj-preset small {
-  font: 9px var(--mono);
-  color: var(--dj-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.dj-preset-wrap.mine .dj-preset {
-  border-color: color-mix(in srgb, var(--dj-echo) 60%, var(--dj-line));
-  padding-right: 22px;
-}
-.dj-preset:active:not(:disabled) {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 var(--dj-line);
-}
-.dj-preset:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-.dj-preset.on {
-  opacity: 1;
-  background: var(--dj-echo);
-  color: var(--dj-well);
-}
-.dj-preset.on small {
-  color: var(--dj-well);
-}
-.dj-preset-x {
-  position: absolute;
-  top: 2px;
-  right: 3px;
-  width: 16px;
-  height: 16px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--dj-soft);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-.dj-preset-x:hover {
-  color: var(--dj-drop);
 }
 .dj-seg {
   display: inline-flex;
@@ -899,49 +825,6 @@
 .dj-seg-unit {
   padding: 0 6px 0 2px;
   font-size: 9px;
-}
-.dj-save {
-  display: inline-flex;
-  gap: 4px;
-}
-.dj-save input {
-  width: 120px;
-  padding: 3px 8px;
-  border-radius: 9px;
-  border: 2px solid var(--dj-line);
-  background: var(--dj-well);
-  color: var(--dj-text);
-  font: 12px var(--logo);
-}
-.dj-mixgo {
-  --glow: var(--dj-echo);
-  position: relative;
-  margin-left: auto;
-  height: 40px;
-  overflow: hidden;
-  color: color-mix(in srgb, var(--dj-echo) 75%, white);
-}
-.dj-mixgo small {
-  font: 9px var(--mono);
-  opacity: 0.8;
-}
-.dj-mixgo.is-running {
-  color: var(--dj-text);
-  background: #2f2b38;
-  text-shadow: 0 1px 2px #000000aa;
-}
-.dj-mixbar {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: calc(var(--mixk, 0) * 100%);
-  background: var(--dj-echo);
-  z-index: -1;
-}
-.dj-mixgo.is-running {
-  isolation: isolate;
-}
-.dj-mixhint {
-  margin: 0;
 }
 .dj-fx .dj-fx-mix {
   background: var(--dj-echo);
@@ -1135,8 +1018,7 @@
   padding: 3px 0;
   background: var(--dj-body);
 }
-.dj-transport,
-.dj-load {
+.dj-transport {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1157,14 +1039,6 @@
 .dj-drop-cue:enabled {
   background: var(--dj-drop);
   color: var(--dj-well);
-}
-.dj-load {
-  margin: 8px 0 2px;
-  color: var(--dj-soft);
-  font-size: 12px;
-}
-.dj-load span {
-  margin-right: 4px;
 }
 .dj-guide {
   padding: 16px;
@@ -1247,207 +1121,18 @@
   box-shadow: 0 0 4px var(--dj-echo);
 }
 
-/* timed and queued transitions */
-.dj-timed label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--dj-soft);
-}
-.dj-timed input {
-  width: 62px;
-  padding: 2px 6px;
-  border-radius: 9px;
-  border: 2px solid var(--dj-line);
-  background: var(--dj-well);
-  color: var(--dj-text);
-  font: 12px var(--mono);
-}
-.dj-timed input.bad {
-  border-color: var(--dj-drop);
-}
-.dj-queued {
-  padding: 6px 8px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--dj-echo) 16%, var(--dj-well));
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--dj-echo) 55%, var(--dj-line));
-}
-.dj-queued-text {
-  flex: 1;
-  display: grid;
-  font-size: 13px;
-}
-.dj-queued-text b {
-  font-family: var(--mono);
-  color: var(--dj-echo);
-}
-.dj-queued-text small {
-  font: 10px var(--mono);
-  color: var(--dj-soft);
-  text-transform: uppercase;
-}
-
-/* My Sets */
-.dj-setqueue {
-  display: grid;
-  gap: 6px;
-  padding: 8px 10px;
-  margin: 6px 0;
-  border: 1px solid var(--dj-line);
-  border-radius: 10px;
-  background: var(--dj-well);
-}
-.dj-setqueue h3 {
-  margin: 0;
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-.dj-setqueue select {
-  min-width: 0;
-  max-width: 100%;
-  padding: 4px 8px;
-  background: var(--dj-body);
-  color: inherit;
-  border: 1px solid var(--dj-line);
-  border-radius: 6px;
-  font: inherit;
-}
-.dj-queue-tracks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.dj-queue-tracks span {
-  font: 11px var(--mono);
-  margin-right: 3px;
-}
-.dj-sets {
-  display: grid;
-  gap: 10px;
-}
-.dj-sets section {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 16px;
-  background: #1b1921;
-  box-shadow: inset 0 0 0 2px var(--dj-line);
-}
-.dj-sets h3 {
-  margin: 0;
-  font-size: 15px;
-}
+/* saved sets */
 .dj-hint {
   margin: 0;
   font-size: 12px;
   color: var(--dj-soft);
-}
-.dj-setsteps {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
-}
-.dj-setsteps li {
-  counter-increment: step;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 10px;
-  background: var(--dj-well);
-  font-size: 12px;
-}
-.dj-setsteps li::before {
-  content: counter(step);
-  font: 10px var(--mono);
-  color: var(--dj-soft);
-}
-.dj-setsteps li.on {
-  box-shadow: inset 0 0 0 2px var(--dj-play);
-}
-.dj-setsteps .dj-setjump {
-  margin-left: auto;
-}
-.dj-setsteps span {
-  color: var(--dj-soft);
-  font-family: var(--mono);
-  font-size: 11px;
-}
-.dj-setsteps .dj-sethand {
-  margin-left: auto;
-  color: var(--dj-echo);
-}
-.dj-setdot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid var(--dj-line);
-}
-.dj-setsave input {
-  flex: 1 1 160px;
-  padding: 4px 8px;
-  border-radius: 9px;
-  border: 2px solid var(--dj-line);
-  background: var(--dj-well);
-  color: var(--dj-text);
-  font: 13px var(--logo);
-}
-.dj-savebtn {
-  background: var(--dj-play);
-}
-.dj-setrow {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 12px;
-  background: var(--dj-well);
-}
-.dj-setrow > .dj-setsteps {
-  grid-column: 1 / -1;
-}
-.dj-setname {
-  display: grid;
-  justify-items: start;
-  border: 0;
-  background: transparent;
-  color: var(--dj-text);
-  font: 600 13px var(--logo);
-  text-align: left;
-  cursor: pointer;
-}
-.dj-setname small {
-  font: 10px var(--mono);
-  color: var(--dj-soft);
-  text-transform: uppercase;
-}
-.dj-setbtns {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
 }
 .dj-danger {
   background: var(--dj-drop);
   color: var(--dj-well);
 }
 
-/* The Sound page: both records as waveforms, the transition's points, and suggested mixes. */
-.dj-sound {
-  display: grid;
-  gap: 8px;
-  margin-top: 8px;
-}
+/* The workspace's waveforms and suggested transitions */
 .dj-zoom {
   min-width: 30px;
   text-align: center;
@@ -1525,16 +1210,6 @@
   height: 40px;
   cursor: default;
 }
-.dj-lane-foot {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 5px;
-}
-.dj-cue-chip {
-  color: #ffd166;
-  font-family: var(--mono);
-}
 .dj-pointbox {
   display: inline-flex;
   align-items: center;
@@ -1553,9 +1228,6 @@
 }
 .dj-pointbox input.bad {
   border-color: var(--dj-drop);
-}
-.dj-overlap {
-  flex: 1;
 }
 .dj-previewing {
   color: var(--dj-echo);
@@ -1610,85 +1282,632 @@
   gap: 4px;
 }
 
-/* Link songs: a chain of records, each handing over to the next. */
-.dj-chain {
+/*
+ * The DJ workspace: one screen for a mix. Live along the top (sticky), the set list down the side, the pair being
+ * worked on in the middle with its controls, suggestions under it, and a small panel beside it when one is open.
+ */
+.dj.dj-mode-dj {
+  width: min(1180px, calc(100vw - 28px));
+}
+.dj-work {
+  display: grid;
+  grid-template-columns: minmax(300px, 370px) minmax(0, 1fr);
+  grid-template-areas:
+    "live live"
+    "list pair"
+    "list sugg";
+  align-items: start;
+  gap: 8px;
+}
+.dj-work.has-panel {
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(230px, 270px);
+  grid-template-areas:
+    "live live live"
+    "list pair panel"
+    "list sugg panel";
+}
+.dj-ctllabel {
+  font: 700 10px var(--logo);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dj-soft);
+  white-space: nowrap;
+}
+
+/* live: what everyone hears */
+.dj-livebar {
+  grid-area: live;
+  position: sticky;
+  top: -8px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 7px 10px 9px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #2c2836, var(--dj-body));
+  box-shadow:
+    inset 0 0 0 2px var(--dj-line),
+    0 8px 10px -8px #000a;
+}
+.dj-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: #4a4555;
+}
+.is-playing .dj-live-dot {
+  background: var(--dj-drop);
+  box-shadow: 0 0 8px var(--dj-drop);
+}
+.dj-live-now,
+.dj-live-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.dj-live-now b,
+.dj-live-next > span:not(.dj-row-tag) {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dj-live-clock,
+.dj-live-next small {
+  font: 11px var(--mono);
+  color: var(--dj-soft);
+}
+.dj-livebar .dj-live-play {
+  min-width: 0;
+  width: 46px;
+  height: 40px;
+  padding: 0;
+  font-size: 15px;
+}
+.dj-live-progress {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--dj-well);
+  overflow: hidden;
+}
+.dj-live-progress i {
+  display: block;
+  height: 100%;
+  width: calc(var(--phrase, 0) * 100%);
+  background: var(--a, var(--dj-play));
+}
+
+/* the set list */
+.dj-setlist {
+  grid-area: list;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
   padding: 8px;
   border-radius: 14px;
   background: var(--dj-body-2);
   box-shadow: inset 0 0 0 2px var(--dj-line);
 }
-.dj-chain h3 {
-  margin: 0 0 6px;
-  font-size: 13px;
+.dj-setlist-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.dj-chain h3 small {
-  margin-left: 6px;
+.dj-setlist-head h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.dj-setlist-head small,
+.dj-row-text small {
   font: 11px var(--mono);
   color: var(--dj-soft);
 }
-.dj-chainlist {
+.dj-setlist-empty {
+  padding: 12px 4px;
+}
+.dj-rows {
   display: grid;
-  gap: 2px;
-  margin: 0 0 6px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
-.dj-chainstep {
+.dj-row {
   --c: #5a5566;
-  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 2px;
   border-radius: 11px;
   background: var(--dj-well);
   box-shadow: inset 4px 0 0 var(--c);
 }
-.dj-chainrec,
-.dj-chainlink {
+.dj-row.is-onair {
+  background: color-mix(in srgb, var(--dj-play) 13%, var(--dj-well));
+}
+.dj-row.is-next {
+  background: color-mix(in srgb, #ffb02e 10%, var(--dj-well));
+}
+.dj-row.is-played {
+  opacity: 0.6;
+}
+.dj-row.is-selected {
+  box-shadow:
+    inset 4px 0 0 var(--c),
+    inset 0 0 0 2px var(--dj-echo);
+}
+.dj-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dj-row-num {
+  width: 22px;
+  flex-shrink: 0;
+  text-align: right;
+  font: 700 13px var(--mono);
+  color: var(--c);
+}
+.dj-row-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.dj-row-text b,
+.dj-row-text small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dj-row-text b {
+  font-size: 13px;
+}
+.dj-row-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #3a3646;
+  font: 700 10px var(--logo);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.dj-row-tag.air {
+  background: var(--dj-play);
+  color: var(--dj-well);
+}
+.dj-row-tag.next {
+  background: #ffb02e;
+  color: var(--dj-well);
+}
+.dj-row-tools {
+  display: flex;
+  flex-shrink: 0;
+  gap: 3px;
+}
+.dj-row-tools .dj-chip {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.dj-jump {
+  white-space: nowrap;
+}
+.dj-link {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
-  font-size: 12px;
-}
-.dj-chainrec b {
-  font-size: 13px;
-}
-.dj-chainnum {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--c);
-  color: var(--dj-well);
-  font: 700 11px var(--mono);
-}
-.dj-chainbtns {
-  display: flex;
-  gap: 3px;
-  margin-left: auto;
-}
-.dj-chainlink {
-  margin: 5px 0 0 26px;
+  gap: 3px 8px;
+  margin: 2px 0 2px 16px;
+  padding: 3px 0 3px 10px;
+  border-left: 2px dashed #4a4555;
+  font-size: 11px;
   color: var(--dj-soft);
 }
-.dj-chainlink.bad .dj-pointbox input {
-  border-color: var(--dj-drop);
+.dj-link.is-open {
+  border-left: 2px solid var(--dj-echo);
 }
-.dj-bad {
+.dj-link.is-review {
+  border-left-color: #ffb02e;
+}
+.dj-link.is-bad {
+  border-left-color: var(--dj-drop);
+}
+.dj-editmix {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.dj-editmix[aria-pressed="true"] {
+  background: var(--dj-echo);
+  color: var(--dj-well);
+}
+.dj-link-text {
+  font-family: var(--mono);
+}
+.dj-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #3a3646;
+  color: var(--dj-text);
+  font: 700 10px var(--logo);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.dj-badge.review {
+  background: color-mix(in srgb, #ffb02e 24%, transparent);
+  color: #ffb02e;
+}
+.dj-badge.bad {
+  background: color-mix(in srgb, var(--dj-drop) 24%, transparent);
   color: var(--dj-drop);
 }
-.dj-chain select,
-.dj-chaingo input {
-  padding: 2px 6px;
+.dj-badge.air {
+  background: color-mix(in srgb, var(--dj-play) 20%, transparent);
+  color: var(--dj-play);
+}
+.dj-badge-x {
+  padding: 0 3px;
+  border: 0;
+  border-radius: 4px;
+  background: #ffb02e;
+  color: var(--dj-well);
+  font: inherit;
+  cursor: pointer;
+}
+.dj-picker {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 11px;
+  background: var(--dj-well);
+}
+.dj-picker ul {
+  display: grid;
+  gap: 2px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.dj-picker label {
+  --c: #5a5566;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  box-shadow: inset 3px 0 0 var(--c);
+  cursor: pointer;
+}
+.dj-picker label.on {
+  background: #2e2a38;
+}
+.dj-picker input {
+  accent-color: var(--dj-play);
+}
+.dj-picker-order {
+  width: 14px;
+  font: 700 11px var(--mono);
+  color: var(--dj-play);
+}
+.dj-savebar input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 8px;
   border-radius: 9px;
   border: 2px solid var(--dj-line);
   background: var(--dj-well);
   color: var(--dj-text);
   font: 12px var(--logo);
 }
-.dj-chaingo input {
-  width: 110px;
+.dj-saved summary {
+  font-size: 12px;
+  color: var(--dj-soft);
+  cursor: pointer;
 }
-.dj-chainadd,
-.dj-chaingo {
-  margin-top: 5px;
+.dj-saved ul {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dj-saved li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 9px;
+  background: var(--dj-well);
+}
+
+/* the pair being worked on */
+.dj-pair {
+  grid-area: pair;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.dj-pair-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dj-pair-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.dj-pair-empty {
+  padding: 24px 8px;
+  border-radius: 14px;
+  background: var(--dj-body-2);
+  text-align: center;
+}
+.dj-lane.out.is-selected {
+  box-shadow:
+    inset 0 0 0 2px var(--dj-echo),
+    inset 4px 0 0 #ffb02e;
+}
+.dj-lane.into.is-selected {
+  box-shadow:
+    inset 0 0 0 2px var(--dj-echo),
+    inset 4px 0 0 var(--dj-play);
+}
+.dj-lane-pick {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.dj-points {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+.dj-point b {
+  font-family: var(--mono);
+}
+.dj-point.out b {
+  color: #ffb02e;
+}
+.dj-point.in b {
+  color: var(--dj-play);
+}
+.dj-points-btns {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.dj-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  background: var(--dj-body-2);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+}
+.dj-ctlgroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.dj-ctlgroup > .dj-ctllabel {
+  flex-basis: 100%;
+}
+.dj-controls .dj-pad {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  box-shadow: 0 3px 0 var(--dj-line), inset 0 2px 0 #ffffff1c;
+  font-size: 12px;
+}
+.dj-controls .dj-pad.on {
+  box-shadow: 0 3px 0 var(--dj-line), 0 0 12px color-mix(in srgb, var(--glow) 60%, transparent);
+}
+.dj-ctlgroup.private {
+  padding: 3px 6px 5px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dj-echo) 10%, transparent);
+}
+.dj-ctlgroup.private > .dj-ctllabel {
+  color: var(--dj-echo);
+}
+/* (wide enough for their labels, so turning into Stop doesn't shift the buttons) */
+.dj-ctlgroup.private .dj-pad {
+  min-width: 6.5em;
+  justify-content: center;
+}
+.dj-ctlgroup.private .dj-pad + .dj-pad {
+  min-width: 10.5em;
+}
+.dj-ctlgroup.private .dj-pad.on {
+  background: var(--dj-echo);
+  color: var(--dj-well);
+}
+.dj-ctlgroup:last-child {
+  margin-left: auto;
+}
+.dj-status {
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 9px;
+  background: var(--dj-well);
+  font-size: 12px;
+}
+.dj-status.pending {
+  color: var(--dj-soft);
+}
+.dj-status.done {
+  color: var(--dj-play);
+}
+.dj-status.failed {
+  color: var(--dj-drop);
+}
+.dj-previewing {
+  margin: 0;
+  text-transform: none;
+  font-size: 11px;
+}
+.dj-suggest {
+  grid-area: sugg;
+  min-width: 0;
+}
+.dj-suggestion.is-picked {
+  box-shadow: inset 0 0 0 2px var(--dj-echo);
+}
+
+/* the side panel: Sound FX, or exact timing */
+.dj-panel {
+  grid-area: panel;
+  position: sticky;
+  top: 72px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--dj-body-2);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+}
+.dj-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dj-panel-head h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.dj-panel .dj-seg {
+  flex-wrap: wrap;
+}
+.dj-fxpanel,
+.dj-timing {
+  display: grid;
+  gap: 8px;
+}
+.dj-fxrow,
+.dj-timing-row,
+.dj-timing-presets,
+.dj-nudges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.dj-nudges {
+  gap: 3px;
+}
+.dj-nudges .dj-chip {
+  padding: 3px 6px;
+}
+.dj-fxdeck {
+  --c: #5a5566;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--dj-well);
+  box-shadow: inset 3px 0 0 var(--c);
+}
+
+/* a laptop: the panel goes under the pair */
+@media (max-width: 1060px) {
+  .dj-work.has-panel {
+    grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+    grid-template-areas:
+      "live live"
+      "list pair"
+      "list panel"
+      "list sugg";
+  }
+  .dj-panel {
+    position: static;
+  }
+}
+
+/* a phone: one column, the set list straight under the waveforms (under the panel while one is open, so it stays
+   beside the mix), live and Play kept at the top */
+@media (max-width: 720px) {
+  .dj.dj-mode-dj {
+    max-height: calc(100dvh - 130px);
+    padding: 6px 8px 8px;
+  }
+  .dj-work,
+  .dj-work.has-panel {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "live"
+      "pair"
+      "panel"
+      "list"
+      "sugg";
+  }
+  .dj-livebar {
+    top: -6px;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .dj-livebar > .dj-ctllabel,
+  .dj-live-now,
+  .dj-live-next {
+    grid-column: 1;
+  }
+  .dj-live-play {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+  .dj-wave {
+    height: 70px;
+  }
+  /* (Edit mix scrolls the pair up to just under the live bar) */
+  .dj-pair {
+    scroll-margin-top: 120px;
+  }
+  .dj-ctlgroup:last-child {
+    margin-left: 0;
+  }
+  /* the buttons drop to a line of their own rather than squeezing the title */
+  .dj-row {
+    flex-wrap: wrap;
+  }
+  .dj-row-main {
+    flex-basis: 190px;
+  }
+  .dj-row-tools {
+    margin-left: auto;
+    padding: 0 0 2px 30px;
+  }
+  .dj-row-tools .dj-chip {
+    padding: 5px 9px;
+  }
 }

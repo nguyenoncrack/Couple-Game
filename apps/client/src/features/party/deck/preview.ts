@@ -1,26 +1,27 @@
-import { cueFor, DEFAULT_DECK, deckBeat, otherSide, trackPosition, type Deck, type DeckSide, type DeckTrackId, type MixStyle } from "@cg/shared";
+import { cueFor, DEFAULT_DECK, deckBeat, trackPosition, type Deck, type DeckTrackId, type MixStyle } from "@cg/shared";
 import { create } from "zustand";
 import { DeckEngine } from "./deckEngine";
 
 /**
- * Listening ahead, just for you: a second, private deck that plays the incoming record from its start point, or a
- * whole transition from a few seconds before it, while the live mix carries on (turned down a little, only for you).
- * Nothing is sent to the house; your partner hears the party as usual.
+ * Rehearsal, just for you: a second, private deck that plays a record from its start point, or a whole transition
+ * between any two records of the set from a few seconds before it, while the live mix carries on (turned down a
+ * little, only for you). Nothing is sent to the house; your partner hears the party as usual.
  */
 
 export interface PreviewPlan {
-  /** The incoming deck and where its record comes in from (track beats). */
-  into: DeckSide;
+  /** The incoming record and where it comes in from (track beats). */
+  into: DeckTrackId;
   inAt: number;
-  /** For a transition: where the outgoing record starts fading (track beats), the style and the length. */
+  /** For a transition: the outgoing record, where it starts fading (track beats), the style and the length. */
+  out?: DeckTrackId;
   at?: number;
   style?: MixStyle;
   bars?: number;
 }
 
 interface PreviewState {
-  /** What's playing: a label, and when it started and stops (performance.now() ms). */
-  on: { key: string; label: string; deck: Deck; until: number } | null;
+  /** What's playing: a label, the plan, the private deck, and when it stops (performance.now() ms). */
+  on: { key: string; label: string; plan: PreviewPlan; deck: Deck; until: number } | null;
 }
 
 export const usePreview = create<PreviewState>(() => ({ on: null }));
@@ -39,28 +40,24 @@ let timer = 0;
 
 const clock = () => performance.now();
 
-/** The private deck for a plan: anchored now, at the live deck's tempo, with the live deck's channels. */
+/** The private deck for a plan: the outgoing record on A, the incoming on B, anchored now at the live tempo. */
 export function previewDeck(shared: Deck, plan: PreviewPlan, t: number): Deck {
-  const out = otherSide(plan.into);
-  const id = (side: DeckSide) => shared[side] as DeckTrackId;
-  const base: Deck = { ...DEFAULT_DECK, bpm: shared.bpm, chA: shared.chA, chB: shared.chB, playing: true, t, beat: 0, a: null, b: null, mix: null, drop: null };
-  const intoKey = plan.into === "a" ? "A" : "B";
-  if (plan.at === undefined) {
+  const base: Deck = { ...DEFAULT_DECK, bpm: shared.bpm, playing: true, t, beat: 0, a: null, b: null, mix: null, drop: null };
+  if (plan.at === undefined || !plan.out) {
     // the incoming record on its own, from its start point
-    return { ...base, [plan.into]: id(plan.into), xfade: plan.into === "a" ? 0 : 1, [`cue${intoKey}`]: cueFor(id(plan.into), 0, plan.inAt) };
+    return { ...base, b: plan.into, xfade: 1, cueB: cueFor(plan.into, 0, plan.inAt) };
   }
-  const outKey = out === "a" ? "A" : "B";
   const start = LEAD_BEATS;
   return {
     ...base,
-    a: shared.a,
-    b: shared.b,
-    xfade: out === "a" ? 0 : 1,
-    [`cue${outKey}`]: cueFor(id(out), 0, Math.max(0, plan.at - start)),
+    a: plan.out,
+    b: plan.into,
+    xfade: 0,
+    cueA: cueFor(plan.out, 0, Math.max(0, plan.at - start)),
     // the incoming record waits at its start point until the transition starts
-    [`cue${intoKey}`]: start - plan.inAt,
-    [`wait${intoKey}`]: start,
-    mix: { style: plan.style ?? "blend", from: out === "a" ? 0 : 1, to: plan.into === "b" ? 1 : 0, start, beats: (plan.bars ?? 8) * 4, at: plan.at, inAt: plan.inAt },
+    cueB: start - plan.inAt,
+    waitB: start,
+    mix: { style: plan.style ?? "blend", from: 0, to: 1, start, beats: (plan.bars ?? 8) * 4, at: plan.at, inAt: plan.inAt },
   };
 }
 
@@ -81,7 +78,7 @@ export function startPreview(key: string, label: string, liveEngine: DeckEngine,
   live.setDuck(DUCK);
   const beats = plan.at === undefined ? CUE_BEATS : LEAD_BEATS + (plan.bars ?? 8) * 4 + TAIL_BEATS;
   const ms = (beats * 60_000) / shared.bpm + 150;
-  usePreview.setState({ on: { key, label, deck, until: t + ms } });
+  usePreview.setState({ on: { key, label, plan, deck, until: t + ms } });
   timer = window.setTimeout(stopPreview, ms);
 }
 
@@ -94,10 +91,11 @@ export function stopPreview() {
   if (usePreview.getState().on) usePreview.setState({ on: null });
 }
 
-/** Where the preview has got to in the record on `side` (for the waveforms), or null when none is playing it. */
-export function previewPosition(side: DeckSide): number | null {
+/** Where the preview has got to in a record (as the outgoing or the incoming one), or null when it isn't playing it. */
+export function previewPosition(role: "out" | "into", id: DeckTrackId | null): number | null {
   const on = usePreview.getState().on;
-  if (!on || !on.deck[side]) return null;
+  const side = role === "out" ? "a" : "b";
+  if (!on || !id || on.deck[side] !== id) return null;
   return trackPosition(on.deck, side, deckBeat(on.deck, clock()));
 }
 

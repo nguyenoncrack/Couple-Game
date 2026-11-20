@@ -592,6 +592,95 @@ describe("DJ sets", () => {
     expect(posOf(d, "a", T0 + 6000)).toBeCloseTo(sec(5), 2);
   });
 
+  it("edits the set around the record on air without stopping it, and jumps with the edited cue", () => {
+    const s = fresh();
+    const steps = [
+      { track: "back-to-u", from: 0, cues: [], next: { at: sec(200), style: "blend", bars: 8 } },
+      { track: "take-me", from: sec(10), cues: [], next: { at: sec(150), style: "echo", bars: 4 } },
+      { track: "atlasaudio-edm", from: sec(5), cues: [], next: { at: sec(100), style: "bass", bars: 8 } },
+      { track: "where-you-are", from: 0, cues: [] },
+    ];
+    send(s, { cmd: "setload", set: { name: "Edit me", steps }, playing: true }, T0);
+    const d = s.party!.deck!;
+    const at = T0 + 20_000;
+    const before = posOf(d, "a", at);
+    // the last two swap, and the link into the new third record is re-timed (and its start point moves)
+    const edited = [
+      steps[0]!,
+      { ...steps[1]!, next: { at: sec(120), style: "bass", bars: 4 } },
+      { track: "where-you-are", from: sec(31), cues: [], next: { at: sec(176), style: "filter", bars: 8 } },
+      { track: "atlasaudio-edm", from: sec(5), cues: [] },
+    ];
+    expect(send(s, { cmd: "setedit", steps: edited, step: 0, was: 0 }, at).changed).toBe(true);
+    expect(d).toMatchObject({ playing: true, a: "back-to-u", b: "take-me", set: { name: "Edit me", step: 0 } });
+    expect(posOf(d, "a", at)).toBeCloseTo(before, 3);
+    expect(d.set!.steps.map((x) => x.track)).toEqual(["back-to-u", "take-me", "where-you-are", "atlasaudio-edm"]);
+    // jumping live to the second record queues the third from its edited start point, with the edited link
+    send(s, { cmd: "setjump", step: 1, track: "take-me" }, at + 1000);
+    expect(d).toMatchObject({ playing: true, set: { step: 1 }, mix: { at: placeIn("take-me", sec(120)), inAt: placeIn("where-you-are", sec(31)), style: "bass", beats: 16 } });
+    const into = d.a === "where-you-are" ? "a" : "b";
+    expect(d[into]).toBe("where-you-are");
+    expect(posOf(d, into, at + 1000)).toBeCloseTo(placeIn("where-you-are", sec(31)), 3);
+
+    // the record queued next changes: the free deck takes the new one, parked at its start point
+    const swapped = [steps[0]!, { ...steps[1]!, next: { at: sec(120), style: "bass", bars: 4 } }, { track: "atlasaudio-edm", from: sec(7), cues: [] }];
+    expect(send(s, { cmd: "setedit", steps: swapped, step: 1, was: 1 }, at + 2000).changed).toBe(true);
+    expect(d[into]).toBe("atlasaudio-edm");
+    expect(d.mix).toMatchObject({ inAt: placeIn("atlasaudio-edm", sec(7)) });
+    // taking the next record off leaves the record on air to play on its own
+    expect(send(s, { cmd: "setedit", steps: swapped.slice(0, 2), step: 1, was: 1 }, at + 3000).changed).toBe(true);
+    expect(d).toMatchObject({ mix: null, [into]: null, set: { step: 1 } });
+    expect(d.set!.steps).toHaveLength(2);
+    expect(d.set!.steps[1]!.next).toBeUndefined();
+  });
+
+  it("turns down an edit made from a stale view, one that moves the record on air, or a link already passed", () => {
+    const s = fresh();
+    const steps = [
+      { track: "back-to-u", from: sec(100), cues: [], next: { at: sec(200), style: "blend", bars: 8 } },
+      { track: "take-me", from: 0, cues: [] },
+    ];
+    send(s, { cmd: "setload", set: { name: "x", steps }, playing: true }, T0);
+    const d = s.party!.deck!;
+    const t = T0 + 5000;
+    const add = [...steps.slice(0, 1), { ...steps[1]!, next: { at: sec(150), style: "blend", bars: 8 } }, { track: "night-bus", from: 0, cues: [] }];
+    // (a queued transition's start is worked out again on every command, so "changed" can't say it was turned down)
+    send(s, { cmd: "setedit", steps: add, step: 0, was: 1 }, t);
+    send(s, { cmd: "setedit", steps: add, step: 1, was: 0 }, t);
+    // back-to-u is about 5 s past its start point of 1:40, so a link at 1:42 has gone by
+    send(s, { cmd: "setedit", steps: [{ ...steps[0]!, next: { at: sec(102), style: "blend", bars: 8 } }, steps[1]!], step: 0, was: 0 }, t);
+    expect(d.set!.steps).toHaveLength(2);
+    expect(d.mix).toMatchObject({ at: placeIn("back-to-u", sec(200)) });
+    expect(send(s, { cmd: "setedit", steps: add, step: 0, was: 0 }, t).changed).toBe(true);
+    expect(d.set!.steps).toHaveLength(3);
+
+    // during a transition, the record it's bringing in stays next; the rest can change
+    send(s, { cmd: "mixnow" }, t + 1000);
+    const mid = t + 3000;
+    send(s, { cmd: "setedit", steps: [steps[0]!, { track: "night-bus", from: 0, cues: [] }], step: 0, was: 0 }, mid);
+    expect(d.set!.steps.map((x) => x.track)).toEqual(["back-to-u", "take-me", "night-bus"]);
+    const later = [...add.slice(0, 2), { track: "disco-kettle", from: 0, cues: [] }];
+    expect(send(s, { cmd: "setedit", steps: later, step: 0, was: 0 }, mid).changed).toBe(true);
+    expect(d.mix).toMatchObject({ style: "blend" });
+    expect(d.set!.steps.map((x) => x.track)).toEqual(["back-to-u", "take-me", "disco-kettle"]);
+  });
+
+  it("starts a set from a record playing on its own, where it is", () => {
+    const s = fresh();
+    send(s, { cmd: "deck", set: { a: "take-me", b: null, playing: true } }, T0);
+    const d = s.party!.deck!;
+    const t = T0 + 10_000;
+    const pos = posOf(d, "a", t);
+    const steps = [
+      { track: "take-me", from: 0, cues: [], next: { at: sec(150), style: "blend", bars: 8 } },
+      { track: "back-to-u", from: sec(12), cues: [] },
+    ];
+    expect(send(s, { cmd: "setedit", steps, step: 0, was: 0 }, t).changed).toBe(true);
+    expect(d).toMatchObject({ a: "take-me", b: "back-to-u", playing: true, set: { step: 0, name: null }, mix: { inAt: placeIn("back-to-u", sec(12)) } });
+    expect(posOf(d, "a", t)).toBeCloseTo(pos, 3);
+    expect(PartyCmd.safeParse({ cmd: "setedit", steps: [], step: 0, was: 0 }).success).toBe(false);
+  });
+
   it("checks a set before loading it", () => {
     expect(PartyCmd.safeParse({ cmd: "setload", set: { name: "x", steps: [] } }).success).toBe(false);
     expect(PartyCmd.safeParse({ cmd: "setload", set: { name: "x", steps: [{ track: "nope", from: 0, cues: [] }] } }).success).toBe(false);
