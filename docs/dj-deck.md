@@ -23,10 +23,12 @@ The music is heard by everyone in the house whenever the deck plays. There is no
 At the booth the console has one **Workspace** tab (plus Lights and Guide): the set list, the waveforms of the transition you're working on, the controls and the suggestions, together. You build a set, work on a transition and play it without changing pages.
 
 - **Live bar** (stays at the top): what everyone hears now (*On air*, its time), what's *Up next* and when it mixes in, and a big Play/Pause.
+  - A **song slider** under it moves through the record on air for everyone: drag it (the time reads *Go to 1:42* until you let go), or use −10 s / +10 s (−1 bar / +1 bar on a built-in record). An orange tick marks where the set's next transition starts. A jump past that stops a bar short of it (`safeSeek`) and says so, because jumping past would call off the transition and with it the rest of the set; *Mix now* goes on to the next record.
 - **Set list** (beside the decks; on a phone, under the waveforms): the records in order, numbered, each with title, artist and length, and *On air* / *Up next* / *Played* tags.
   - *+ Add songs* opens the library: tick several (they're numbered in the order ticked) and add them in one go. Each new pair is linked at once (`autoLink`, as a suggested mix would).
   - ↑ ↓ reorder and × removes. A record can't move past the one on air, the one on air can't be removed, and while a transition is under way its two records stay put. The transitions a move or removal changes are worked out again and marked *New pair: check it* until you open them, save them, or press ✓.
-  - *Save set* keeps the list on this device (same name updates it). *Saved sets* below have *Load* (paused at the first song), *Play* and × (asks first).
+  - *Auto* on a link works that transition out again from the two records' beats and energy (`autoLinks`, as a suggested mix would); *Auto-link all* does every link from the record on air on. Played links, and the one under way, are left alone.
+  - *Save set* keeps the list on this device (same name updates it). *Saved sets* below have *Load* (paused at the first song), *Play*, *Songs* (lists them), *Rename*, *Duplicate* and × (asks first).
   - Between each pair, *Edit mix i → i+1* puts that transition on the waveforms, with "fades at 2:48 · Blend 8 bars" beside it. On a phone it scrolls the waveforms into view.
   - Clicking a row selects it for editing or rehearsal (nothing is sent). *Jump live* moves everyone's music to that record, from its start point, and cues the next record with its transition (`setjump`, or `setload` with a step when nothing from the list is on the decks).
   - Every change to the list goes to the house straight away (`setedit`, below) while the music plays on.
@@ -43,6 +45,10 @@ At the booth the console has one **Workspace** tab (plus Lights and Guide): the 
 - **Adjust timing** panel: time boxes for "Track 4 fades at" and "Track 5 starts at" (`1:24.5`, `84.5` or `1:02:03`), −/+ beat and bar nudges, style (*Blend*, *Bass swap*, *Echo out*, *Filter out*, *Cut*) and length (1 to 16 bars), the five presets and your own, zoom, *Centred on the points*, and a live seek for the record on air.
 - **Record crate**: one row that scrolls sideways. Clicking a record loads it onto an empty deck if there is one, otherwise the deck that isn't on air, and it starts from its beginning. Recordings show their length.
 - **Just you**: volume, Mute and Fade (quieter away from the speakers).
+- **More controls**, under the workspace (everyone hears these), in three parts that each fold away:
+  - *Decks*: both full turntables with the screen: place bar (drag to move through a song; a jump on the record on air stops short of the set's next transition, as above), play or pause one deck, Start, −10 s / +10 s, a time box, cues, *Set drop* / *Drop now*, Hi/Mid/Low EQ, volume and eject; then the mixer row (Play, crossfader, Filter, Echo, Drop, tempo). On a phone the two decks stack.
+  - *Transitions*: the presets and your own, style and length, *+ Save preset*, *Mix to A/B* now, or a timed mix for later ("At 1:37 on A, start B at 0:30") with *Queue*; a queued transition shows *Mix now* and *Cancel*.
+  - *Load a record*: *Load to Auto / A / B* and the crate, to put any record straight onto a deck outside the set list.
 
 Everything on the deck is shared and synced through the house, except the "just you" row and your saved transitions.
 

@@ -1,4 +1,4 @@
-import { deckTrack, isRecording, MAX_SET_STEPS, mixDone, trackBeats, type Deck, type DeckSide, type DeckTrackId, type SetStep } from "@cg/shared";
+import { deckTrack, isRecording, MAX_SET_STEPS, mixDone, mixOut, mixQueued, trackBeats, type Deck, type DeckSide, type DeckTrackId, type SetStep } from "@cg/shared";
 import type { Analysis } from "../analysis/analyze";
 import { autoLink } from "../analysis/chain";
 
@@ -118,6 +118,18 @@ export function removeSong(steps: readonly SetStep[], i: number, ctx: EditContex
   return { steps: tidy(list), onAir, relinked };
 }
 
+/**
+ * Work transitions out again from the records' beats and energy, as a suggested mix would: one (the link out of
+ * record `i`), or every one from the record on air to the end (`null`). Links already played are left alone.
+ */
+export function autoLinks(steps: readonly SetStep[], i: number | null, ctx: EditContext): Edit {
+  const list = steps.map((s) => ({ ...s }));
+  const first = Math.max(0, ctx.onAir ?? 0);
+  const which = i === null ? Array.from({ length: Math.max(0, list.length - 1 - first) }, (_, k) => first + k) : [i];
+  const relinked = which.filter((k) => k < list.length - 1 && relink(list, k, ctx));
+  return { steps: tidy(list), onAir: ctx.onAir, relinked };
+}
+
 /** What's wrong with a link, if anything: inside its record, and after where that record starts (or is now). */
 export function linkProblem(step: SetStep, startsAt: number): string | null {
   if (!step.next) return null;
@@ -142,4 +154,19 @@ export function sameSteps(a: readonly SetStep[] | undefined, b: readonly SetStep
     if (!s.next || i === b.length - 1) return true;
     return Boolean(t.next) && t.next!.style === s.next.style && t.next!.bars === s.next.bars && near(t.next!.at, s.next.at);
   });
+}
+
+/** How far short of a queued set transition a jump on its record stops (a bar). */
+export const SEEK_MARGIN = 4;
+
+/**
+ * Where a jump on a deck may go. Jumping the record on air past the point where the set's next transition starts
+ * would call that transition off, and with it the rest of the set, so a jump stops a bar short of it instead (Mix now
+ * goes on to the next record). Anything else goes where it's asked.
+ */
+export function safeSeek(d: Deck, side: DeckSide, pos: number, beat: number): number {
+  const m = d.mix;
+  const linked = Boolean(d.set?.steps[d.set.step]?.next);
+  if (!m || !linked || !mixQueued(m, beat) || m.at === undefined || mixOut(m) !== side) return pos;
+  return Math.min(pos, Math.max(0, m.at - SEEK_MARGIN));
 }
