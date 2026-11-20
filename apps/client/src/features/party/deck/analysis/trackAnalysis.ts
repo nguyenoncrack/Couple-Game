@@ -227,4 +227,4 @@ async function cachePut(key: string, a: Analysis): Promise<void> {
 }
 
 // (a handle for poking at it from the browser's console while developing)
-if (import.meta.env.DEV) Object.assign(window, { __analysis: useAnalysis });
+if (import.meta.env.DEV && typeof window !== "undefined") Object.assign(window, { __analysis: useAnalysis });

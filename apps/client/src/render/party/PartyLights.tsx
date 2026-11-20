@@ -9,7 +9,7 @@ import { Meshes } from "../KitMesh";
 import { pencilMaterial, type Finish } from "../pencil";
 import { topShown } from "../Storeys";
 import { ballSpots, collectFixtures, headBeams, HEAD_AT, HEAD_Y, laserBeams, MAX_FIXTURES, RoomRays, BALL_Y, type Beam, type Fixture } from "./partyLayout";
-import { glowMaterial, mirrorBallMaterial, paletteAt, partyTime, partyUniforms, steadyFor, stepParty } from "./partyMaterials";
+import { glowMaterial, mirrorBallMaterial, paletteAt, partyTime, partyUniforms, showFrame, steadyFor, stepParty } from "./partyMaterials";
 import { headBody, headYoke } from "./partyModels";
 
 /**
@@ -71,7 +71,7 @@ export function PartyLights() {
   const ballMeshes = useRef(new Map<string, THREE.Group>());
   const materials = useMemo(() => {
     const tex = glowTexture();
-    return { beam: additive({ opacity: 0.55, side: THREE.DoubleSide }), cone: additive({ opacity: 0.16, side: THREE.DoubleSide }), pool: additive({ opacity: 0.5, map: tex }), tex };
+    return { beam: additive({ opacity: 0.85, side: THREE.DoubleSide }), cone: additive({ opacity: 0.2, side: THREE.DoubleSide }), pool: additive({ opacity: 0.6, map: tex }), tex };
   }, []);
   const parts = useMemo(() => {
     const yoke = new Kit();
@@ -117,6 +117,11 @@ export function PartyLights() {
     }
     const t = partyTime(now);
     const steady = steadyFor(lights);
+    const show = showFrame;
+    // the moving heads, their pools and the mirror ball's spots brighten with the music and flare on the beat
+    const boost = steady ? 1 : (0.75 + 0.45 * show.energy) * (1 + 0.9 * show.flash + 0.6 * show.lift);
+    // laser beams thicken a little on each hit
+    const laserWidth = 0.022 + (steady ? 0 : 0.016 * show.flash + 0.01 * show.lift);
     let nt = 0;
     let nc = 0;
     let np = 0;
@@ -151,14 +156,14 @@ export function PartyLights() {
       const floor = f.level * STOREY + FLOOR_Y;
       const ray = rays.get(f.id)!;
       if (f.kind === "laser") {
-        for (const b of laserBeams(f, ray, t, steady, lights.spread)) {
-          if (nt < BEAMS && place(T, nt, b, floor, () => 0.02)) nt++;
+        for (const b of laserBeams(f, ray, t, steady, lights.spread, show)) {
+          if (nt < BEAMS && place(T, nt, b, floor, () => laserWidth)) nt++;
         }
       } else if (f.kind === "movinghead") {
-        const beams = headBeams(f, ray, t, steady, lights.spread);
+        const beams = headBeams(f, ray, t, steady, lights.spread).map((b) => ({ ...b, glow: b.glow * boost }));
         beams.forEach((b, i) => {
           if (nc < BEAMS && place(C, nc, b, floor, (len) => len * 0.15)) nc++;
-          pool(b.to[0], b.to[2], floor, 0.15 * Math.hypot(b.to[0] - b.from[0], b.to[1] - b.from[1], b.to[2] - b.from[2]) + 0.2, b.hue, 0.9);
+          pool(b.to[0], b.to[2], floor, 0.15 * Math.hypot(b.to[0] - b.from[0], b.to[1] - b.from[1], b.to[2] - b.from[2]) + 0.2, b.hue, 0.9 * boost);
           const rig = rigs.current.get(`${f.id}:${i}`);
           if (rig?.pan && rig.tilt) {
             const dx = b.to[0] - b.from[0];
@@ -168,7 +173,7 @@ export function PartyLights() {
           }
         });
       } else {
-        for (const sp of ballSpots(f, ray, t, steady)) pool(sp.x, sp.z, floor, sp.size * 2, sp.hue, 0.8);
+        for (const sp of ballSpots(f, ray, t, steady)) pool(sp.x, sp.z, floor, sp.size * 2, sp.hue, 0.8 * boost);
         const g = ballMeshes.current.get(f.id);
         if (g) g.rotation.y = steady ? 0 : t * 0.3;
       }

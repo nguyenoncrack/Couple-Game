@@ -1,10 +1,11 @@
 import { catalog, cellKey, edgeBetween, type Blueprint, type Level } from "@cg/shared";
+import { CALM, type ShowFrame } from "./lightShow";
 
 /**
  * Where the party's moving lights go. Pure arithmetic from the blueprint and the clock (no drawing), so it's easy
  * to test: each fixture knows how far it can see in every direction before a wall (or the edge of the lot), and
- * every beam, spot and sparkle is kept inside that. All motion is slow, smooth and a function of the server clock,
- * so both screens agree.
+ * every beam, spot and sparkle is kept inside that. Motion is a function of the server clock and the light show
+ * (which follows the shared deck), so both screens agree.
  */
 
 export type FixtureKind = "laser" | "movinghead" | "discoball";
@@ -155,20 +156,39 @@ export function headBeams(f: Fixture, rays: RoomRays, t: number, steady: boolean
 
 export const LASER_BEAMS = 7;
 
+/** A steady pseudo-random number in 0 to 1 for a whole number and a seed (a laser's aim for each bar). */
+const barHash = (n: number, seed: number) => {
+  const x = Math.sin(n * 12.9898 + seed * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+};
+const smoothstep = (a: number, b: number, x: number) => {
+  const k = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+
 /**
- * A laser's fan: seven thin beams spread across the front of the fixture, rocking gently, each running out to
- * whichever wall (or lot edge) it meets first. `spread` (0.2 to 1) is how wide the fan opens.
+ * A laser's fan: seven thin beams spread across the front of the fixture, each running out to whichever wall (or
+ * lot edge) it meets first. `spread` (0.2 to 1) is how wide the fan opens. It follows the light show: the fan opens
+ * wider and burns brighter as the music gets going, flares on each beat, and, while the music goes hard, swings to a
+ * new aim at the start of each bar. In a breakdown only every other beam stays bright. Steady light holds it still.
  */
-export function laserBeams(f: Fixture, rays: RoomRays, t: number, steady: boolean, spread: number): Beam[] {
+export function laserBeams(f: Fixture, rays: RoomRays, t: number, steady: boolean, spread: number, show: ShowFrame = CALM): Beam[] {
   const [ox, oz] = turn(f, 0, 0.1);
   const out: Beam[] = [];
-  const rock = steady ? 0 : slow(t, 12, f.seed) * 0.35;
+  const hard = steady ? 0 : smoothstep(0.55, 0.85, show.energy);
+  // a new aim each bar, reached within half a beat
+  const swing = smoothstep(0, 0.5, show.barBeat);
+  const aim = hard * ((barHash(show.bar - 1, f.seed) - 0.5) * (1 - swing) + (barHash(show.bar, f.seed) - 0.5) * swing) * 0.9;
+  const rock = steady ? 0 : slow(t, 12, f.seed) * 0.35 * (1 - 0.5 * hard) + aim;
+  const open = steady ? 1 : 0.55 + 0.45 * show.energy;
+  const quiet = !steady && show.energy < 0.35;
   for (let i = 0; i < LASER_BEAMS; i++) {
     const k = i / (LASER_BEAMS - 1) - 0.5;
-    const a = f.yaw + k * spread * 2.4 + rock;
+    const a = f.yaw + k * spread * 2.4 * open + rock;
     const lift = steady ? 0.1 : 0.12 * slow(t, 8, f.seed + k);
     const len = Math.max(0.4, rays.at(a) - 0.1);
-    out.push({ from: [ox, LASER_Y, oz], to: [ox + Math.sin(a) * len, Math.min(2.3, Math.max(0.3, LASER_Y + 0.15 + lift + len * 0.04)), oz + Math.cos(a) * len], hue: f.seed + k * 0.5 + (steady ? 0 : t / 30), glow: 0.9 });
+    const glow = steady ? 0.9 : (0.6 + 0.45 * show.energy) * (quiet && i % 2 ? 0.2 : 1) + 0.65 * show.flash + 0.45 * show.lift;
+    out.push({ from: [ox, LASER_Y, oz], to: [ox + Math.sin(a) * len, Math.min(2.3, Math.max(0.3, LASER_Y + 0.15 + lift + len * 0.04)), oz + Math.cos(a) * len], hue: f.seed + k * 0.5 + (steady ? 0 : t / 30), glow });
   }
   return out;
 }

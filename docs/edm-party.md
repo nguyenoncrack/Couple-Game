@@ -23,7 +23,15 @@ A "Party" category of furniture, a compact party panel, dancing, and a shared Yo
 
 **Dancing**: five loops (Bounce, Sway, Disco point, Hands up, Shuffle), in place or on a dance tile, from the panel or the tile's menu. The DJ booth is its own activity. Both are ordinary activities, so starting anything else (or walking) ends them, and they end the stove, sink, seat or toilet like any other order.
 
-**Lights**: on/off, brightness, presets (Sunset, Neon, Chill, Aurora), one colour, Steady light, laser spread. One shared state for the house, kept with life state and saved with it. Patterns are slow drifts (no preset is quicker than 10 s a cycle), a change of preset dips and returns, steady holds everything still, and a device that asks for reduced motion is held steady. Lights follow a schedule on the server clock; they do **not** react to the sound.
+**Lights**: on/off, brightness, presets (Sunset, Neon, Chill, Aurora), one colour, Steady light, laser spread. One shared state for the house, kept with life state and saved with it. Patterns are slow drifts (no preset is quicker than 10 s a cycle), a change of preset dips and returns, steady holds everything still, and a device that asks for reduced motion is held steady.
+
+**Following the music** (`render/party/lightShow.ts`): while the DJ deck plays, the lights follow the record everyone hears most. A built-in record gives its sections (and the Drop pad its build and drop); a recording gives its own beat grid and second-by-second loudness once it has been listened to (the lights ask for that in the background; until then the deck's beat and a middling energy stand in). From that:
+- a flash on each beat, harder on the first beat of the bar, none while the kick is out (a breakdown): never more than one a beat, so a little over two a second at the fastest tempo;
+- the energy: quiet parts glow lower and thin the laser fans to every other beam, full-on parts glow brighter and open the fans wider;
+- while the music goes hard, the floor's colours step round the palette on each bar, its tiles take the beat's flash in turns like a checkerboard, and each laser swings to a new aim at the start of each bar;
+- one burst when a drop hits (or a recording suddenly gets much louder): a bright ring racing across the floor, with every light flaring for a second and a half.
+
+Steady light, and a device that asks for reduced motion, turn all of that off: a calm, even glow.
 
 **Music**: paste a YouTube link (watch, youtu.be, embed, shorts, live, music.youtube.com; a `t=` start is honoured; playlists and channels are refused). Either player can add, play now, pause, seek ±10 s, skip and remove. Each screen plays it in YouTube's own embedded player (IFrame API), kept in step with the shared state; volume and mute are per player (this device). The sound comes from the speakers: the player's volume is scaled by how far that player's character stands from the nearest speaker, DJ booth or music player (full within 2 m, about a third at 6 m, never below 5%, and a floor up or down counts as 7 m more). YouTube's player only exposes a volume, so there is no left/right panning; a "Fade" switch in the music dock turns the fading off.
 

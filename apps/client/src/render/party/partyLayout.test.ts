@@ -118,6 +118,30 @@ describe("where beams and spots go", () => {
     }
   });
 
+  it("keeps every laser inside the room while it follows the music", () => {
+    const f = fixture("laser", { yaw: 0.8 });
+    const r = rays(f);
+    for (let bar = 0; bar < 40; bar++)
+      for (const barBeat of [0, 0.2, 0.5, 2.5])
+        for (const energy of [0.1, 0.6, 1]) {
+          const beams = laserBeams(f, r, bar * 3.1, false, 1, { flash: 1, energy, bar, barBeat, lift: 1 });
+          expect(beams).toHaveLength(LASER_BEAMS);
+          for (const b of beams) expect(inside(b.to[0], b.to[2], 0.02), `bar ${bar}`).toBe(true);
+        }
+  });
+
+  it("flares lasers on the beat, swings them each bar when the music goes hard, and keeps steady light still", () => {
+    const f = fixture("laser");
+    const r = new RoomRays(emptyBlueprint(40, 40).levels[0], { w: 40, d: 40 }, 20, 20);
+    const glow = (flash: number) => Math.max(...laserBeams(f, r, 5, false, 0.6, { flash, energy: 0.8, bar: 3, barBeat: 0, lift: 0 }).map((b) => b.glow));
+    expect(glow(1)).toBeGreaterThan(glow(0) + 0.5);
+    const aimAt = (bar: number, energy: number) => laserBeams(f, r, 5, false, 0.6, { flash: 0, energy, bar, barBeat: 1, lift: 0 })[3]!.to[0];
+    expect(Math.abs(aimAt(4, 1) - aimAt(5, 1))).toBeGreaterThan(0.05);
+    expect(aimAt(4, 0.3)).toBeCloseTo(aimAt(5, 0.3), 6);
+    const still = laserBeams(f, r, 5, true, 0.6, { flash: 1, energy: 1, bar: 9, barBeat: 0, lift: 1 });
+    expect(JSON.stringify(still)).toBe(JSON.stringify(laserBeams(f, r, 5, true, 0.6)));
+  });
+
   it("opens the fan wider as the spread goes up", () => {
     const f = fixture("laser");
     const width = (spread: number) => {
