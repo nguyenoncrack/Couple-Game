@@ -1,13 +1,17 @@
-import { deckBeat, deckPump, musicPosition, presetOf, type Deck, type Music, type Pattern, type PartyLights } from "@cg/shared";
+import { deckBeat, deckPump, musicPosition, presetOf, type Deck, type DeckTrackId, type Music, type Pattern, type PartyLights } from "@cg/shared";
 import * as THREE from "three";
+import { readyAnalysis, requestAnalysis, useAnalysis } from "../../features/party/deck/analysis/trackAnalysis";
 import { lighting } from "../pencil";
+import { CALM, grooveOf, LightShow, loudSide, type ShowFrame } from "./lightShow";
 
 /**
  * The party's shared look. Every lit tile, LED strip and speaker ring is drawn by one of the materials here, and all
  * of them read the same uniforms, which `stepParty` moves once a frame. A tile works out its colour from where it
  * stands in the house, so neighbouring tiles line up into one pattern without being told about each other, and a
- * change of preset reaches every tile at once. Nothing here flashes: patterns are slow drifts, and a change of
- * preset dips the light and brings it back rather than snapping.
+ * change of preset reaches every tile at once. Patterns drift slowly, and a change of preset dips the light and
+ * brings it back rather than snapping. While the deck plays, the light show (`lightShow.ts`) adds a flash on each
+ * beat (at most one a beat), steps the patterns on each bar, follows the music's energy and bursts when a drop hits;
+ * steady light, and a device that asks for less motion, keep none of that.
  */
 
 /** Every period divides this many seconds, so the clock can wrap without a visible jump. */
@@ -38,7 +42,21 @@ export const partyUniforms = {
   /** How loud each deck is, 0 to 1, for the mixer's level lights. */
   uMeterA: { value: 0 },
   uMeterB: { value: 0 },
+  /** The light show: a flash on each beat (0 to 1), the music's energy (0 to 1), bars on the record's own grid (whole bars and the beat as a fraction), and a drop's burst. */
+  uFlash: { value: 0 },
+  uEnergy: { value: CALM.energy },
+  uBar: { value: 0 },
+  uLift: { value: 0 },
 };
+
+// (a handle for watching the light show from the browser's console while developing)
+if (import.meta.env.DEV && typeof window !== "undefined") Object.assign(window, { __lights: partyUniforms });
+
+const show = new LightShow();
+/** This frame's light show, for the beams and spots (set by `stepParty`). */
+export let showFrame: ShowFrame = CALM;
+let asked: DeckTrackId | null = null;
+const analysisOf = (id: DeckTrackId) => readyAnalysis(useAnalysis.getState()[id]);
 
 /** What the speakers move to: the deck's own beat, or (for a YouTube video, which tells us nothing of its beat) a steady 120 bpm. */
 export function musicPulse(deck: Deck | undefined, music: Music | undefined, nowMs: number): { playing: boolean; beat: number; pump: number; levels: [number, number]; rate: number } {
@@ -135,6 +153,17 @@ export function stepParty(lights: PartyLights, music: Music | undefined, nowMs: 
   const ease = 1 - Math.exp(-dt * 14);
   u.uMeterA.value += ((still ? pulse.levels[0] * 0.7 : pulse.levels[0]) - u.uMeterA.value) * ease;
   u.uMeterB.value += ((still ? pulse.levels[1] * 0.7 : pulse.levels[1]) - u.uMeterB.value) * ease;
+
+  // the light show follows the record everyone hears most (listened to in the background, so the lights land on its beats)
+  const beat = deck?.playing ? deckBeat(deck, nowMs) : 0;
+  const onAir = deck?.playing && lights.on ? deck[loudSide(deck, beat)] : null;
+  if (onAir && onAir !== asked) requestAnalysis(onAir);
+  asked = onAir;
+  showFrame = show.step(lights.on ? grooveOf(deck, beat, analysisOf) : null, dt, steady);
+  u.uFlash.value = showFrame.flash;
+  u.uEnergy.value = showFrame.energy;
+  u.uBar.value = (showFrame.bar + showFrame.barBeat / 4) % WRAP;
+  u.uLift.value = showFrame.lift;
 }
 
 function apply(look: ReturnType<typeof lookOf>) {
@@ -151,7 +180,7 @@ function apply(look: ReturnType<typeof lookOf>) {
 }
 
 const common = /* glsl */ `
-  uniform float uTime, uLevel, uCount, uPattern, uPeriod, uSteady, uBeat, uSpin, uPump, uBeatCount, uMeterA, uMeterB;
+  uniform float uTime, uLevel, uCount, uPattern, uPeriod, uSteady, uBeat, uSpin, uPump, uBeatCount, uMeterA, uMeterB, uFlash, uEnergy, uBar, uLift;
   uniform vec3 uPalette[${SLOTS}];
   uniform vec2 uCentre;
   vec3 palAt(float u) {
@@ -212,9 +241,20 @@ export const tileMaterial = new THREE.ShaderMaterial({
       float panel = smoothstep(0.035, 0.075, edge);
       vec2 g = fract(p * 4.0) - 0.5;
       float led = 1.0 - smoothstep(0.17, 0.3, length(g));
-      vec3 glow = palAt(spot(p)) * breathe() * (1.0 + 0.2 * uPump * (1.0 - uSteady));
+      // while the music goes hard the colours step round the palette on each bar
+      float hard = smoothstep(0.6, 0.85, uEnergy) * (1.0 - uSteady);
+      vec3 glow = palAt(spot(p) + floor(uBar) * 0.21 * step(0.55, uEnergy) * (1.0 - uSteady)) * breathe();
+      // quieter parts glow lower, full-on parts brighter
+      float drive = 0.6 + 0.75 * uEnergy;
+      // the beat's flash; when the music's full on, the tiles take turns in a checkerboard, beat by beat
+      float turn = mod(floor(p.x) + floor(p.y) + floor(uBar * 4.0), 2.0);
+      float flash = uFlash * mix(1.0, turn * 1.5, hard) * (1.0 - uSteady);
+      // a drop's burst: a bright ring racing out across the floor
+      float front = (1.0 - uLift) * 14.0;
+      float ring = uLift * exp(-pow((length(p - uCentre) - front) * 1.2, 2.0)) * (1.0 - uSteady);
+      vec3 lit = glow * drive * (1.0 + 0.2 * uPump * (1.0 - uSteady) + 1.1 * flash) + (vec3(0.35) + glow * 0.5) * (0.5 * flash + 1.2 * ring);
       vec3 glass = vec3(0.045, 0.047, 0.07);
-      vec3 col = glass + glow * uLevel * (0.38 + 0.62 * led) * panel + glow * uLevel * 0.2 * (1.0 - panel);
+      vec3 col = glass + lit * uLevel * (0.5 + 0.75 * led) * panel + glow * uLevel * (0.22 + 0.3 * flash) * (1.0 - panel);
       // a faint sheen, fixed to the room, so the glass reads as glass
       col += vec3(0.06, 0.065, 0.09) * smoothstep(0.25, 0.0, abs(fract((p.x - p.y) * 0.5) - 0.5));
       gl_FragColor = vec4(col, 1.0);
@@ -235,7 +275,7 @@ export const glowMaterial = new THREE.ShaderMaterial({
       vec2 p = vec2(vWorld.x + vWorld.z, vWorld.y * 2.5);
       vec3 glow = palAt(spot(vec2(vWorld.x, vWorld.z)) + vWorld.y * 0.12) * breathe();
       // brighter on each kick while music plays (steady light holds it level)
-      float lit = uLevel * (0.55 + 0.45 * uBeat) * (1.0 + 0.32 * uPump * (1.0 - uSteady));
+      float lit = uLevel * (0.55 + 0.45 * uBeat) * (1.0 + (0.32 * uPump + 0.8 * uFlash + 0.6 * uLift) * (1.0 - uSteady));
       vec3 col = vec3(0.03) + glow * (0.15 + 0.85 * lit);
       gl_FragColor = vec4(col, 1.0);
       ${out}
@@ -351,7 +391,7 @@ export function mirrorBallMaterial(tint: string): THREE.ShaderMaterial {
           float h = hash(f);
           float tw = uSteady > 0.5 ? 0.5 : 0.5 + 0.5 * sin(uTime * 0.9 + h * 40.0);
           float lum = 0.55 + 0.3 * h + 0.25 * tw * (0.4 + uLevel);
-          vec3 col = uTint * lum + palAt(h + 0.3) * 0.28 * uLevel * tw;
+          vec3 col = uTint * lum + palAt(h + 0.3) * (0.28 * tw + 0.45 * uFlash * (1.0 - uSteady)) * uLevel;
           gl_FragColor = vec4(col, 1.0);
           ${out}
         }
