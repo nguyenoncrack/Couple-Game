@@ -71,6 +71,8 @@ export function grooveOf(d: Deck | undefined, beat: number, analysisOf: (id: Dec
 }
 
 export interface ShowFrame {
+  /** A track is driving this frame and motion is enabled. */
+  active: boolean;
   /** 0 to 1: a flash on the beat that dies away before the next. */
   flash: number;
   /** 0 to 1, smoothed. */
@@ -83,7 +85,7 @@ export interface ShowFrame {
   lift: number;
 }
 
-export const CALM: ShowFrame = { flash: 0, energy: 0.6, bar: 0, barBeat: 0, lift: 0 };
+export const CALM: ShowFrame = { active: false, flash: 0, energy: 0.6, bar: 0, barBeat: 0, lift: 0 };
 
 const ease = (from: number, to: number, dt: number, seconds: number) => from + (to - from) * (1 - Math.exp(-dt / seconds));
 
@@ -116,6 +118,6 @@ export class LightShow {
     const f = g.beat - Math.floor(g.beat);
     const accent = g.barBeat < 1 ? 1 : 0.6;
     const flash = kick * accent * Math.exp(-f * 7) * (0.35 + 0.65 * this.energy);
-    return { flash, energy: this.energy, bar: g.bar, barBeat: g.barBeat, lift: this.lift };
+    return { active: true, flash, energy: this.energy, bar: g.bar, barBeat: g.barBeat, lift: this.lift };
   }
 }

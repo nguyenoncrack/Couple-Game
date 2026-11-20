@@ -1,13 +1,15 @@
 import { channelOf, deckBeat, deckRunning, mixAt, musicPosition, type Deck, type DeckTrackId, type Music } from "@cg/shared";
 import { grooveOf, type GrooveAnalysis } from "./lightShow";
 
-const REST = { cone: 0, rock: 0 };
+const REST = { cone: 0, rock: 0, phase: 0, strength: 0 };
 
 function beatMotion(beat: number, strength: number) {
   const phase = beat - Math.floor(beat);
   return {
     cone: strength * Math.exp(-phase * 7),
     rock: strength * Math.cos(phase * 4 * Math.PI) * Math.exp(-phase * 4.5),
+    phase,
+    strength,
   };
 }
 
@@ -42,4 +44,6 @@ export function stepSpeakerMotion(deck: Deck | undefined, music: Music | undefin
   const follow = 1 - Math.exp(-dt * 32);
   speakerMotion.cone += (target.cone - speakerMotion.cone) * follow;
   speakerMotion.rock += (target.rock - speakerMotion.rock) * follow;
+  speakerMotion.phase = target.phase;
+  speakerMotion.strength = target.strength;
 }

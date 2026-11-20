@@ -137,18 +137,21 @@ const turn = (f: Fixture, lx: number, lz: number): [number, number] => {
  * One moving head's beam: it wanders over the floor of its room on two slow, unrelated swings, kept short of the
  * walls. Steady light holds it pointing at the middle of the area in front of it.
  */
-export function headBeams(f: Fixture, rays: RoomRays, t: number, steady: boolean, spread: number): Beam[] {
+export function headBeams(f: Fixture, rays: RoomRays, t: number, steady: boolean, spread: number, show: ShowFrame = CALM): Beam[] {
   return HEAD_AT.map(([lx, lz], i) => {
     const [ox, oz] = turn(f, lx, lz);
     const phase = f.seed + i * 0.37;
-    const a = steady ? f.yaw + (i ? 0.35 : -0.35) : f.yaw + slow(t, 14, phase) * (0.9 + spread * 0.6) + (i ? 0.5 : -0.5);
-    const reach = steady ? 0.55 : 0.55 + 0.4 * (0.5 + 0.5 * slow(t, 9, phase + 0.3));
+    const side = i ? 1 : -1;
+    const live = !steady && show.active;
+    const sweep = live ? slow(show.barBeat, 4, f.seed) * side : slow(t, 14, phase);
+    const a = f.yaw + (steady ? side * 0.35 : sweep * (0.78 + spread * 0.55) + side * (0.48 + 0.3 * show.lift));
+    const reach = steady ? 0.55 : live ? 0.55 + 0.26 * show.flash + 0.18 * show.lift : 0.55 + 0.4 * (0.5 + 0.5 * slow(t, 9, phase + 0.3));
     // measured from the middle of the fixture, where the room's rays were cast from
     const dist = Math.max(0.2, Math.min(reach * 4.5, rays.at(a) - 0.1));
     return {
       from: [ox, HEAD_Y, oz],
       to: [f.x + Math.sin(a) * dist, 0.02, f.z + Math.cos(a) * dist],
-      hue: f.seed + i * 0.25 + (steady ? 0 : t / 40),
+      hue: f.seed + i * 0.38 + (live ? show.bar * 0.21 + show.barBeat * 0.08 : steady ? 0 : t / 40),
       glow: 0.85,
     };
   });
@@ -179,16 +182,21 @@ export function laserBeams(f: Fixture, rays: RoomRays, t: number, steady: boolea
   // a new aim each bar, reached within half a beat
   const swing = smoothstep(0, 0.5, show.barBeat);
   const aim = hard * ((barHash(show.bar - 1, f.seed) - 0.5) * (1 - swing) + (barHash(show.bar, f.seed) - 0.5) * swing) * 0.9;
-  const rock = steady ? 0 : slow(t, 12, f.seed) * 0.35 * (1 - 0.5 * hard) + aim;
-  const open = steady ? 1 : 0.55 + 0.45 * show.energy;
+  const chase = !steady && show.active;
+  const sweep = chase ? slow(show.barBeat, 4, f.seed) * (0.28 + hard * 0.35) : slow(t, 12, f.seed) * 0.28;
+  const rock = steady ? 0 : sweep + aim;
+  const open = steady ? 1 : 0.55 + 0.50 * show.energy + 0.26 * show.flash + 0.24 * show.lift;
   const quiet = !steady && show.energy < 0.35;
+  const travel = 0.5 - 0.5 * Math.cos(show.barBeat * Math.PI);
   for (let i = 0; i < LASER_BEAMS; i++) {
     const k = i / (LASER_BEAMS - 1) - 0.5;
     const a = f.yaw + k * spread * 2.4 * open + rock;
     const lift = steady ? 0.1 : 0.12 * slow(t, 8, f.seed + k);
     const len = Math.max(0.4, rays.at(a) - 0.1);
-    const glow = steady ? 0.9 : (0.6 + 0.45 * show.energy) * (quiet && i % 2 ? 0.2 : 1) + 0.65 * show.flash + 0.45 * show.lift;
-    out.push({ from: [ox, LASER_Y, oz], to: [ox + Math.sin(a) * len, Math.min(2.3, Math.max(0.3, LASER_Y + 0.15 + lift + len * 0.04)), oz + Math.cos(a) * len], hue: f.seed + k * 0.5 + (steady ? 0 : t / 30), glow });
+    const trail = chase ? Math.exp(-10 * (k + 0.5 - travel) ** 2) * show.energy : 0;
+    const glow = steady ? 0.9 : (0.42 + 0.44 * show.energy) * (quiet && i % 2 ? 0.22 : 1) + (0.55 + 0.62 * show.flash) * trail + 0.65 * show.lift;
+    const hue = f.seed + k * 0.46 + (chase ? show.bar * 0.21 + trail * 0.4 : steady ? 0 : t / 30);
+    out.push({ from: [ox, LASER_Y, oz], to: [ox + Math.sin(a) * len, Math.min(2.3, Math.max(0.3, LASER_Y + 0.15 + lift + len * 0.04)), oz + Math.cos(a) * len], hue, glow });
   }
   return out;
 }

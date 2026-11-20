@@ -119,9 +119,9 @@ export function PartyLights() {
     const steady = steadyFor(lights);
     const show = showFrame;
     // the moving heads, their pools and the mirror ball's spots brighten with the music and flare on the beat
-    const boost = steady ? 1 : (0.75 + 0.45 * show.energy) * (1 + 0.9 * show.flash + 0.6 * show.lift);
+    const boost = steady ? 1 : (0.65 + 0.52 * show.energy) * (1 + 1.12 * show.flash + 0.86 * show.lift);
     // laser beams thicken a little on each hit
-    const laserWidth = 0.022 + (steady ? 0 : 0.016 * show.flash + 0.01 * show.lift);
+    const laserWidth = 0.022 + (steady ? 0 : 0.02 * show.flash + 0.015 * show.lift);
     let nt = 0;
     let nc = 0;
     let np = 0;
@@ -160,7 +160,7 @@ export function PartyLights() {
           if (nt < BEAMS && place(T, nt, b, floor, () => laserWidth)) nt++;
         }
       } else if (f.kind === "movinghead") {
-        const beams = headBeams(f, ray, t, steady, lights.spread).map((b) => ({ ...b, glow: b.glow * boost }));
+        const beams = headBeams(f, ray, t, steady, lights.spread, show).map((b) => ({ ...b, glow: b.glow * boost }));
         beams.forEach((b, i) => {
           if (nc < BEAMS && place(C, nc, b, floor, (len) => len * 0.15)) nc++;
           pool(b.to[0], b.to[2], floor, 0.15 * Math.hypot(b.to[0] - b.from[0], b.to[1] - b.from[1], b.to[2] - b.from[2]) + 0.2, b.hue, 0.9 * boost);

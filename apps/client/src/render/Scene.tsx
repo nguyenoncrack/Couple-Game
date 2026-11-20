@@ -12,6 +12,7 @@ import { FOG } from "./pencil";
 import { Scenery } from "./Scenery";
 import { Lifts } from "./Lifts";
 import { PartyLights } from "./party/PartyLights";
+import { SpeakerWaves } from "./party/SpeakerWaves";
 import { Sky } from "./Sky";
 import { Puddles } from "./weather/Puddles";
 import { Rain } from "./weather/Rain";
@@ -45,6 +46,7 @@ export function Scene() {
       <Characters />
       <LifeProps />
       <PartyLights />
+      <SpeakerWaves />
       <PartnerPresence />
       <Sky />
       <Puddles w={lot.w} d={lot.d} />

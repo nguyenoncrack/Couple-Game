@@ -10,7 +10,8 @@ it("kicks on the beat, recoils between beats, and rests during a breakdown", () 
   expect(at(64).rock).toBeGreaterThan(0.8);
   expect(at(64.25).rock).toBeLessThan(0);
   expect(at(64.9).cone).toBeLessThan(0.01);
-  expect(at(100)).toEqual({ cone: 0, rock: 0 });
+  expect(at(64.25)).toMatchObject({ phase: 0.25, strength: expect.any(Number) });
+  expect(at(100)).toEqual({ cone: 0, rock: 0, phase: 0, strength: 0 });
 });
 
 it("uses the audible deck's recording grid when the favored deck is held", () => {
@@ -28,8 +29,9 @@ it("settles after playback pauses and stays still with reduced motion", () => {
     stepSpeakerMotion(DEFAULT_DECK, undefined, 16, 0.016, false, noAnalysis);
     expect(speakerMotion.cone).toBeGreaterThan(0);
     expect(speakerMotion.cone).toBeLessThan(active);
+    expect(speakerMotion.strength).toBe(0);
     stepSpeakerMotion(playing(), undefined, 32, 0.016, true, noAnalysis);
-    expect(speakerMotion).toEqual({ cone: 0, rock: 0 });
+    expect(speakerMotion).toEqual({ cone: 0, rock: 0, phase: 0, strength: 0 });
   } finally {
     stepSpeakerMotion(undefined, undefined, 0, 0, true, noAnalysis);
   }

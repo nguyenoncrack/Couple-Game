@@ -45,6 +45,7 @@ export const partyUniforms = {
   uMeterB: { value: 0 },
   /** The light show: a flash on each beat (0 to 1), the music's energy (0 to 1), bars on the record's own grid (whole bars and the beat as a fraction), and a drop's burst. */
   uFlash: { value: 0 },
+  uChase: { value: 0 },
   uEnergy: { value: CALM.energy },
   uBar: { value: 0 },
   uLift: { value: 0 },
@@ -161,8 +162,12 @@ export function stepParty(lights: PartyLights, music: Music | undefined, nowMs: 
   const onAir = deck?.playing && lights.on ? deck[loudSide(deck, beat)] : null;
   if (onAir && onAir !== asked) requestAnalysis(onAir);
   asked = onAir;
-  showFrame = show.step(lights.on ? grooveOf(deck, beat, analysisOf) : null, dt, steady);
+  const videoGroove = !deck?.playing && pulse.playing
+    ? { beat: pulse.beat, bar: Math.floor(pulse.beat / 4), barBeat: pulse.beat % 4, energy: 0.7, section: null }
+    : null;
+  showFrame = show.step(lights.on ? grooveOf(deck, beat, analysisOf) ?? videoGroove : null, dt, steady);
   u.uFlash.value = showFrame.flash;
+  u.uChase.value = showFrame.active ? 1 : 0;
   u.uEnergy.value = showFrame.energy;
   u.uBar.value = (showFrame.bar + showFrame.barBeat / 4) % WRAP;
   u.uLift.value = showFrame.lift;
@@ -182,7 +187,7 @@ function apply(look: ReturnType<typeof lookOf>) {
 }
 
 const common = /* glsl */ `
-  uniform float uTime, uLevel, uCount, uPattern, uPeriod, uSteady, uBeat, uSpin, uPump, uBeatCount, uMeterA, uMeterB, uFlash, uEnergy, uBar, uLift;
+  uniform float uTime, uLevel, uCount, uPattern, uPeriod, uSteady, uBeat, uSpin, uPump, uBeatCount, uMeterA, uMeterB, uFlash, uChase, uEnergy, uBar, uLift;
   uniform vec3 uPalette[${SLOTS}];
   uniform vec2 uCentre;
   vec3 palAt(float u) {
@@ -243,18 +248,17 @@ export const tileMaterial = new THREE.ShaderMaterial({
       float panel = smoothstep(0.035, 0.075, edge);
       vec2 g = fract(p * 4.0) - 0.5;
       float led = 1.0 - smoothstep(0.17, 0.3, length(g));
-      // while the music goes hard the colours step round the palette on each bar
-      float hard = smoothstep(0.6, 0.85, uEnergy) * (1.0 - uSteady);
-      vec3 glow = palAt(spot(p) + floor(uBar) * 0.21 * step(0.55, uEnergy) * (1.0 - uSteady)) * breathe();
-      // quieter parts glow lower, full-on parts brighter
-      float drive = 0.6 + 0.75 * uEnergy;
-      // the beat's flash; when the music's full on, the tiles take turns in a checkerboard, beat by beat
-      float turn = mod(floor(p.x) + floor(p.y) + floor(uBar * 4.0), 2.0);
-      float flash = uFlash * mix(1.0, turn * 1.5, hard) * (1.0 - uSteady);
+      // Chase diagonal bands across the tiles, paced by the record. Reverse on alternate bars.
+      float drive = 0.5 + 0.85 * uEnergy;
+      float direction = mix(1.0, -1.0, mod(floor(uBar), 2.0));
+      float stripe = fract((floor(p.x) + direction * floor(p.y)) * 0.28 - uBar * 3.0);
+      float chase = (1.0 - smoothstep(0.08, 0.36, abs(stripe - 0.5))) * uChase * smoothstep(0.28, 0.83, uEnergy);
+      vec3 glow = palAt(spot(p) + chase * 0.5 + floor(uBar) * 0.21 * uChase) * breathe();
+      float flash = uFlash * (0.3 + 1.25 * chase);
       // a drop's burst: a bright ring racing out across the floor
       float front = (1.0 - uLift) * 14.0;
       float ring = uLift * exp(-pow((length(p - uCentre) - front) * 1.2, 2.0)) * (1.0 - uSteady);
-      vec3 lit = glow * drive * (1.0 + 0.2 * uPump * (1.0 - uSteady) + 1.1 * flash) + (vec3(0.35) + glow * 0.5) * (0.5 * flash + 1.2 * ring);
+      vec3 lit = glow * drive * (0.78 + 0.8 * chase + 1.15 * flash) + (vec3(0.18) + glow * 0.55) * (0.4 * flash + 1.65 * ring);
       vec3 glass = vec3(0.045, 0.047, 0.07);
       vec3 col = glass + lit * uLevel * (0.5 + 0.75 * led) * panel + glow * uLevel * (0.22 + 0.3 * flash) * (1.0 - panel);
       // a faint sheen, fixed to the room, so the glass reads as glass
