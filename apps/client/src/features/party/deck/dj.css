@@ -1633,13 +1633,32 @@
   padding: 0;
   list-style: none;
 }
-.dj-saved li {
-  display: flex;
-  align-items: center;
+.dj-saved li.dj-saved-row {
+  display: grid;
   gap: 4px;
   padding: 4px 6px;
   border-radius: 9px;
   background: var(--dj-well);
+}
+.dj-saved-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.dj-saved-main .dj-row-text {
+  flex: 1 1 120px;
+}
+.dj-saved-songs {
+  margin: 0;
+  padding: 0 0 2px 26px;
+  font-size: 12px;
+}
+.dj-saved-songs small {
+  color: var(--dj-soft);
+}
+.dj-setlist-tools .dj-note {
+  font-size: 11px;
 }
 
 /* the pair being worked on */
@@ -1909,5 +1928,283 @@
   }
   .dj-row-tools .dj-chip {
     padding: 5px 9px;
+  }
+}
+
+/* the transitions and the record loader under the workspace (More controls), as they were on the Decks page */
+.dj-mixpanel {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: #1b1921;
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+}
+.dj-mixlabel {
+  margin-right: 2px;
+}
+.dj-preset-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.dj-preset {
+  display: grid;
+  justify-items: start;
+  gap: 0;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 2px solid var(--dj-line);
+  background: linear-gradient(180deg, #3f3a49, #2f2b38);
+  box-shadow: 0 3px 0 var(--dj-line);
+  color: var(--dj-text);
+  font: 600 12px var(--logo);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.06s;
+}
+.dj-preset small {
+  font: 9px var(--mono);
+  color: var(--dj-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dj-preset-wrap.mine .dj-preset {
+  border-color: color-mix(in srgb, var(--dj-echo) 60%, var(--dj-line));
+  padding-right: 22px;
+}
+.dj-preset:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--dj-line);
+}
+.dj-preset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.dj-preset.on {
+  opacity: 1;
+  background: var(--dj-echo);
+  color: var(--dj-well);
+}
+.dj-preset.on small {
+  color: var(--dj-well);
+}
+.dj-preset-x {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dj-soft);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dj-preset-x:hover {
+  color: var(--dj-drop);
+}
+.dj-save {
+  display: inline-flex;
+  gap: 4px;
+}
+.dj-save input {
+  width: 120px;
+  padding: 3px 8px;
+  border-radius: 9px;
+  border: 2px solid var(--dj-line);
+  background: var(--dj-well);
+  color: var(--dj-text);
+  font: 12px var(--logo);
+}
+.dj-mixgo {
+  --glow: var(--dj-echo);
+  position: relative;
+  margin-left: auto;
+  height: 40px;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--dj-echo) 75%, white);
+}
+.dj-mixgo small {
+  font: 9px var(--mono);
+  opacity: 0.8;
+}
+.dj-mixgo.is-running {
+  color: var(--dj-text);
+  background: #2f2b38;
+  text-shadow: 0 1px 2px #000000aa;
+}
+.dj-mixbar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--mixk, 0) * 100%);
+  background: var(--dj-echo);
+  z-index: -1;
+}
+.dj-mixgo.is-running {
+  isolation: isolate;
+}
+.dj-mixhint {
+  margin: 0;
+}
+.dj-transport,
+.dj-load {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.dj-load {
+  margin: 8px 0 2px;
+  color: var(--dj-soft);
+  font-size: 12px;
+}
+.dj-load span {
+  margin-right: 4px;
+}
+.dj-timed label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--dj-soft);
+}
+.dj-timed input {
+  width: 62px;
+  padding: 2px 6px;
+  border-radius: 9px;
+  border: 2px solid var(--dj-line);
+  background: var(--dj-well);
+  color: var(--dj-text);
+  font: 12px var(--mono);
+}
+.dj-timed input.bad {
+  border-color: var(--dj-drop);
+}
+.dj-queued {
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dj-echo) 16%, var(--dj-well));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--dj-echo) 55%, var(--dj-line));
+}
+.dj-queued-text {
+  flex: 1;
+  display: grid;
+  font-size: 13px;
+}
+.dj-queued-text b {
+  font-family: var(--mono);
+  color: var(--dj-echo);
+}
+.dj-queued-text small {
+  font: 10px var(--mono);
+  color: var(--dj-soft);
+  text-transform: uppercase;
+}
+
+/* more controls, under the workspace: each part folds away */
+.dj-more {
+  display: grid;
+  /* (a single column the width of the console: nothing inside may stretch it) */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 2px dashed var(--dj-line);
+}
+.dj-more-title {
+  margin: 0;
+  font: 700 14px var(--logo);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.dj-more-title small {
+  margin-left: 8px;
+  font: 400 12px var(--mono);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--dj-soft);
+}
+.dj-more-part {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dj-well) 45%, transparent);
+  box-shadow: inset 0 0 0 2px var(--dj-line);
+}
+.dj-more-part > *,
+.dj-more .dj-table,
+.dj-more .dj-screen {
+  min-width: 0;
+}
+/* a phone: one deck under the other, each the full width */
+@media (max-width: 640px) {
+  .dj-more .dj-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.dj-more-part > summary {
+  cursor: pointer;
+  font-size: 14px;
+}
+.dj-more-part > summary small {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--dj-soft);
+}
+.dj-more-part[open] > summary {
+  margin-bottom: 4px;
+}
+
+/* the song slider in the live bar: drag to move through the song on air */
+.dj-live-seek {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dj-live-seek .dj-chip {
+  padding: 2px 7px;
+  font-size: 11px;
+}
+.dj-live-seekbar {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.dj-live-seekbar input {
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--a, var(--dj-play));
+  cursor: pointer;
+}
+.dj-live-seekmark {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: #ffb02e;
+  pointer-events: none;
+}
+.dj-live-seektime {
+  min-width: 9em;
+  font: 11px var(--mono);
+  color: var(--dj-soft);
+  text-align: right;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .dj-live-seektime {
+    min-width: 0;
   }
 }

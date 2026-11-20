@@ -1,7 +1,7 @@
 import { DECK_TRACKS, deckTrack, isRecording, MAX_SET_STEPS, MIX_STYLES, trackBeats, type DeckTrackId, type MixStyle, type SetStep } from "@cg/shared";
 import { useState, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { deleteSet, saveSet, usePartyUi, type SavedSet } from "../../partyUi";
+import { deleteSet, duplicateSet, MAX_SETS, renameSet, saveSet, usePartyUi, type SavedSet } from "../../partyUi";
 import { useAnalysis } from "../analysis/trackAnalysis";
 import { beatsToSeconds, preciseClock } from "../deckTime";
 import { artistOf, canMove, linkProblem, pairKey, type LiveList } from "./setPlan";
@@ -35,9 +35,11 @@ interface Props {
   onRemove: (i: number) => void;
   onJump: (i: number) => void;
   onLoad: (set: SavedSet, play: boolean) => void;
+  /** Work a transition out again (or every one from the record on air on, with null). */
+  onAuto: (i: number | null) => void;
 }
 
-export function SetList({ list, onAirPos, mixing, name, onAdd, onMove, onRemove, onJump, onLoad }: Props) {
+export function SetList({ list, onAirPos, mixing, name, onAdd, onMove, onRemove, onJump, onLoad, onAuto }: Props) {
   const { steps, onAir } = list;
   const { pair, selected, review, draft } = useWorkspace(useShallow((s) => ({ pair: s.pair, selected: s.selected, review: s.review, draft: s.draft })));
   const [adding, setAdding] = useState(false);
@@ -105,6 +107,15 @@ export function SetList({ list, onAirPos, mixing, name, onAdd, onMove, onRemove,
                     <span className="dj-link-text">
                       fades at {preciseClock(s.next.at)} · {styleName(s.next.style)} {s.next.bars} bar{s.next.bars === 1 ? "" : "s"}
                     </span>
+                    <button
+                      className="dj-chip dj-auto"
+                      onClick={() => onAuto(i)}
+                      disabled={(onAir !== null && i < onAir) || (mixing && i === onAir)}
+                      title="Work this transition out again from the two songs' beats and energy"
+                      aria-label={`Work out the ${i + 1} → ${i + 2} transition automatically`}
+                    >
+                      Auto
+                    </button>
                     {unsaved && <span className="dj-badge">Unsaved</span>}
                     {problem && <span className="dj-badge bad">Already gone by</span>}
                     {key && review.includes(key) && (
@@ -129,6 +140,14 @@ export function SetList({ list, onAirPos, mixing, name, onAdd, onMove, onRemove,
             );
           })}
         </ol>
+      )}
+      {steps.length > 1 && (
+        <div className="dj-mixrow dj-setlist-tools">
+          <button className="dj-chip" onClick={() => onAuto(null)} title="Work every transition from the song on air to the end out again from the songs' beats and energy">
+            Auto-link all
+          </button>
+          <span className="dj-note">Redo every transition automatically</span>
+        </div>
       )}
       <SaveBar steps={steps} name={name} />
       <SavedSets onLoad={onLoad} />
@@ -225,45 +244,88 @@ function SaveBar({ steps, name }: { steps: SetStep[]; name: string | null }) {
 function SavedSets({ onLoad }: { onLoad: (set: SavedSet, play: boolean) => void }) {
   const sets = usePartyUi((s) => s.sets);
   const [open, setOpen] = useState(false);
-  const [confirm, setConfirm] = useState<string | null>(null);
   if (!sets.length) return null;
   return (
     <details className="dj-saved" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>Saved sets ({sets.length})</summary>
       <ul>
         {sets.map((s) => (
-          <li key={s.id}>
-            <span className="dj-row-text">
-              <b>{s.name}</b>
-              <small>
-                {s.steps.length} song{s.steps.length === 1 ? "" : "s"}
-              </small>
-            </span>
-            {confirm === s.id ? (
-              <>
-                <button className="dj-chip dj-danger" onClick={() => (deleteSet(s.id), setConfirm(null))}>
-                  Delete
-                </button>
-                <button className="dj-chip" onClick={() => setConfirm(null)}>
-                  Keep
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="dj-chip" onClick={() => onLoad(s, false)} title="Replace the set on the decks with this one, paused at its first song">
-                  Load
-                </button>
-                <button className="dj-chip on" onClick={() => onLoad(s, true)} title="Replace the set on the decks with this one and play it from the top (everyone hears it)">
-                  Play
-                </button>
-                <button className="dj-chip" onClick={() => setConfirm(s.id)} aria-label={`Delete the saved set ${s.name}`}>
-                  ×
-                </button>
-              </>
-            )}
-          </li>
+          <SavedRow key={s.id} set={s} full={sets.length >= MAX_SETS} onLoad={onLoad} />
         ))}
       </ul>
     </details>
+  );
+}
+
+/** One saved set: load or play it, see its songs, rename, copy or delete it (delete asks first). */
+function SavedRow({ set, full, onLoad }: { set: SavedSet; full: boolean; onLoad: (set: SavedSet, play: boolean) => void }) {
+  const [mode, setMode] = useState<"idle" | "songs" | "rename" | "delete">("idle");
+  const [text, setText] = useState(set.name);
+  return (
+    <li className="dj-saved-row">
+      <span className="dj-saved-main">
+        <span className="dj-row-text">
+          <b>{set.name}</b>
+          <small>
+            {set.steps.length} song{set.steps.length === 1 ? "" : "s"}
+          </small>
+        </span>
+        {mode === "delete" ? (
+          <>
+            <button className="dj-chip dj-danger" onClick={() => deleteSet(set.id)}>
+              Delete
+            </button>
+            <button className="dj-chip" onClick={() => setMode("idle")}>
+              Keep
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="dj-chip" onClick={() => onLoad(set, false)} title="Replace the set on the decks with this one, paused at its first song">
+              Load
+            </button>
+            <button className="dj-chip on" onClick={() => onLoad(set, true)} title="Replace the set on the decks with this one and play it from the top (everyone hears it)">
+              Play
+            </button>
+            <button className={`dj-chip ${mode === "songs" ? "on" : ""}`} onClick={() => setMode(mode === "songs" ? "idle" : "songs")} aria-expanded={mode === "songs"} title="Show its songs">
+              Songs
+            </button>
+            <button className="dj-chip" onClick={() => (setText(set.name), setMode(mode === "rename" ? "idle" : "rename"))} aria-expanded={mode === "rename"}>
+              Rename
+            </button>
+            <button className="dj-chip" onClick={() => duplicateSet(set.id)} disabled={full} title={full ? `Up to ${MAX_SETS} saved sets` : "Make a copy of it, next to it"}>
+              Duplicate
+            </button>
+            <button className="dj-chip" onClick={() => setMode("delete")} aria-label={`Delete the saved set ${set.name}`}>
+              ×
+            </button>
+          </>
+        )}
+      </span>
+      {mode === "rename" && (
+        <form
+          className="dj-mixrow dj-savebar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            renameSet(set.id, text);
+            setMode("idle");
+          }}
+        >
+          <input autoFocus value={text} maxLength={32} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setMode("idle")} aria-label={`New name for ${set.name}`} />
+          <button className="dj-chip on" type="submit">
+            Rename
+          </button>
+        </form>
+      )}
+      {mode === "songs" && (
+        <ol className="dj-saved-songs">
+          {set.steps.map((st, k) => (
+            <li key={k}>
+              {deckTrack(st.track).name} <small>{artistOf(st.track)}</small>
+            </li>
+          ))}
+        </ol>
+      )}
+    </li>
   );
 }

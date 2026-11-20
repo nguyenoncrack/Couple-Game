@@ -1,6 +1,6 @@
 import { DEFAULT_DECK, trackBeats, type Deck, type DeckTrackId, type SetStep } from "@cg/shared";
 import { describe, expect, it } from "vitest";
-import { addSongs, canMove, liveList, moveSong, pairKey, removeSong, sameSteps, type EditContext } from "./setPlan";
+import { addSongs, autoLinks, canMove, liveList, moveSong, pairKey, removeSong, safeSeek, sameSteps, SEEK_MARGIN, type EditContext } from "./setPlan";
 
 const ctx = (onAir: number | null, onAirPos: number | null = null): EditContext => ({ bpm: 124, analysis: () => null, onAir, onAirPos });
 const step = (track: DeckTrackId, from = 0): SetStep => ({ track, from, cues: [] });
@@ -64,5 +64,44 @@ describe("the workspace's set list", () => {
     const rounded = steps.map((s) => ({ ...s, from: s.from + 0.2, next: s.next && { ...s.next, at: Math.round(s.next.at * 4) / 4 } }));
     expect(sameSteps(rounded, steps)).toBe(true);
     expect(sameSteps(rounded.slice(0, 1), steps)).toBe(false);
+  });
+
+  it("works transitions out again: one, or every one still to come", () => {
+    const { steps } = addSongs([step("take-me")], five.slice(1), ctx(0));
+    // hand-made links that Auto should replace
+    const odd = steps.map((s) => (s.next ? { ...s, next: { at: 8, style: "cut" as const, bars: 1 } } : s));
+    const one = autoLinks(odd, 2, ctx(0));
+    expect(one.relinked).toEqual([2]);
+    expect(one.steps[2]!.next).toEqual(steps[2]!.next);
+    expect(one.steps[1]!.next).toEqual(odd[1]!.next);
+    // every link from the record on air on; the ones already played stay as they were
+    const all = autoLinks(odd, null, ctx(2));
+    expect(all.relinked).toEqual([2, 3]);
+    expect(all.steps[0]!.next).toEqual(odd[0]!.next);
+    expect(all.steps[3]!.next).toEqual(steps[3]!.next);
+    expect(all.steps[4]!.next).toBeUndefined();
+    // a played link, or the last record, has nothing to work out
+    expect(autoLinks(odd, 0, ctx(2)).relinked).toEqual([]);
+    expect(autoLinks(odd, 4, ctx(0)).relinked).toEqual([]);
+  });
+
+  it("stops a jump on the record on air just short of the set's next transition", () => {
+    const { steps } = addSongs([step("take-me")], ["back-to-u"], ctx(0));
+    const at = steps[0]!.next!.at;
+    const deck: Deck = {
+      ...DEFAULT_DECK,
+      a: "take-me",
+      b: "back-to-u",
+      xfade: 0,
+      set: { name: null, steps, step: 0 },
+      mix: { style: "blend", from: 0, to: 1, start: null, beats: 32, at },
+    };
+    expect(safeSeek(deck, "a", at + 20, 0)).toBe(at - SEEK_MARGIN);
+    expect(safeSeek(deck, "a", 10, 0)).toBe(10);
+    // the other deck, a transition already under way, or a mix that isn't the set's go where they're asked
+    expect(safeSeek(deck, "b", at + 20, 0)).toBe(at + 20);
+    expect(safeSeek({ ...deck, mix: { ...deck.mix!, start: 5 } }, "a", at + 20, 10)).toBe(at + 20);
+    expect(safeSeek({ ...deck, set: { name: null, steps: [step("take-me")], step: 0 } }, "a", at + 20, 0)).toBe(at + 20);
+    expect(safeSeek({ ...deck, mix: null }, "a", at + 20, 0)).toBe(at + 20);
   });
 });

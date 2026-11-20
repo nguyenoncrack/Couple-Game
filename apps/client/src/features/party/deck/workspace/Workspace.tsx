@@ -3,6 +3,7 @@ import {
   deckRunning,
   deckTrack,
   defaultHandover,
+  isRecording,
   marksOf,
   MIX_BARS,
   MIX_STYLES,
@@ -17,7 +18,7 @@ import {
   type MixStyle,
   type SetStep,
 } from "@cg/shared";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { serverNow } from "../../../../state/game";
 import { BUILT_IN_PRESETS, usePartyUi, type SavedSet } from "../../partyUi";
@@ -27,7 +28,7 @@ import type { DeckEngine } from "../deckEngine";
 import { beatsToSeconds, parseClock, preciseClock, secondsToBeats } from "../deckTime";
 import { startPreview, stopPreview, usePreview, type PreviewPlan } from "../preview";
 import { SetList } from "./SetList";
-import { addSongs, linkProblem, liveList, moveSong, onAirSide, pairKey, removeSong, sameSteps, type EditContext } from "./setPlan";
+import { addSongs, autoLinks, linkProblem, liveList, moveSong, onAirSide, pairKey, removeSong, safeSeek, sameSteps, type EditContext } from "./setPlan";
 import { TrackLane } from "./TrackLane";
 import { draftKey, flagForReview, markReviewed, say, sendTracked, setDraft, setPanel, useWorkspace, type Draft } from "./workspaceStore";
 
@@ -116,6 +117,17 @@ export function Workspace({ deck, beat, engine, fx }: Props) {
     const keys = e.relinked.map((k) => pairKey(e.steps, k)).filter((k): k is string => Boolean(k));
     const name = deckTrack(steps[i]!.track).name;
     commit(e.steps, e.onAir, { pending: `Taking out ${name}…`, done: `Took out ${name}.${keys.length ? ` Track ${i} now goes straight into track ${i + 1}: check that transition` : ""}`, failed: `Couldn't take out ${name}` }, () => flagForReview(keys));
+  };
+  const auto = (i: number | null) => {
+    const e = autoLinks(steps, i, ctx);
+    if (!e.relinked.length) return say(i === null ? "No transitions to work out" : `Couldn't work out the ${i + 1} → ${i + 2} transition`, "failed");
+    const keys = e.relinked.map((k) => pairKey(e.steps, k)).filter((k): k is string => Boolean(k));
+    const what = i === null ? `${e.relinked.length} transition${e.relinked.length === 1 ? "" : "s"}` : `the ${i + 1} → ${i + 2} transition`;
+    commit(e.steps, e.onAir, { pending: `Working out ${what}…`, done: `Worked out ${what} from the songs' beats and energy`, failed: `Couldn't change ${what}` }, () => {
+      for (const k of keys) markReviewed(k);
+      const d = useWorkspace.getState().draft;
+      if (d && e.relinked.some((k) => d.key.startsWith(`${k}:`))) setDraft(null);
+    });
   };
   const jump = (i: number) => {
     const step = steps[i];
@@ -344,7 +356,7 @@ export function Workspace({ deck, beat, engine, fx }: Props) {
         )}
       </section>
 
-      <SetList list={list} onAirPos={onAirPos} mixing={mixing} name={deck.set?.name ?? null} onAdd={add} onMove={move} onRemove={remove} onJump={jump} onLoad={loadSaved} />
+      <SetList list={list} onAirPos={onAirPos} mixing={mixing} name={deck.set?.name ?? null} onAdd={add} onMove={move} onRemove={remove} onJump={jump} onLoad={loadSaved} onAuto={auto} />
 
       {n >= 2 && outStep && inStep && cur && (
         <Suggestions
@@ -428,10 +440,72 @@ function LiveStrip({ deck, beat, steps, onAir, onAirPos, side, onPlay, rehearsin
       <button className={`dj-pad dj-play dj-live-play ${deck.playing ? "on" : ""}`} onClick={onPlay} disabled={!now && !deck.playing} aria-pressed={deck.playing} aria-label={deck.playing ? "Pause for everyone" : "Play for everyone"}>
         <span aria-hidden>{deck.playing ? "❚❚" : "▶"}</span>
       </button>
-      <div className="dj-live-progress" aria-hidden>
-        <i />
-      </div>
+      {now && deck[side] === now.track ? (
+        <SongSlider deck={deck} side={side} track={now.track} num={onAir! + 1} pos={onAirPos} fadeAt={m && next && mixQueued(m, beat) ? (m.at ?? null) : null} />
+      ) : (
+        <div className="dj-live-progress" aria-hidden>
+          <i />
+        </div>
+      )}
     </section>
+  );
+}
+
+/**
+ * Move through the song on air, for everyone: drag the slider (it shows where you'll land) and let go, or step back
+ * and forward 10 seconds (a bar on a built-in record). A tick marks where the next transition starts; a jump stops a
+ * bar short of it, so the rest of the set stays (Mix now goes on to the next song).
+ */
+function SongSlider({ deck, side, track, num, pos, fadeAt }: { deck: Deck; side: DeckSide; track: DeckTrackId; num: number; pos: number | null; fadeAt: number | null }) {
+  const [drag, setDrag] = useState<number | null>(null);
+  const len = trackBeats(track);
+  const rec = isRecording(track);
+  const by = rec ? secondsToBeats(10) : 4;
+  const shown = drag ?? pos ?? 0;
+  const go = (to: number) => {
+    const want = Math.max(0, Math.min(len - 0.01, to));
+    const safe = safeSeek(deck, side, want, deckBeat(deck, serverNow()));
+    const short = safe < want - 0.01;
+    sendTracked(
+      { cmd: "cue", side, track, pos: safe },
+      {
+        pending: `Moving track ${num} to ${preciseClock(safe)}…`,
+        done: short ? `Track ${num} went to ${preciseClock(safe)}, just before its transition (Mix now goes on to the next song)` : `Track ${num} went to ${preciseClock(safe)} for everyone`,
+        failed: "The song didn't move",
+      },
+      (d) => Math.abs((trackPosition(d, side, deckBeat(d, serverNow())) ?? -1e9) - safe) < 6,
+    );
+  };
+  const letGo = () => {
+    if (drag !== null) go(drag);
+    setDrag(null);
+  };
+  return (
+    <div className="dj-live-seek">
+      <button className="dj-chip" onClick={() => go((pos ?? 0) - by)} aria-label={`Back ${rec ? "10 seconds" : "a bar"} on track ${num}`}>
+        {rec ? "−10 s" : "−1 bar"}
+      </button>
+      <span className="dj-live-seekbar" style={{ "--k": (shown / len).toFixed(4) } as CSSProperties}>
+        <input
+          type="range"
+          min={0}
+          max={len}
+          step={rec ? 0.25 : 4}
+          value={shown}
+          onChange={(e) => setDrag(Number(e.target.value))}
+          onPointerUp={letGo}
+          onKeyUp={letGo}
+          onBlur={() => setDrag(null)}
+          aria-label={`Move through track ${num} (everyone hears it)`}
+          aria-valuetext={preciseClock(shown)}
+        />
+        {fadeAt !== null && <i className="dj-live-seekmark" style={{ left: `${(fadeAt / len) * 100}%` }} title={`The next transition starts at ${preciseClock(fadeAt)}`} />}
+      </span>
+      <button className="dj-chip" onClick={() => go((pos ?? 0) + by)} aria-label={`Forward ${rec ? "10 seconds" : "a bar"} on track ${num}`}>
+        {rec ? "+10 s" : "+1 bar"}
+      </button>
+      <span className="dj-live-seektime">{drag !== null ? `Go to ${preciseClock(drag)}` : `${preciseClock(shown)} / ${preciseClock(len)}`}</span>
+    </div>
   );
 }
 
@@ -643,7 +717,7 @@ function LiveSeek({ deck, side, num, pos }: { deck: Deck; side: DeckSide; num: n
   const bad = text.trim() !== "" && (sec === null || secondsToBeats(sec) >= trackBeats(id));
   const go = () => {
     if (sec === null || bad) return;
-    const to = secondsToBeats(sec);
+    const to = safeSeek(deck, side, secondsToBeats(sec), deckBeat(deck, serverNow()));
     sendTracked({ cmd: "cue", side, track: id, pos: to }, { pending: `Moving track ${num}…`, done: `Track ${num} moved to ${preciseClock(to)} for everyone`, failed: `Couldn't move track ${num}` }, (d) => d !== deck);
     setText("");
   };
