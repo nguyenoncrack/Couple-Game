@@ -20,43 +20,27 @@ The music is heard by everyone in the house whenever the deck plays. There is no
 
 ## The console
 
-- **Two turntables**: each record turns while the deck plays (at the deck's tempo), with the record's name and an eight-cell level meter fed by that deck's real output. Each deck also has:
-  - a **place bar**: where the deck is in its record. Click or drag it (or use the arrow keys, Home for the start) to jump to another part. A recording jumps to the moment. A built-in record jumps to the start of a bar so it stays in time with the other deck. At the booth it shows the time to a tenth (`2:40.5 / 4:19`).
-  - its own **Play/Pause**: pauses just this deck (the other plays on) and carries on from the same place. Pressing it while the music is paused starts the music with only this deck.
-  - a **time box**: type an exact time (`1:24.5`, `84.5` or `1:02:03`) and press Go (or Enter) to jump there.
-  - **saved cues**: *Save cue* keeps the typed time (or where the deck is now) as a cue on that record, up to eight. They show as chips (click to jump, × to delete) and as blue ticks on the place bar. Cues belong to the record, so they come back whenever it's loaded, on either deck, and they're shared and saved with the house.
-  - a **channel**: Hi, Mid and Low EQ knobs (left cuts the band right out, right lifts it a little; double-click resets) and its own volume.
-  - an **eject** (⏏): takes the record off. The other deck plays on its own, and the next record picked goes onto the empty deck.
-- **Screen**: shows what's on air, its section (Intro, Groove, Full, Breakdown, Rising, Build-up, Drop!) or a recording's time, four beat lights, how far through the record it is, and a transition under way.
-- **Mixer**:
-  - *Play/Pause* pad.
-  - *Crossfader* (A to B, equal power; double-click centres it).
-  - *Filter* knob (left muffles, right thins; drag, arrow keys, or double-click to reset).
-  - *Echo* pad.
-  - *Drop* pad: a two-bar build-up with a snare roll and a riser, then a four-bar drop with a crash.
-  - *Tempo*: −/+ 2 BPM, from 100 to 140.
-- **Transitions**: one press takes the music over to the other deck, starting on the next bar line.
-  - Five built-in presets: *Smooth* (blend, 8 bars), *Bass swap* (8), *Echo out* (4), *Filter fade* (8) and *Quick cut* (1).
-  - Or pick a style and a length (1, 2, 4, 8 or 16 bars) for the *Mix* pad. *+ Save* keeps that as a preset of your own (up to six, on this device, deletable with ×).
-  - Styles: *Blend* fades one into the other. *Bass swap* has both play but only one bass line at a time, swapping halfway. *Echo out* sends the old track into the echo as the new one comes up. *Filter out* strips the old track's bass and then its middle, then the new one takes over. *Cut* switches on the bar line at the end.
-  - While it runs, the Mix pad fills up bar by bar; pressing it (or grabbing the crossfader) stops the transition where it is. A transition needs the music playing and a record on the other deck.
-  - **Timed**: two separate times, when the mix starts on the record on air and where the incoming record starts: "At `2:45` on B ➜ start A at `1:12`", with the chosen style and length, then *Queue*. The incoming deck parks at its cue (its own Play is off; dragging its place bar moves the cue) until the record on air gets there. A queued card shows it ("At 2:45 on B ➜ start A at 1:12 · Bass swap · 8 bars", and how long until it starts) with *Mix now* and *Cancel*. Cancel leaves the incoming deck paused at its cue. Pausing the record on air holds the queued mix; jumping it moves the start, and jumping past the time calls the mix off. A time already gone by can't be queued.
-- **Sound** (a tab at the booth): both records as waveforms (brightness is loudness, the deck's colour is how much of it is bass), with a live playhead, timestamps along the bottom, cue points (yellow), the drop point (pink) and, when the beat is steady, bar and 8-bar phrase lines. Each lane says the record's tempo and whether its beat grid is reliable, or *Analyzing… n%*.
-  - *Set points* (the default) or *Seek*: in Set points, a click or drag on the deck on air sets where it **starts fading** (orange FADE line); on the other deck, where it **comes in** (green IN line). In Seek, a click or drag moves that deck. Clicks snap to the nearest beat when the grid is reliable (Shift-click doesn't). Arrow keys nudge (Shift for one second).
-  - *Zoom* − / + (1× to 64×). The view follows each playhead; *On the points* centres it on the transition instead.
-  - The two points also have time boxes; style and length are the same choices as the Decks page. The **overlap** (the transition's length from each point) is shaded on both lanes, and its length shows in bars and seconds.
-  - *Preview cue* plays the incoming record from its start point, and *Preview transition* plays the transition from 16 beats before it, both on a second, private engine at the deck's tempo: only you hear it, and the live mix is turned down to 30% for you meanwhile. Nothing is sent to the house.
-  - *Queue transition* queues it as a timed transition (replacing one already queued), so it saves with the set like any other.
-  - **Suggested mix**: once both records are analyzed, up to three suggestions with exact times, a style, a length and a short reason ("At 0:31.2 on Deck B, bring in Deck A at 0:13.3 with an 8-bar bass swap." / "The next 8-bar phrase on B; A's drop lands as it ends."). Each has *Preview*, *Edit* (puts it on the waveforms to adjust) and *Apply* (queues it without starting it).
-- **Link songs** (at the top of My Sets): a chain of any number of records (up to 24), each handing over to the next: 1 ➜ 2 ➜ 3 ➜ …. It starts from the record on air and whatever is queued after it.
-  - *+ Add a song* puts a record at the end and works its link out at once. ↑ ↓ reorder, × removes.
-  - Each link has its time (on the outgoing record), style and length, and each record a start time, all editable. *Auto* (or *Auto-link all*) works a link out like a suggested mix: late in the outgoing record (its outro), with the next one's drop landing as the link ends. With no analysis yet it's an 8-bar blend just before the end. A link before its record gets there, or past its end, is flagged.
-  - *Link to what's playing* carries the mix on into the chain without stopping (`setchain`). *Play from the start* loads it and plays from the first record. *Save* keeps it in My Sets.
-  - Each link plays out in turn: when one finishes, the next record goes onto the free deck, parked at its start, with its link queued.
-- **My Sets** (a tab at the booth): a set is records in order, each with where it starts, its cue points, and its transition to the next (the time on it, style and length).
-  - *In the decks* shows the set being played, or the one your mixing records as you go: every transition you queue or start adds the next record, and calling one off drops it.
-  - *Save Set* (separate from *+ Save preset*, which keeps a transition preset) keeps it on this device under a name; saving under the same name updates it.
-  - Each saved set has *Load*, *Rename*, *Duplicate* and *Delete* (which asks first). *Load* puts the first record on A at its start and the second parked on B, with the first transition queued, all paused; press Play to replay it. After each transition the next record goes onto the free deck, parked, with the next transition queued.
+At the booth the console has one **Workspace** tab (plus Lights and Guide): the set list, the waveforms of the transition you're working on, the controls and the suggestions, together. You build a set, work on a transition and play it without changing pages.
+
+- **Live bar** (stays at the top): what everyone hears now (*On air*, its time), what's *Up next* and when it mixes in, and a big Play/Pause.
+- **Set list** (beside the decks; on a phone, under the waveforms): the records in order, numbered, each with title, artist and length, and *On air* / *Up next* / *Played* tags.
+  - *+ Add songs* opens the library: tick several (they're numbered in the order ticked) and add them in one go. Each new pair is linked at once (`autoLink`, as a suggested mix would).
+  - ↑ ↓ reorder and × removes. A record can't move past the one on air, the one on air can't be removed, and while a transition is under way its two records stay put. The transitions a move or removal changes are worked out again and marked *New pair: check it* until you open them, save them, or press ✓.
+  - *Save set* keeps the list on this device (same name updates it). *Saved sets* below have *Load* (paused at the first song), *Play* and × (asks first).
+  - Between each pair, *Edit mix i → i+1* puts that transition on the waveforms, with "fades at 2:48 · Blend 8 bars" beside it. On a phone it scrolls the waveforms into view.
+  - Clicking a row selects it for editing or rehearsal (nothing is sent). *Jump live* moves everyone's music to that record, from its start point, and cues the next record with its transition (`setjump`, or `setload` with a step when nothing from the list is on the decks).
+  - Every change to the list goes to the house straight away (`setedit`, below) while the music plays on.
+- **The pair**: both records as waveforms (brightness is loudness, colour is how much bass), with timestamps, cue points (yellow), the drop point (pink), bar and phrase lines when the beat is steady, and *Analyzing… n%* until it's known. Each lane says its record's tempo and whether its grid is reliable, and its clock reads *Live 1:02 / 2:52* for the record everyone hears, *Rehearsing 0:31* for one you're previewing, or its length.
+  - Click or drag the first lane to set where it **fades** (orange), the second where the next record **starts** (green). Clicks snap to beats when the grid is reliable (Shift-click doesn't); arrow keys nudge. The saved point stays marked *SAVED* while you change it.
+  - Plain labels underneath: "Track 4 fades at 1:08 · Track 5 starts at 0:31 · Blend · 8 bars (15.5 s)". Changes are a draft (*Unsaved*) until *Save transition*; *Discard* puts it back. A fade the record on air has already passed can't be saved, and nor can a transition under way. Once the incoming record is on air its start point is fixed.
+- **Controls** under the waveforms:
+  - *Live · everyone hears*: Play/Pause, Rewind (four bars back on the record on air) and Mix now (starts the queued transition now, or mixes to the other deck).
+  - *Only you hear this*: *Cue n* plays the selected record from its start point and *Preview mix* plays the transition from 16 beats before it. Both run on a second, private engine at the deck's tempo; the live mix is turned down to 30% for you, and a note says what you're rehearsing and what everyone else hears. Nothing is sent to the house.
+  - *Sound FX* and *Adjust timing* open a compact panel beside the mix (on a phone, under it). Closing it keeps the pair, the playheads and any unsaved changes.
+- **Status line**: each command says it's under way ("Saving the 4 → 5 transition…"), then that it landed ("Saved: track 4 fades at 1:08, track 5 starts at 0:31") or that it didn't (after four seconds with no change from the house).
+- **Suggestions** for the pair: once both records are analyzed, up to three, in plain words ("At about 1:08 on Track 4, fade in Track 5 from 0:00 over about 15 s.") with a reason. *Pick* puts its two points on the waveforms at once; the picked one has *Preview*, *Rewind preview*, *Adjust timing* and *Save transition*.
+- **Sound FX** panel (everyone hears it): crossfader (equal power; double-click centres it), *Filter* knob, *Echo* pad, *Drop* pad (a two-bar build-up then a four-bar drop with a crash), tempo −/+ 2 BPM (100 to 140), and per deck its channel (Hi, Mid, Low EQ and volume) and place bar.
+- **Adjust timing** panel: time boxes for "Track 4 fades at" and "Track 5 starts at" (`1:24.5`, `84.5` or `1:02:03`), −/+ beat and bar nudges, style (*Blend*, *Bass swap*, *Echo out*, *Filter out*, *Cut*) and length (1 to 16 bars), the five presets and your own, zoom, *Centred on the points*, and a live seek for the record on air.
 - **Record crate**: one row that scrolls sideways. Clicking a record loads it onto an empty deck if there is one, otherwise the deck that isn't on air, and it starts from its beginning. Recordings show their length.
 - **Just you**: volume, Mute and Fade (quieter away from the speakers).
 
@@ -83,7 +67,7 @@ Built-in records:
 
 A **timed** transition also has `at` (the place in the outgoing record) and `inAt` (the place in the incoming one). After every deck command the house works out `start` from where the outgoing record is (`null` while that deck is paused on its own), and parks the incoming deck: its cue is set so it is at `inAt` on `start`, and `wait` keeps it there until then (`trackPosition` and the engine both respect it; a parked recording is fetched ahead so it comes in on the beat). *Mix now* sets `start` to now; *Cancel* (`unmix`) turns the park into a hold.
 
-**Sets.** The set in the decks is `set: {name, steps, step}` on the deck, where `step` is the record on air. `setchain` replaces everything after the record on air with a chain (keeping the steps already played), and queues its first link; it's refused while a transition is under way, or if the chain doesn't start with the record on air. When a set's transition finishes, any screen sends `setstep` (the house also checks before every deck command). The house then moves `step` on, puts the next record on the deck that's free, and queues the next transition as a timed one. Saved sets live on each device in `cg.party.sets`, and `setload` sends one to the house. Saved cues come back with their records.
+**Sets.** The set in the decks is `set: {name, steps, step}` on the deck, where `step` is the record on air. `setchain` replaces everything after the record on air with a chain (keeping the steps already played), and queues its first link; it's refused while a transition is under way, or if the chain doesn't start with the record on air. `setedit {steps, step, was}` replaces the whole list around the record on air without stopping it: `step` is where that record is in the new list and `was` is the step the editing screen saw, so an edit made from a stale view is turned down. It's also turned down if the record at `step` isn't the one on air, if its link is already past, or (during a transition) if the incoming record would change. Otherwise the next record is parked on the free deck with the new link queued, or a queued link with no next record is called off. When a set's transition finishes, any screen sends `setstep` (the house also checks before every deck command). The house then moves `step` on, puts the next record on the deck that's free, and queues the next transition as a timed one. Saved sets live on each device in `cg.party.sets`, and `setload` sends one to the house. Saved cues come back with their records.
 
 **Song analysis** (`features/party/deck/analysis/`). Every record gets a waveform, tempo, beat grid, downbeat and a per-second energy curve:
 - Recordings are fetched and decoded at 11 kHz mono in the background while the booth's console is open (the records on the decks first; the 72-minute set in 1.5 MB byte ranges). They play as usual meanwhile.
@@ -118,13 +102,12 @@ Steady light stops the pulses. A device that asks for reduced motion stops the c
 - **Shared:**
   - `catalog/party.json`, `catalog/index.ts`, `life/needs.ts`: the music player's `tune` place and what it does for fun.
   - `party/deck.ts`: tracks and their lengths, deck state, beat clock, sections, pump, channels, cues, transitions (`mixAt`).
-  - `party/definitions.ts`: the `deck`, `drop`, `mix`, `cue`, `drop-cue`, `transport`, `mark`, `mixnow`, `unmix`, `setload`, `setchain` and `setstep` commands (`mix` takes optional `at` and `inAt`), `PartyState.deck`.
+  - `party/definitions.ts`: the `deck`, `drop`, `mix`, `cue`, `drop-cue`, `transport`, `mark`, `mixnow`, `unmix`, `setload`, `setchain`, `setjump`, `setappend`, `setedit` and `setstep` commands (`mix` takes optional `at` and `inAt`), `PartyState.deck`.
   - `party/reducer.ts`: deck commands, loading and ejecting, jumping, transitions, taking turns, save and restore, holding when the house empties.
 - **Client:**
   - `features/party/deck/`: engine (a three-band EQ and an echo send per deck, set every tick from the channel and the transition), tracks, recordings, console (`DjConsole.tsx`: booth and music-player pages, place bars, channel strips, transitions), lights page (`LightsPage.tsx`), styles.
   - `partyUi.ts`: the transition you've picked and your saved presets (`cg.party.mix` in local storage), and your saved sets (`cg.party.sets`).
-  - `deck/SetsPage.tsx`: the My Sets tab. `deck/ChainEditor.tsx`: Link songs. `deck/analysis/chain.ts`: working links out.
-  - `deck/SoundPage.tsx`: the Sound tab (waveform lanes on canvas, points, preview, suggestions). `deck/preview.ts`: the private preview engine and the duck. `deck/analysis/`: `analyze.ts` (listening), `trackAnalysis.ts` (the background queue and IndexedDB cache), `suggest.ts` (suggested transitions).
+  - `deck/workspace/`: the Workspace tab. `Workspace.tsx` (the pair, controls, status, suggestions, panels), `SetList.tsx` (rows, song picker, saved sets), `TrackLane.tsx` (a waveform lane on canvas), `setPlan.ts` (the list's edits and relinking, pure), `workspaceStore.ts` (the pair, draft, panel, review marks, status and `sendTracked`). `deck/preview.ts`: the private rehearsal engine and the duck. `deck/analysis/`: `analyze.ts` (listening), `trackAnalysis.ts` (the background queue and IndexedDB cache), `suggest.ts` (suggested transitions), `chain.ts` (working links out).
   - `MusicDock.tsx`: runs the engine and the spatial mix, moves a set on when its transition ends, and shows the console only while your sim works the gear.
   - `partyHooks.ts`: `useGearInUse`, `usePartyGear`, `useSlider`.
   - `tools/LiveTools.tsx`: the "Play some music" verb; the old "Light controls…" and "Music…" menu items are gone.
@@ -135,4 +118,5 @@ Steady light stops the pulses. A device that asks for reduced motion stops the c
   - `client/features/party/deck/deckTime.test.ts` (typed times)
   - `client/features/party/deck/deck.test.ts`
   - `client/features/party/deck/analysis/analyze.test.ts`, `suggest.test.ts` and `chain.test.ts`
+  - `client/features/party/deck/workspace/setPlan.test.ts` (adding, moving and removing around the record on air)
   - the server wire test in `server/__tests__/party.test.ts`

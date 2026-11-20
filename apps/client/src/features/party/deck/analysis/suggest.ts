@@ -40,6 +40,8 @@ export interface SuggestInput {
   inA: Analysis;
   /** The incoming record's saved cues (track beats). */
   inCues: readonly number[];
+  /** What to call the two records ("Track 4"); the decks ("Deck A") by default. */
+  names?: { out: string; into: string };
 }
 
 const toBeats = (s: number) => (s * DEFAULT_BPM) / 60;
@@ -112,6 +114,10 @@ function findOutro(a: Analysis): number | null {
 export function suggestMixes(input: SuggestInput): Suggestion[] {
   const { out, outA, inA, bpm } = input;
   const into: DeckSide = out === "a" ? "b" : "a";
+  const outName = input.names?.out ?? `Deck ${upper(out)}`;
+  const inName = input.names?.into ?? `Deck ${upper(into)}`;
+  const outShort = input.names?.out ?? upper(out);
+  const inShort = input.names?.into ?? upper(into);
   const approximate = !outA.reliable || !inA.reliable;
   const gap = tempoGap(outA.bpm, inA.bpm);
   const together = longestTogether(gap);
@@ -151,9 +157,9 @@ export function suggestMixes(input: SuggestInput): Suggestion[] {
     if (cue !== undefined) return { inAt: toSeconds(cue), why: "from your saved cue" };
     if (lift) {
       const t = lift.at - spanOf(bars);
-      if (t >= 0) return { inAt: approximate ? Math.max(0, Math.round(t)) : downbeatBefore(inA, t), why: `${upper(into)}'s drop lands as it ends` };
+      if (t >= 0) return { inAt: approximate ? Math.max(0, Math.round(t)) : downbeatBefore(inA, t), why: `${inShort}'s drop lands as it ends` };
     }
-    return { inAt: approximate ? 0 : downbeatBefore(inA, 0), why: `${upper(into)} comes in from its top` };
+    return { inAt: approximate ? 0 : downbeatBefore(inA, 0), why: `${inShort} comes in from its top` };
   };
 
   const tempo = approximate
@@ -170,7 +176,7 @@ export function suggestMixes(input: SuggestInput): Suggestion[] {
   // the next phrase
   {
     const p = points(plan("next").bars);
-    if (p.length) picks.push({ kind: "next", at: p[0]!, where: approximate ? `Soon on ${upper(out)}` : `The next 8-bar phrase on ${upper(out)}` });
+    if (p.length) picks.push({ kind: "next", at: p[0]!, where: approximate ? `Soon on ${outShort}` : `The next 8-bar phrase on ${outShort}` });
   }
   // the biggest drop in energy ahead (a breakdown is a natural way out)
   {
@@ -179,7 +185,7 @@ export function suggestMixes(input: SuggestInput): Suggestion[] {
       const drop = energy(outA, t - 8, t) - energy(outA, t, t + 8);
       if (!taken(t) && (!best || drop > best.drop)) best = { at: t, drop };
     }
-    if (best && best.drop > 0.08) picks.push({ kind: "dip", at: best.at, where: `${upper(out)} drops into a breakdown here` });
+    if (best && best.drop > 0.08) picks.push({ kind: "dip", at: best.at, where: `${outShort} drops into a breakdown here` });
   }
   // the outro (or as late as it can be)
   {
@@ -188,7 +194,7 @@ export function suggestMixes(input: SuggestInput): Suggestion[] {
     let at: number | undefined;
     if (outro !== null) at = p.find((t) => t >= outro - 1) ?? p[p.length - 1];
     else at = p[p.length - 1];
-    if (at !== undefined && !taken(at)) picks.push({ kind: "outro", at, where: outro !== null ? `${upper(out)}'s outro` : `Before ${upper(out)} runs out` });
+    if (at !== undefined && !taken(at)) picks.push({ kind: "outro", at, where: outro !== null ? `${outShort}'s outro` : `Before ${outShort} runs out` });
   }
 
   const firstCue = input.inCues.find((c) => c < toBeats(inA.duration) - 1);
@@ -203,8 +209,8 @@ export function suggestMixes(input: SuggestInput): Suggestion[] {
     const inBeats = toBeats(inAt);
     const seconds = (bars * 4 * 60) / bpm;
     const text = approximate
-      ? `At about ${preciseClock(at)} on Deck ${upper(out)}, fade in Deck ${upper(into)} from ${preciseClock(inBeats)} over about ${Math.round(seconds)} s.`
-      : `At ${preciseClock(at)} on Deck ${upper(out)}, bring in Deck ${upper(into)} at ${preciseClock(inBeats)} with ${bars === 8 ? "an" : "a"} ${bars}-bar ${styleWord(style)}.`;
+      ? `At about ${preciseClock(at)} on ${outName}, fade in ${inName} from ${preciseClock(inBeats)} over about ${Math.round(seconds)} s.`
+      : `At ${preciseClock(at)} on ${outName}, bring in ${inName} at ${preciseClock(inBeats)} with ${bars === 8 ? "an" : "a"} ${bars}-bar ${styleWord(style)}.`;
     return {
       id: `${p.kind}-${Math.round(at * 10)}-${Math.round(inBeats * 10)}-${style}-${bars}`,
       out,

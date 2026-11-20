@@ -211,6 +211,11 @@ export const PartyCmd = z.discriminatedUnion("cmd", [
   z.object({ cmd: z.literal("setjump"), step: SetIndex, track: z.enum(DECK_TRACK_IDS) }),
   z.object({ cmd: z.literal("setappend"), track: z.enum(DECK_TRACK_IDS) }),
   /**
+   * Change the set around the record on air without stopping it: add, reorder, remove, or re-time links. `was` is
+   * where the record on air sat in the set as the screen saw it, and `step` is where it sits in the new list.
+   */
+  z.object({ cmd: z.literal("setedit"), steps: SetStepsSchema, step: SetIndex, was: SetIndex }),
+  /**
    * Link records after the one on air: it hands over to the next, that one to the one after, and so on. The first
    * step is the record on air (its `next` is its transition); whatever was queued after it is replaced.
    */

@@ -93,7 +93,7 @@ export function applyParty(state: LifeState, cmd: PartyCmd, ctx: PartyContext): 
 export const deckOf = (p: PartyState): Deck => (p.deck ??= { ...DEFAULT_DECK });
 
 type DeckCmd = (typeof DECK_CMDS)[number];
-const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark", "mixnow", "unmix", "setload", "setjump", "setappend", "setchain", "setstep"] as const;
+const DECK_CMDS = ["deck", "drop", "mix", "cue", "drop-cue", "transport", "mark", "mixnow", "unmix", "setload", "setjump", "setappend", "setedit", "setchain", "setstep"] as const;
 export const isDeckCmd = (cmd: PartyCmd): cmd is Extract<PartyCmd, { cmd: DeckCmd }> => (DECK_CMDS as readonly string[]).includes(cmd.cmd);
 
 const S = (side: DeckSide) => (side === "a" ? "A" : "B");
@@ -278,6 +278,44 @@ function appendSetTrack(d: Deck, track: DeckTrackId, beat: number) {
   }
 }
 
+/**
+ * Swap in a new list of records around the one on air, which plays on undisturbed. A transition under way finishes
+ * as it is (the record it's bringing in has to stay next); otherwise the next link is queued from the new list. A
+ * link that the record on air has already passed is turned down, since it would cut the set short.
+ */
+function editSet(d: Deck, cmd: Extract<PartyCmd, { cmd: "setedit" }>, beat: number): boolean | void {
+  const steps = restoredSteps(cmd.steps).map((s) => ({ ...s, cues: [] }));
+  if (steps.length !== cmd.steps.length) return false;
+  const onAir: DeckSide = d.xfade < 0.5 ? "a" : "b";
+  const free = otherSide(onAir);
+  const here = steps[cmd.step];
+  const next = steps[cmd.step + 1];
+  // (a set that has lost track of the record on air counts as none: the record on air starts a new one)
+  const old = d.set && d.set.steps[d.set.step]?.track === d[onAir] ? d.set : null;
+  // the screen saw the set where it is now (not a record ago)
+  if (!here || d[onAir] !== here.track || (old?.step ?? 0) !== cmd.was) return false;
+  const name = old?.name ?? null;
+  const m = d.mix;
+  if (m && !mixQueued(m, beat)) {
+    if (!next || d[free] !== next.track || mixInto(m) !== free) return false;
+    d.set = { name, steps, step: cmd.step };
+    return;
+  }
+  if (here.next && next) {
+    const pos = trackPosition(d, onAir, beat) ?? 0;
+    if (here.next.at < pos - 1e-6) return false;
+  }
+  const queued = Boolean(m);
+  d.mix = null;
+  d.set = { name, steps, step: cmd.step };
+  if (here.next && next) queueStep(d, free);
+  else {
+    delete here.next;
+    // the record that was queued after this one is taken off
+    if (queued) load(d, free, null, beat);
+  }
+}
+
 /** Work the deck. Reports whether anything changed. */
 function applyDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, now: number): boolean {
   const beat = deckBeat(d, now);
@@ -441,6 +479,8 @@ function runDeck(d: Deck, cmd: Extract<PartyCmd, { cmd: DeckCmd }>, beat: number
       return cueSetStep(d, cmd.step, mixAt(d, beat).xfade < 0.5 ? "a" : "b", beat);
     case "setappend":
       return appendSetTrack(d, cmd.track, beat);
+    case "setedit":
+      return editSet(d, cmd, beat);
     case "setchain": {
       const chain = restoredSteps(cmd.steps);
       const onAir: DeckSide = d.xfade < 0.5 ? "a" : "b";
