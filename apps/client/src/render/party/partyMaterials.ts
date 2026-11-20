@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { readyAnalysis, requestAnalysis, useAnalysis } from "../../features/party/deck/analysis/trackAnalysis";
 import { lighting } from "../pencil";
 import { CALM, grooveOf, LightShow, loudSide, type ShowFrame } from "./lightShow";
+import { speakerMotion, stepSpeakerMotion } from "./speakerMotion";
 
 /**
  * The party's shared look. Every lit tile, LED strip and speaker ring is drawn by one of the materials here, and all
@@ -58,7 +59,7 @@ export let showFrame: ShowFrame = CALM;
 let asked: DeckTrackId | null = null;
 const analysisOf = (id: DeckTrackId) => readyAnalysis(useAnalysis.getState()[id]);
 
-/** What the speakers move to: the deck's own beat, or (for a YouTube video, which tells us nothing of its beat) a steady 120 bpm. */
+/** The clock for the mixer and light effects, with a steady 120 bpm fallback for video. */
 export function musicPulse(deck: Deck | undefined, music: Music | undefined, nowMs: number): { playing: boolean; beat: number; pump: number; levels: [number, number]; rate: number } {
   if (deck?.playing) {
     const beat = deckBeat(deck, nowMs);
@@ -148,7 +149,8 @@ export function stepParty(lights: PartyLights, music: Music | undefined, nowMs: 
   // speakers thump and meters dance to the beat; a device that asks for less motion keeps them still
   const still = Boolean(reduced?.matches);
   u.uPump.value = still ? 0 : pulse.pump;
-  lighting.pump.value = still ? 0 : pulse.pump;
+  stepSpeakerMotion(deck, music, nowMs, dt, still, analysisOf);
+  lighting.pump.value = speakerMotion.cone;
   u.uBeatCount.value = steady ? 0 : pulse.beat % WRAP;
   const ease = 1 - Math.exp(-dt * 14);
   u.uMeterA.value += ((still ? pulse.levels[0] * 0.7 : pulse.levels[0]) - u.uMeterA.value) * ease;

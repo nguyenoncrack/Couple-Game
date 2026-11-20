@@ -45,9 +45,9 @@ export function loudSide(d: Deck, beat: number): DeckSide {
 const mod = (x: number, n: number) => ((x % n) + n) % n;
 
 /** What the music on the decks is doing at `beat`, or null while nothing plays. */
-export function grooveOf(d: Deck | undefined, beat: number, analysisOf: (id: DeckTrackId) => GrooveAnalysis | null): Groove | null {
+export function grooveOf(d: Deck | undefined, beat: number, analysisOf: (id: DeckTrackId) => GrooveAnalysis | null, side?: DeckSide): Groove | null {
   if (!d?.playing) return null;
-  const side = loudSide(d, beat);
+  side ??= loudSide(d, beat);
   const id = d[side];
   const local = trackPosition(d, side, beat);
   if (!id || local === null) return null;

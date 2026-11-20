@@ -8,6 +8,7 @@ import { KitMesh, Meshes } from "./KitMesh";
 import { doorParts, modelFor, openingModelFor, shade, type DoorLeaf } from "./models";
 import { FortDress } from "./fort/FortDress";
 import { DYNAMIC_KINDS } from "./party/partyLayout";
+import { SpeakerCabinet } from "./party/SpeakerCabinet";
 import { buildingMaterial } from "../features/buildMaterials/material";
 import { buildWall } from "../features/buildMaterials/wallGeometry";
 import { pencilMaterial, shadowMaterial } from "./pencil";
@@ -377,7 +378,7 @@ function Placed({ o, onDown }: { o: PlacedObject; onDown: (id: string, e: ThreeE
           onDown(o.id, e);
         }}
       >
-        <Meshes meshes={meshes} />
+        {item.model.kind === "speaker" ? <SpeakerCabinet meshes={meshes} /> : <Meshes meshes={meshes} />}
         {isFrame && <FortDress id={o.id} />}
       </group>
     </group>
